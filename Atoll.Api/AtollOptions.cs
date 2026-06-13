@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Configuration;
+namespace Atoll.Api;
 
 public sealed class AtollOptions
 {

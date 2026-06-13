@@ -71,12 +71,6 @@ public class MinimalApiEndpointsTests
 
         Assert.That(invalidBy.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         Assert.That(unknown.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-
-        Assert.That(invalidBy.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/html"));
-        Assert.That(unknown.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/html"));
-
-        Assert.That(await invalidBy.Content.ReadAsStringAsync(), Is.EqualTo("That route does not exist."));
-        Assert.That(await unknown.Content.ReadAsStringAsync(), Is.EqualTo("That route does not exist."));
     }
 
     [Test]

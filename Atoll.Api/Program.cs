@@ -1,9 +1,9 @@
 using Atoll.Api;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
-
 builder.Services.Configure<AtollOptions>(builder.Configuration);
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default));
@@ -18,22 +18,16 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
-app.MapMethods("/health", ["GET", "HEAD"], Health);
+app.MapMethods("/health", ["GET", "HEAD"], () => Results.Ok());
 app.MapGet("/packages", Packages);
 app.MapGet("/metrics", Metrics);
 
-app.MapMethods("/{*path}", ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"], NotFoundHtml)
-    .WithOrder(int.MaxValue);
+app.MapFallback("/{**path}", ([FromRoute] string? path) => Results.NotFound());
 
 await app.RunAsync();
 return;
 
-static IResult Health()
-{
-    return Results.Ok();
-}
-
-static IResult Packages(string? names, string? by, PackageQueryService queryService)
+IResult Packages([FromQuery] string? names, [FromQuery] string? by, PackageQueryService queryService)
 {
     var parsedNames = QueryParsing.ParseNames(names);
 
@@ -42,7 +36,7 @@ static IResult Packages(string? names, string? by, PackageQueryService queryServ
         "prov" => Results.Ok(queryService.FindByProvides(parsedNames)),
         "desc" => Results.Ok(queryService.FindByWords(parsedNames)),
         null or "" => Results.Ok(queryService.FindByNames(parsedNames)),
-        _ => NotFoundHtml()
+        _ => Results.NotFound()
     };
 }
 
@@ -79,9 +73,4 @@ static IResult Metrics(
     };
 
     return Results.Ok(response);
-}
-
-static IResult NotFoundHtml()
-{
-    return Results.Content("That route does not exist.", "text/html", null, StatusCodes.Status404NotFound);
 }
