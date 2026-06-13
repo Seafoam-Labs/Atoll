@@ -1,0 +1,7 @@
+﻿services:
+  atoll:
+    image: atoll
+    build:
+      context: .
+      dockerfile: Atoll/Dockerfile
+
