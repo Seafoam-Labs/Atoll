@@ -1,23 +1,29 @@
 namespace Atoll.Api.Services.Query;
 
-public sealed record PackagesQuery
+/// <summary>
+///     The type of query to perform for packages.
+///     1. Name: search packages by 'name'
+///     2. Prov: search packages by 'provides'
+///     3. Desc: search packages by 'words' (Name + Description + Keywords)
+/// </summary>
+public enum QueryType
 {
-    public CommaSeparatedQueryParameter? Names { get; init; }
-
-    public string? By { get; init; }
+    Name,
+    Prov,
+    Desc
 }
 
-public readonly record struct CommaSeparatedQueryParameter(string[] Parts)
+public readonly record struct SearchTerms(string[] Values)
 {
-    public static bool TryParse(string source, out CommaSeparatedQueryParameter result)
+    public static bool TryParse(string source, out SearchTerms result)
     {
         if (string.IsNullOrWhiteSpace(source))
         {
-            result = new CommaSeparatedQueryParameter([]);
+            result = new SearchTerms([]);
             return true;
         }
 
-        result = new CommaSeparatedQueryParameter(source.Split(',',
+        result = new SearchTerms(source.Split(',',
             StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
         return true;
     }

@@ -27,24 +27,27 @@ app.MapFallback("/{**path}", ([FromRoute] string? path) => Results.NotFound());
 await app.RunAsync();
 return;
 
-IResult Packages([AsParameters] PackagesQuery query, PackageQueryService queryService)
+IResult Packages(
+    [FromServices] PackageQueryService queryService,
+    [FromQuery(Name = "names")] SearchTerms? names,
+    [FromQuery(Name = "by")] QueryType? by = QueryType.Name)
 {
-    var names = query.Names?.Parts.ToHashSet() ?? [];
+    var queryNames = names?.Values.ToHashSet() ?? [];
 
-    return query.By switch
+    return by switch
     {
-        "prov" => Results.Ok(queryService.FindByProvides(names)),
-        "desc" => Results.Ok(queryService.FindByWords(names)),
-        null or "" => Results.Ok(queryService.FindByNames(names)),
-        _ => Results.NotFound()
+        QueryType.Name => Results.Ok(queryService.FindByNames(queryNames)),
+        QueryType.Desc => Results.Ok(queryService.FindByWords(queryNames)),
+        QueryType.Prov => Results.Ok(queryService.FindByProvides(queryNames)),
+        _ => throw new ArgumentOutOfRangeException(nameof(by), by, null)
     };
 }
 
 static IResult Metrics(
-    PackageIndexStore store,
-    PackageQueryService queryService,
-    PackageRefreshCoordinator refreshCoordinator,
-    ApplicationRuntimeInfo runtimeInfo)
+    [FromServices] PackageIndexStore store,
+    [FromServices] PackageQueryService queryService,
+    [FromServices] PackageRefreshCoordinator refreshCoordinator,
+    [FromServices] ApplicationRuntimeInfo runtimeInfo)
 {
     var snapshot = store.Current;
     var refresh = refreshCoordinator.GetStatus();

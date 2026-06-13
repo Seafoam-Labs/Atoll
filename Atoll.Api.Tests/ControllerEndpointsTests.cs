@@ -37,8 +37,8 @@ public class MinimalApiEndpointsTests
     public async Task PackagesSupportsNameProvAndDescQueries()
     {
         var byName = await _client.GetAsync("/packages?names=portable-kit,not-real");
-        var byProv = await _client.GetAsync("/packages?names=shelly&by=prov");
-        var byDesc = await _client.GetAsync("/packages?names=handheld,portable&by=desc");
+        var byProv = await _client.GetAsync("/packages?names=shelly&by=Prov");
+        var byDesc = await _client.GetAsync("/packages?names=handheld,portable&by=Desc");
 
         Assert.That(byName.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(byProv.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -69,7 +69,7 @@ public class MinimalApiEndpointsTests
         var invalidBy = await _client.GetAsync("/packages?names=shelly&by=unknown");
         var unknown = await _client.GetAsync("/does-not-exist");
 
-        Assert.That(invalidBy.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That(invalidBy.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(unknown.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
 
