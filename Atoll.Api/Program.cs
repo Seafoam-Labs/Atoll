@@ -1,4 +1,3 @@
-using System.Security.Cryptography.X509Certificates;
 using Atoll.Api;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,21 +13,6 @@ builder.Services.AddSingleton<PackageQueryService>();
 builder.Services.AddSingleton<PackageRefreshCoordinator>();
 builder.Services.AddSingleton(new ApplicationRuntimeInfo(DateTimeOffset.UtcNow));
 builder.Services.AddHostedService<PackageRefreshWorker>();
-
-builder.WebHost.ConfigureKestrel((context, kestrel) =>
-{
-    var options = context.Configuration.Get<AtollOptions>() ?? new AtollOptions();
-
-    if (!string.IsNullOrWhiteSpace(options.Key) && !string.IsNullOrWhiteSpace(options.Cert))
-    {
-        var certificate = X509Certificate2.CreateFromPemFile(options.Cert, options.Key);
-
-        kestrel.ListenAnyIP(443, listenOptions => listenOptions.UseHttps(certificate));
-        return;
-    }
-
-    kestrel.ListenAnyIP(options.Port);
-});
 
 var app = builder.Build();
 
