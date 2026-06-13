@@ -3,5 +3,4 @@
     image: atoll
     build:
       context: .
-      dockerfile: Atoll/Dockerfile
-
+      dockerfile: Atoll.Api/Dockerfile
