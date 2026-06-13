@@ -28,7 +28,7 @@ app.MapFallback("/{**path}", ([FromRoute] string? path) => Results.NotFound());
 await app.RunAsync();
 return;
 
-IResult Packages(
+static IResult Packages(
     [FromServices] PackageQueryService queryService,
     [FromQuery(Name = "names")] SearchTerms? names,
     [FromQuery(Name = "by")] QueryType? by = QueryType.Name)
