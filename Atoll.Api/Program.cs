@@ -3,6 +3,8 @@ using Atoll.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddOpenApi();
+
 builder.Services.Configure<AtollOptions>(builder.Configuration);
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default));
@@ -29,6 +31,8 @@ builder.WebHost.ConfigureKestrel((context, kestrel) =>
 });
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
 app.MapMethods("/health", ["GET", "HEAD"], Health);
 app.MapGet("/packages", Packages);
