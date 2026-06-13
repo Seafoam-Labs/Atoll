@@ -27,15 +27,15 @@ app.MapFallback("/{**path}", ([FromRoute] string? path) => Results.NotFound());
 await app.RunAsync();
 return;
 
-IResult Packages([FromQuery] string? names, [FromQuery] string? by, PackageQueryService queryService)
+IResult Packages([AsParameters] PackagesQuery query, PackageQueryService queryService)
 {
-    var parsedNames = QueryParsing.ParseNames(names);
+    var names = query.Names?.Parts.ToHashSet() ?? [];
 
-    return by switch
+    return query.By switch
     {
-        "prov" => Results.Ok(queryService.FindByProvides(parsedNames)),
-        "desc" => Results.Ok(queryService.FindByWords(parsedNames)),
-        null or "" => Results.Ok(queryService.FindByNames(parsedNames)),
+        "prov" => Results.Ok(queryService.FindByProvides(names)),
+        "desc" => Results.Ok(queryService.FindByWords(names)),
+        null or "" => Results.Ok(queryService.FindByNames(names)),
         _ => Results.NotFound()
     };
 }
