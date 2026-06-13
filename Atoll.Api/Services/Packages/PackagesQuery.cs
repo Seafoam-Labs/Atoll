@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Query;
+namespace Atoll.Api.Services.Packages;
 
 /// <summary>
 ///     The type of query to perform for packages.

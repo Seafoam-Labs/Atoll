@@ -11,6 +11,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddSingleton<PackageIndexStore>();
 builder.Services.AddSingleton<PackageQueryService>();
 builder.Services.AddSingleton<PackageRefreshCoordinator>();
+builder.Services.AddSingleton<MetricsService>();
 builder.Services.AddSingleton(new ApplicationRuntimeInfo(DateTimeOffset.UtcNow));
 builder.Services.AddHostedService<PackageRefreshWorker>();
 
@@ -43,37 +44,7 @@ IResult Packages(
     };
 }
 
-static IResult Metrics(
-    [FromServices] PackageIndexStore store,
-    [FromServices] PackageQueryService queryService,
-    [FromServices] PackageRefreshCoordinator refreshCoordinator,
-    [FromServices] ApplicationRuntimeInfo runtimeInfo)
+static IResult Metrics([FromServices] MetricsService metricsService)
 {
-    var snapshot = store.Current;
-    var refresh = refreshCoordinator.GetStatus();
-
-    var response = new MetricsResponse
-    {
-        UptimeSeconds = (long)(DateTimeOffset.UtcNow - runtimeInfo.StartedAtUtc).TotalSeconds,
-        RequestCount = queryService.RequestCount,
-        IndexSizes = new IndexSizes
-        {
-            ByNames = snapshot.ByNames.Count,
-            ByProvides = snapshot.ByProvides.Count,
-            ByWords = snapshot.ByWords.Count
-        },
-        Refresh = new RefreshStatus
-        {
-            DataFile = refresh.DataFile,
-            IntervalSeconds = (long)refresh.Interval.TotalSeconds,
-            Attempts = refresh.Attempts,
-            Successes = refresh.Successes,
-            Failures = refresh.Failures,
-            LastStartedUtc = refresh.LastStartedUtc,
-            LastSucceededUtc = refresh.LastSucceededUtc,
-            LastFailedUtc = refresh.LastFailedUtc
-        }
-    };
-
-    return Results.Ok(response);
+    return Results.Ok(metricsService.GetMetrics());
 }

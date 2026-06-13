@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Atoll.Api.Services.Query;
+namespace Atoll.Api.Services.Packages;
 
 public sealed class PackageQueryService(PackageIndexStore store)
 {
