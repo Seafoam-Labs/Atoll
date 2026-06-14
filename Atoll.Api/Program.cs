@@ -40,7 +40,7 @@ static IResult Packages(
         QueryType.Name => TypedResults.Ok(queryService.FindByNames(queryValues)),
         QueryType.Desc => TypedResults.Ok(queryService.FindByWords(queryValues)),
         QueryType.Prov => TypedResults.Ok(queryService.FindByProvides(queryValues)),
-        _ => throw new ArgumentOutOfRangeException(nameof(by), by, null)
+        _ => TypedResults.BadRequest()
     };
 }
 
