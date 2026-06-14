@@ -21,6 +21,7 @@ dotnet run --project Atoll.Api
 ## Docker
 
 ```bash
+# Uses port 8080
 docker compose up --build
 ```
 
