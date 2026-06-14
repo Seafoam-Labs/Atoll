@@ -5,7 +5,7 @@
       context: .
       dockerfile: Atoll.Api/Dockerfile
     ports:
-      - "5290:5290"
+      - "8080:8080"
     environment:
       - DataFile=/app/data/packages-meta-ext-v1.json
     volumes:
