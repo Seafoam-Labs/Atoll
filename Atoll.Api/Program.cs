@@ -1,6 +1,6 @@
 using Atoll.Api;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.Configure<AtollOptions>(builder.Configuration);
 
