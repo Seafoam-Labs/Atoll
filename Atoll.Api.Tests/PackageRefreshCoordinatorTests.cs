@@ -20,7 +20,7 @@ public class PackageRefreshCoordinatorTests
             {
                 DataFile = path,
                 DataFileUrl = "https://example.test/packages.json.gz",
-                RefreshIntervalHours = 1
+                RefreshIntervalMinutes = 10
             }),
             NullLogger<PackageRefreshCoordinator>.Instance);
 

@@ -7,5 +7,5 @@ public sealed class AtollOptions
 
     public string DataFile { get; init; } = DataFileDefault;
     public string DataFileUrl { get; init; } = DataFileUrlDefault;
-    public int RefreshIntervalHours { get; init; } = 1;
+    public int RefreshIntervalMinutes { get; init; } = 10;
 }

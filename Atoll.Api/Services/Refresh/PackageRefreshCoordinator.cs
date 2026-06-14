@@ -20,7 +20,7 @@ public sealed class PackageRefreshCoordinator(
 
     public string DataFilePath => options.Value.DataFile;
 
-    public TimeSpan RefreshInterval => TimeSpan.FromHours(Math.Max(1, options.Value.RefreshIntervalHours));
+    public TimeSpan RefreshInterval => TimeSpan.FromMinutes(Math.Max(1, options.Value.RefreshIntervalMinutes));
 
     public RefreshStatusSnapshot GetStatus()
     {
