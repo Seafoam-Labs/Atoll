@@ -17,7 +17,7 @@ public static class Endpoints
     private static IResult Packages(
         [FromServices] PackageQueryService queryService,
         [FromQuery(Name = "query")] QueryValues? query,
-        [FromQuery(Name = "by")] QueryType? by = QueryType.Name)
+        [FromQuery(Name = "by")] QueryType? by)
     {
         var queryValues = query?.Values.ToHashSet() ?? [];
 

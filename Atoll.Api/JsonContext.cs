@@ -5,6 +5,8 @@ namespace Atoll.Api;
 
 [JsonSerializable(typeof(IReadOnlyList<JsonElement>))]
 [JsonSerializable(typeof(MetricsResponse))]
+[JsonSerializable(typeof(QueryType?))]
+[JsonSerializable(typeof(QueryValues?))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal partial class AppJsonContext : JsonSerializerContext;
 
