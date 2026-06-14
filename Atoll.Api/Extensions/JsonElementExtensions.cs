@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Atoll.Api.Services.Indexing;
+namespace Atoll.Api.Extensions;
 
 public static class JsonElementExtensions
 {
