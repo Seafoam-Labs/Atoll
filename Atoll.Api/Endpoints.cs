@@ -20,6 +20,7 @@ public static class Endpoints
         [FromQuery(Name = "by")] QueryType? by)
     {
         var queryValues = query?.Values.ToHashSet() ?? [];
+        by ??= QueryType.Name;
 
         return by switch
         {
