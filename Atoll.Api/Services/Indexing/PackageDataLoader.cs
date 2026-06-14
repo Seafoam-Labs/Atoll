@@ -13,7 +13,9 @@ public static class PackageDataLoader
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("AUR package dump is not a JSON array.");
 
-        var byNamesBuilder = ImmutableDictionary.CreateBuilder<string, JsonElement>(StringComparer.Ordinal);
+        var byNamesBuilder =
+            ImmutableDictionary.CreateBuilder<string, JsonElement>(StringComparer.Ordinal,
+                JsonElementComparer.Instance);
         var byProvidesMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         var byWordsMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
