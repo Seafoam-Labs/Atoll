@@ -4,3 +4,12 @@
     build:
       context: .
       dockerfile: Atoll.Api/Dockerfile
+    ports:
+      - "5290:5290"
+    environment:
+      - DataFile=/app/data/packages-meta-ext-v1.json
+    volumes:
+      - atoll-data:/app/data
+
+volumes:
+  atoll-data:
