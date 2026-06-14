@@ -36,9 +36,9 @@ public class MinimalApiEndpointsTests
     [Test]
     public async Task PackagesSupportsNameProvAndDescQueries()
     {
-        var byName = await _client.GetAsync("/packages?names=portable-kit,not-real");
-        var byProv = await _client.GetAsync("/packages?names=shelly&by=Prov");
-        var byDesc = await _client.GetAsync("/packages?names=handheld,portable&by=Desc");
+        var byName = await _client.GetAsync("/packages?query=portable-kit,not-real");
+        var byProv = await _client.GetAsync("/packages?query=shelly&by=Prov");
+        var byDesc = await _client.GetAsync("/packages?query=handheld,portable&by=Desc");
 
         Assert.That(byName.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(byProv.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -66,7 +66,7 @@ public class MinimalApiEndpointsTests
     [Test]
     public async Task InvalidPackagesByAndUnknownRouteReturnTextHtml404()
     {
-        var invalidBy = await _client.GetAsync("/packages?names=shelly&by=unknown");
+        var invalidBy = await _client.GetAsync("/packages?query=shelly&by=unknown");
         var unknown = await _client.GetAsync("/does-not-exist");
 
         Assert.That(invalidBy.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -76,7 +76,7 @@ public class MinimalApiEndpointsTests
     [Test]
     public async Task MetricsReturnsExpectedShapeAndCounts()
     {
-        _ = await _client.GetAsync("/packages?names=portable-kit");
+        _ = await _client.GetAsync("/packages?query=portable-kit");
 
         var response = await _client.GetAsync("/metrics");
         var body = await response.Content.ReadAsStringAsync();

@@ -30,16 +30,16 @@ return;
 
 static IResult Packages(
     [FromServices] PackageQueryService queryService,
-    [FromQuery(Name = "names")] SearchTerms? names,
+    [FromQuery(Name = "query")] QueryValues? query,
     [FromQuery(Name = "by")] QueryType? by = QueryType.Name)
 {
-    var queryNames = names?.Values.ToHashSet() ?? [];
+    var queryValues = query?.Values.ToHashSet() ?? [];
 
     return by switch
     {
-        QueryType.Name => Results.Ok(queryService.FindByNames(queryNames)),
-        QueryType.Desc => Results.Ok(queryService.FindByWords(queryNames)),
-        QueryType.Prov => Results.Ok(queryService.FindByProvides(queryNames)),
+        QueryType.Name => Results.Ok(queryService.FindByNames(queryValues)),
+        QueryType.Desc => Results.Ok(queryService.FindByWords(queryValues)),
+        QueryType.Prov => Results.Ok(queryService.FindByProvides(queryValues)),
         _ => throw new ArgumentOutOfRangeException(nameof(by), by, null)
     };
 }

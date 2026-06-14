@@ -13,17 +13,17 @@ public enum QueryType
     Desc
 }
 
-public readonly record struct SearchTerms(string[] Values)
+public readonly record struct QueryValues(string[] Values)
 {
-    public static bool TryParse(string source, out SearchTerms result)
+    public static bool TryParse(string source, out QueryValues result)
     {
         if (string.IsNullOrWhiteSpace(source))
         {
-            result = new SearchTerms([]);
+            result = new QueryValues([]);
             return true;
         }
 
-        result = new SearchTerms(source.Split(',',
+        result = new QueryValues(source.Split(',',
             StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
         return true;
     }

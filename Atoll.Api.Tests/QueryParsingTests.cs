@@ -2,12 +2,12 @@ using NUnit.Framework;
 
 namespace Atoll.Api.Tests;
 
-public class SearchTermsTests
+public class QueryValuesTests
 {
     [Test]
     public void NamesAreSplitByComma()
     {
-        var parsed = SearchTerms.TryParse("shelly,portable,portable", out var result);
+        var parsed = QueryValues.TryParse("shelly,portable,portable", out var result);
 
         Assert.That(parsed, Is.True);
         Assert.That(result.Values.Length, Is.EqualTo(3));
@@ -19,7 +19,7 @@ public class SearchTermsTests
     [Test]
     public void EmptySourceProducesNoParts()
     {
-        _ = SearchTerms.TryParse("", out var result);
+        _ = QueryValues.TryParse("", out var result);
 
         Assert.That(result.Values, Is.Empty);
     }
