@@ -61,12 +61,7 @@ public sealed class PackageRefreshCoordinator(
         try
         {
             logger.LogInformation("Fetching updated package data.");
-            var client = httpClientFactory.CreateClient();
-
-            await using var compressed = await client.GetStreamAsync(options.Value.DataFileUrl, cancellationToken);
-            await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
-            await using var output = File.Create(DataFilePath);
-            await gzip.CopyToAsync(output, cancellationToken);
+            await DownloadPackageDataAsync(cancellationToken);
 
             logger.LogInformation("Reforming package indices...");
             await ReloadFromDiskAsync(cancellationToken);
@@ -90,6 +85,16 @@ public sealed class PackageRefreshCoordinator(
             logger.LogWarning(ex, "Unable to fetch new package data.");
             return false;
         }
+    }
+
+    private async Task DownloadPackageDataAsync(CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient();
+
+        await using var compressed = await client.GetStreamAsync(options.Value.DataFileUrl, cancellationToken);
+        await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
+        await using var output = File.Create(DataFilePath);
+        await gzip.CopyToAsync(output, cancellationToken);
     }
 
     private async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
