@@ -19,11 +19,11 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
-app.MapMethods("/health", ["GET", "HEAD"], () => Results.Ok());
+app.MapMethods("/health", ["GET", "HEAD"], TypedResults.Ok);
 app.MapGet("/packages", Packages);
 app.MapGet("/metrics", Metrics);
 
-app.MapFallback("/{**path}", ([FromRoute] string? path) => Results.NotFound());
+app.MapFallback("/{**path}", ([FromRoute] string? path) => TypedResults.NotFound());
 
 await app.RunAsync();
 return;
@@ -37,14 +37,14 @@ static IResult Packages(
 
     return by switch
     {
-        QueryType.Name => Results.Ok(queryService.FindByNames(queryValues)),
-        QueryType.Desc => Results.Ok(queryService.FindByWords(queryValues)),
-        QueryType.Prov => Results.Ok(queryService.FindByProvides(queryValues)),
+        QueryType.Name => TypedResults.Ok(queryService.FindByNames(queryValues)),
+        QueryType.Desc => TypedResults.Ok(queryService.FindByWords(queryValues)),
+        QueryType.Prov => TypedResults.Ok(queryService.FindByProvides(queryValues)),
         _ => throw new ArgumentOutOfRangeException(nameof(by), by, null)
     };
 }
 
 static IResult Metrics([FromServices] MetricsService metricsService)
 {
-    return Results.Ok(metricsService.GetMetrics());
+    return TypedResults.Ok(metricsService.GetMetrics());
 }
