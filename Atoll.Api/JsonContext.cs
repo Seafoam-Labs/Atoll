@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Atoll.Api;
 
 [JsonSerializable(typeof(AurPackage[]))]
-[JsonSerializable(typeof(MetricsResponse))]
+[JsonSerializable(typeof(MetricsSummary))]
 [JsonSerializable(typeof(QueryType?))]
 [JsonSerializable(typeof(QueryValues?))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
@@ -12,7 +12,7 @@ internal partial class AppJsonContext : JsonSerializerContext;
 /// <summary>
 ///     Represents the response from the /metrics endpoint.
 /// </summary>
-public sealed class MetricsResponse
+public sealed class MetricsSummary
 {
     public long UptimeSeconds { get; set; }
     public long RequestCount { get; set; }

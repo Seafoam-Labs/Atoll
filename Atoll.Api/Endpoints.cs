@@ -31,7 +31,7 @@ public static class Endpoints
         };
     }
 
-    private static Ok<MetricsResponse> Metrics([FromServices] MetricsService metricsService)
+    private static Ok<MetricsSummary> Metrics([FromServices] MetricsService metricsService)
     {
         return TypedResults.Ok(metricsService.GetMetrics());
     }

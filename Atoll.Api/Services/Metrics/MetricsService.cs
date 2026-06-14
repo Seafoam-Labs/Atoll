@@ -6,12 +6,12 @@ public sealed class MetricsService(
     PackageRefreshCoordinator refreshCoordinator,
     ApplicationRuntimeInfo runtimeInfo)
 {
-    public MetricsResponse GetMetrics()
+    public MetricsSummary GetMetrics()
     {
         var snapshot = store.Current;
         var refresh = refreshCoordinator.GetStatus();
 
-        return new MetricsResponse
+        return new MetricsSummary
         {
             UptimeSeconds = (long)(DateTimeOffset.UtcNow - runtimeInfo.StartedAtUtc).TotalSeconds,
             RequestCount = queryService.RequestCount,
