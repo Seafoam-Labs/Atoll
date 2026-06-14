@@ -53,14 +53,14 @@ public class MinimalApiEndpointsTests
         using var byDescDoc = JsonDocument.Parse(byDescBody);
 
         Assert.That(byNameDoc.RootElement.GetArrayLength(), Is.EqualTo(1));
-        Assert.That(byNameDoc.RootElement[0].GetProperty("Name").GetString(), Is.EqualTo("portable-kit"));
+        Assert.That(byNameDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
 
         Assert.That(byProvDoc.RootElement.GetArrayLength(), Is.EqualTo(1));
-        Assert.That(byProvDoc.RootElement[0].GetProperty("Name").GetString(), Is.EqualTo("shelly-bin"));
+        Assert.That(byProvDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("shelly-bin"));
 
         Assert.That(byDescDoc.RootElement.GetArrayLength(), Is.EqualTo(2));
-        Assert.That(byDescDoc.RootElement[0].GetProperty("Name").GetString(), Is.EqualTo("portable-pro"));
-        Assert.That(byDescDoc.RootElement[1].GetProperty("Name").GetString(), Is.EqualTo("portable-kit"));
+        Assert.That(byDescDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("portable-pro"));
+        Assert.That(byDescDoc.RootElement[1].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
     }
 
     [Test]

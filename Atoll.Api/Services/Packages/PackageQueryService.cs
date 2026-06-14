@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Atoll.Api.Services.Packages;
 
 public sealed class PackageQueryService(PackageIndexStore store)
@@ -8,18 +6,19 @@ public sealed class PackageQueryService(PackageIndexStore store)
 
     public long RequestCount => Interlocked.Read(ref _requestCount);
 
-    public IReadOnlyList<JsonElement> FindByNames(HashSet<string> names)
+    public AurPackage[] FindByNames(HashSet<string> names)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
 
         return names
             .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-            .Where(package => package.ValueKind != JsonValueKind.Undefined)
+            .Where(package => package is not null)
+            .Cast<AurPackage>()
             .ToArray();
     }
 
-    public IReadOnlyList<JsonElement> FindByProvides(HashSet<string> names)
+    public AurPackage[] FindByProvides(HashSet<string> names)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
@@ -35,11 +34,12 @@ public sealed class PackageQueryService(PackageIndexStore store)
 
         return matchingNames
             .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-            .Where(package => package.ValueKind != JsonValueKind.Undefined)
+            .Where(package => package is not null)
+            .Cast<AurPackage>()
             .ToArray();
     }
 
-    public IReadOnlyList<JsonElement> FindByWords(HashSet<string> words)
+    public AurPackage[] FindByWords(HashSet<string> words)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
@@ -66,21 +66,10 @@ public sealed class PackageQueryService(PackageIndexStore store)
 
         return intersection
             .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-            .Where(package => package.ValueKind != JsonValueKind.Undefined)
-            .OrderByDescending(GetNumVotes)
+            .Where(package => package is not null)
+            .Cast<AurPackage>()
+            .OrderByDescending(package => package.NumVotes)
             .Take(50)
             .ToArray();
-    }
-
-    private static long GetNumVotes(JsonElement package)
-    {
-        if (!package.TryGetProperty("NumVotes", out var votes)) return 0;
-
-        return votes.ValueKind switch
-        {
-            JsonValueKind.Number when votes.TryGetInt64(out var n) => n,
-            JsonValueKind.Number when votes.TryGetDouble(out var d) => (long)d,
-            _ => 0
-        };
     }
 }

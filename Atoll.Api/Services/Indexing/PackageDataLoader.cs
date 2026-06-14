@@ -13,24 +13,22 @@ public static class PackageDataLoader
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("AUR package dump is not a JSON array.");
 
-        var byNamesBuilder =
-            ImmutableDictionary.CreateBuilder<string, JsonElement>(StringComparer.Ordinal,
-                JsonElementComparer.Instance);
+        var byNamesBuilder = ImmutableDictionary.CreateBuilder<string, AurPackage>(StringComparer.Ordinal);
         var byProvidesMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         var byWordsMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
-        foreach (var package in doc.RootElement.EnumerateArray())
+        foreach (var packageElement in doc.RootElement.EnumerateArray())
         {
-            var clone = package.Clone();
-            if (!clone.TryGetProperty("Name", out var nameElement) ||
+            if (!packageElement.TryGetProperty("Name", out var nameElement) ||
                 nameElement.ValueKind != JsonValueKind.String) continue;
 
             var name = nameElement.GetString();
             if (string.IsNullOrEmpty(name)) continue;
 
-            byNamesBuilder[name] = clone;
-            IndexProvides(byProvidesMap, name, clone);
-            IndexWords(byWordsMap, name, clone);
+            var package = packageElement.DeserializeAurPackage();
+            byNamesBuilder[name] = package;
+            IndexProvides(byProvidesMap, name, packageElement);
+            IndexWords(byWordsMap, name, packageElement);
         }
 
         var byProvides = byProvidesMap.ToImmutableDictionary(
@@ -49,7 +47,7 @@ public static class PackageDataLoader
     private static void IndexProvides(Dictionary<string, HashSet<string>> byProvides, string packageName,
         JsonElement package)
     {
-        var provides = TryGetStringArray(package, "Provides");
+        var provides = package.TryGetStringArray("Provides");
 
         if (provides.Length == 0)
         {
@@ -69,24 +67,10 @@ public static class PackageDataLoader
 
         var nameTerms = packageName.Split(['-', '_'], StringSplitOptions.None);
         var descTerms = desc.Split(' ');
-        var keywords = TryGetStringArray(package, "Keywords");
+        var keywords = package.TryGetStringArray("Keywords");
 
         foreach (var word in TokenCleaning.SplitAndClean(nameTerms.Concat(descTerms).Concat(keywords)))
             AddValue(byWords, word, packageName);
-    }
-
-    private static string[] TryGetStringArray(JsonElement package, string property)
-    {
-        if (!package.TryGetProperty(property, out var propertyElement) ||
-            propertyElement.ValueKind != JsonValueKind.Array) return [];
-
-        return propertyElement
-            .EnumerateArray()
-            .Where(item => item.ValueKind == JsonValueKind.String)
-            .Select(item => item.GetString())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Cast<string>()
-            .ToArray();
     }
 
     private static void AddValue(Dictionary<string, HashSet<string>> map, string key, string value)

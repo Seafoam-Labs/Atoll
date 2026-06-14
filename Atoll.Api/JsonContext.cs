@@ -1,9 +1,8 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Atoll.Api;
 
-[JsonSerializable(typeof(IReadOnlyList<JsonElement>))]
+[JsonSerializable(typeof(AurPackage[]))]
 [JsonSerializable(typeof(MetricsResponse))]
 [JsonSerializable(typeof(QueryType?))]
 [JsonSerializable(typeof(QueryValues?))]
