@@ -1,11 +1,8 @@
 using Atoll.Api;
 
-var builder = WebApplication.CreateSlimBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<AtollOptions>(builder.Configuration);
-
-builder.Services.ConfigureHttpJsonOptions(options =>
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default));
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient();
