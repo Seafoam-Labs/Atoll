@@ -16,17 +16,17 @@ public static class Endpoints
 
     private static Ok<AurPackage[]> Packages(
         [FromServices] PackageQueryService queryService,
-        [FromQuery(Name = "query")] QueryValues? query,
-        [FromQuery(Name = "by")] QueryType? by)
+        [FromQuery(Name = "query")] ValuesQuery? query,
+        [FromQuery(Name = "by")] ByQuery? by)
     {
         var queryValues = query?.Values.ToHashSet() ?? [];
-        by ??= QueryType.Name;
+        var byValue = by?.Value ?? By.Name;
 
-        return by switch
+        return byValue switch
         {
-            QueryType.Name => TypedResults.Ok(queryService.FindByNames(queryValues)),
-            QueryType.Desc => TypedResults.Ok(queryService.FindByWords(queryValues)),
-            QueryType.Prov => TypedResults.Ok(queryService.FindByProvides(queryValues)),
+            By.Name => TypedResults.Ok(queryService.FindByNames(queryValues)),
+            By.Words => TypedResults.Ok(queryService.FindByWords(queryValues)),
+            By.Provides => TypedResults.Ok(queryService.FindByProvides(queryValues)),
             _ => throw new ArgumentOutOfRangeException(nameof(by), by, null)
         };
     }

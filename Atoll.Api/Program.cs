@@ -1,8 +1,12 @@
+using System.Text.Json.Serialization;
 using Atoll.Api;
+using Microsoft.AspNetCore.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<AtollOptions>(builder.Configuration);
+builder.Services.Configure<JsonOptions>(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient();

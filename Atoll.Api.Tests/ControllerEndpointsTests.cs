@@ -34,11 +34,11 @@ public class MinimalApiEndpointsTests
     }
 
     [Test]
-    public async Task PackagesSupportsNameProvAndDescQueries()
+    public async Task PackagesSupportsNameProvidesAndWordsQueries()
     {
         var byName = await _client.GetAsync("/packages?query=portable-kit,not-real");
-        var byProv = await _client.GetAsync("/packages?query=shelly&by=Prov");
-        var byDesc = await _client.GetAsync("/packages?query=handheld,portable&by=Desc");
+        var byProv = await _client.GetAsync("/packages?query=shelly&by=provides");
+        var byDesc = await _client.GetAsync("/packages?query=handheld,portable&by=words");
 
         Assert.That(byName.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(byProv.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -49,18 +49,18 @@ public class MinimalApiEndpointsTests
         var byDescBody = await byDesc.Content.ReadAsStringAsync();
 
         using var byNameDoc = JsonDocument.Parse(byNameBody);
-        using var byProvDoc = JsonDocument.Parse(byProvBody);
-        using var byDescDoc = JsonDocument.Parse(byDescBody);
+        using var byProvidesDoc = JsonDocument.Parse(byProvBody);
+        using var byWordsDoc = JsonDocument.Parse(byDescBody);
 
         Assert.That(byNameDoc.RootElement.GetArrayLength(), Is.EqualTo(1));
         Assert.That(byNameDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
 
-        Assert.That(byProvDoc.RootElement.GetArrayLength(), Is.EqualTo(1));
-        Assert.That(byProvDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("shelly-bin"));
+        Assert.That(byProvidesDoc.RootElement.GetArrayLength(), Is.EqualTo(1));
+        Assert.That(byProvidesDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("shelly-bin"));
 
-        Assert.That(byDescDoc.RootElement.GetArrayLength(), Is.EqualTo(2));
-        Assert.That(byDescDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("portable-pro"));
-        Assert.That(byDescDoc.RootElement[1].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
+        Assert.That(byWordsDoc.RootElement.GetArrayLength(), Is.EqualTo(2));
+        Assert.That(byWordsDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("portable-pro"));
+        Assert.That(byWordsDoc.RootElement[1].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
     }
 
     [Test]
