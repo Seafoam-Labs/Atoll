@@ -2,6 +2,7 @@ using System.Globalization;
 using CliWrap;
 using CliWrap.Buffered;
 using Microsoft.Extensions.Options;
+using static CliWrap.CommandResultValidation;
 
 namespace Atoll.Api.Services.Aur;
 
@@ -9,7 +10,6 @@ namespace Atoll.Api.Services.Aur;
 public sealed class GitPackageRepository : IPackageRepository
 {
     private const string Repos = "repos";
-    private const string Work = "work";
 
     private readonly string _basePath;
     private readonly IBundleStorage _storage;
@@ -19,7 +19,6 @@ public sealed class GitPackageRepository : IPackageRepository
         _storage = storage;
         _basePath = options.Value.Storage.Local.DataPath;
         Directory.CreateDirectory(Path.Combine(_basePath, Repos));
-        Directory.CreateDirectory(Path.Combine(_basePath, Work));
     }
 
     public async Task<IReadOnlyList<string>> ListAsync()
@@ -31,55 +30,6 @@ public sealed class GitPackageRepository : IPackageRepository
     {
         if (Directory.Exists(RepoPath(packageName))) return true;
         return await _storage.ExistsAsync(packageName);
-    }
-
-    public async Task CreateAsync(string packageName, PackageFiles files, string message)
-    {
-        if (await ExistsAsync(packageName))
-            throw new InvalidOperationException($"Package {packageName} already exists");
-
-        var workDir = CreateWorkDir(packageName);
-        try
-        {
-            await RunGitAsync(["init"], workDir);
-            await RunGitAsync(["config", "user.email", "aur@local"], workDir);
-            await RunGitAsync(["config", "user.name", "AUR Sync"], workDir);
-
-            await WriteFilesAsync(workDir, files);
-            await RunGitAsync(["add", "-A"], workDir);
-            await RunGitAsync(["commit", "-m", message], workDir);
-
-            await RunGitAsync(["clone", "--bare", workDir, RepoPath(packageName)]);
-            await CreateAndUploadBundleAsync(packageName);
-        }
-        finally
-        {
-            DeleteDirectory(workDir);
-        }
-    }
-
-    public async Task UpdateAsync(string packageName, PackageFiles files, string message)
-    {
-        await EnsureLocalRepoAsync(packageName);
-
-        var workDir = CreateWorkDir(packageName);
-        try
-        {
-            await RunGitAsync(["clone", "--depth=1", $"file://{RepoPath(packageName)}", "."], workDir);
-            await RunGitAsync(["config", "user.email", "aur@local"], workDir);
-            await RunGitAsync(["config", "user.name", "AUR Sync"], workDir);
-
-            await WriteFilesAsync(workDir, files);
-            await RunGitAsync(["add", "-A"], workDir);
-            await RunGitAsync(["commit", "-m", Escape(message)], workDir);
-            await RunGitAsync(["push", "origin", "HEAD"], workDir);
-
-            await CreateAndUploadBundleAsync(packageName);
-        }
-        finally
-        {
-            DeleteDirectory(workDir);
-        }
     }
 
     public async Task<PackageFiles> GetAsync(string packageName, string? commitSha = null)
@@ -127,16 +77,17 @@ public sealed class GitPackageRepository : IPackageRepository
     {
         if (await ExistsAsync(packageName)) return;
 
-        var workDir = CreateWorkDir(packageName);
+        var repoPath = RepoPath(packageName);
         try
         {
-            await RunGitAsync(["clone", "--mirror", $"https://aur.archlinux.org/{packageName}.git", RepoPath(packageName)],
-                Path.GetTempPath());
+            DeleteDirectory(repoPath);
+            await RunGitAsync(["clone", "--mirror", $"https://aur.archlinux.org/{packageName}.git", repoPath]);
             await CreateAndUploadBundleAsync(packageName);
         }
-        finally
+        catch
         {
-            DeleteDirectory(workDir);
+            DeleteDirectory(repoPath);
+            throw;
         }
     }
 
@@ -175,42 +126,22 @@ public sealed class GitPackageRepository : IPackageRepository
 
     private async Task CreateAndUploadBundleAsync(string packageName)
     {
-        var bundlePath = Path.Combine(_basePath, $"{packageName}.bundle");
+        var packageBundle = $"{packageName}.bundle";
+        var fullBundlePath = Path.Combine(RepoPath(packageName), packageBundle);
         try
         {
-            await RunGitAsync(["bundle", "create", bundlePath, "--all"], RepoPath(packageName));
-            await _storage.UploadAsync(packageName, bundlePath);
+            await RunGitAsync(["bundle", "create", packageBundle, "--all"], RepoPath(packageName));
+            await _storage.UploadAsync(packageName, fullBundlePath);
         }
         finally
         {
-            File.Delete(bundlePath);
+            File.Delete(fullBundlePath);
         }
-    }
-
-    private static async Task WriteFilesAsync(string workDir, PackageFiles files)
-    {
-        foreach (var (path, content) in files.Files)
-        {
-            var fullPath = Path.Combine(workDir, path);
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            await File.WriteAllTextAsync(fullPath, content);
-        }
-    }
-
-    private string CreateWorkDir(string packageName)
-    {
-        var workdir = Path.Combine(_basePath, Work, $"{packageName}-{Guid.NewGuid()}");
-        return Directory.CreateDirectory(workdir).FullName;
     }
 
     private static void DeleteDirectory(string path)
     {
         if (Directory.Exists(path)) Directory.Delete(path, true);
-    }
-
-    private static string Escape(string message)
-    {
-        return message.Replace("\"", "\\\"").Replace("\n", " ");
     }
 
     private static async Task<BufferedCommandResult> RunGitAsync(
@@ -220,11 +151,9 @@ public sealed class GitPackageRepository : IPackageRepository
     {
         var cmd = Cli.Wrap("git")
             .WithArguments(args)
+            .WithValidation(throwOnError ? ZeroExitCode : None)
             .WithWorkingDirectory(workDir ?? Directory.GetCurrentDirectory());
 
-        var result = await cmd.ExecuteBufferedAsync();
-        if (throwOnError && result.ExitCode != 0)
-            throw new InvalidOperationException($"git {args} failed: {result.StandardError}");
-        return result;
+        return await cmd.ExecuteBufferedAsync();
     }
 }

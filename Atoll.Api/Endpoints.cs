@@ -52,28 +52,6 @@ public static class Endpoints
                 return TypedResults.Created($"/packages/{name}");
             });
 
-        packages.MapPost("/{name}",
-            async (
-                [FromRoute] string name,
-                [FromBody] PackageFiles files,
-                [FromQuery(Name = "message")] string message,
-                [FromServices] IPackageRepository repo) =>
-            {
-                await repo.CreateAsync(name, files, message);
-                return TypedResults.Created($"/packages/{name}");
-            });
-
-        packages.MapPut("/{name}",
-            async (
-                [FromRoute] string name,
-                [FromBody] PackageFiles files,
-                [FromQuery(Name = "message")] string message,
-                [FromServices] IPackageRepository repo) =>
-            {
-                await repo.UpdateAsync(name, files, message);
-                return TypedResults.NoContent();
-            });
-
         packages.MapGet("/{name}",
             async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
             TypedResults.Ok(await repo.GetAsync(name)));
