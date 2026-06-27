@@ -17,7 +17,7 @@ public interface IPackageRepository
     Task<PackageFiles> GetAsync(string packageName, string? commitSha = null);
     Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName);
     Task DeleteAsync(string packageName);
-    Task SyncFromS3Async(string packageName);
-    Task SyncToS3Async(string packageName);
+    Task SyncFromStorageAsync(string packageName);
+    Task SyncToStorageAsync(string packageName);
     Task SeedFromAurAsync(string packageName);
 }

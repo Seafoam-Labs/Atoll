@@ -17,7 +17,7 @@ public class PackageSyncS3Worker(
             {
                 foreach (var package in await repo.ListAsync())
                 {
-                    await repo.SyncToS3Async(package);
+                    await repo.SyncToStorageAsync(package);
                     logger.LogInformation("Synced {Package} to S3", package);
                 }
             }
