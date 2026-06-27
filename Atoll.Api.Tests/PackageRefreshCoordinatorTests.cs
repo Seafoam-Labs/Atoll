@@ -18,9 +18,12 @@ public class PackageRefreshCoordinatorTests
             new StubHttpClientFactory(invalidPayload),
             Options.Create(new AtollOptions
             {
-                DataFile = path,
-                DataFileUrl = "https://example.test/packages.json.gz",
-                RefreshIntervalMinutes = 10
+                DataSource = new DataSourceOptions
+                {
+                    DataFile = path,
+                    DataFileUrl = "https://example.test/packages.json.gz",
+                    RefreshIntervalMinutes = 10
+                }
             }),
             NullLogger<PackageRefreshCoordinator>.Instance);
 
