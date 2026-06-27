@@ -75,10 +75,12 @@ public static class Endpoints
             });
 
         packages.MapGet("/{name}",
-            async ([FromRoute] string name, [FromServices] IPackageRepository repo) => TypedResults.Ok(await repo.GetAsync(name)));
+            async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
+            TypedResults.Ok(await repo.GetAsync(name)));
 
         packages.MapGet("/{name}/versions",
-            async ([FromRoute] string name, [FromServices] IPackageRepository repo) => TypedResults.Ok(await repo.GetHistoryAsync(name)));
+            async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
+            TypedResults.Ok(await repo.GetHistoryAsync(name)));
 
         packages.MapGet("/{name}/versions/{sha}",
             async (
