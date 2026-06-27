@@ -28,7 +28,7 @@ docker compose up --build
 ## Endpoints
 
 - `GET /health` - health check
-- `GET /packages?query=<value>&by=name|words|provides` - package search
+- `GET /search?query=<value>&by=name|words|provides` - package search
 - `GET /metrics` - service metrics
 
 **by** parameter:

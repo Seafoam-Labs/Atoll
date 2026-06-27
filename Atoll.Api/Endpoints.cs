@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Aur;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,13 +9,21 @@ public static class Endpoints
     public static void MapEndpoints(this WebApplication app)
     {
         app.MapMethods("/health", ["GET", "HEAD"], TypedResults.Ok);
-        app.MapGet("/packages", Packages);
         app.MapGet("/metrics", Metrics);
+        app.MapGet("/search", Search);
+
+        var packages = app.MapGroup("/packages");
+        DefinePackageRoutes(packages);
 
         app.MapFallback("/{**path}", ([FromRoute] string? path) => TypedResults.NotFound());
     }
 
-    private static Ok<AurPackage[]> Packages(
+    private static Ok<Metrics> Metrics([FromServices] MetricsService metricsService)
+    {
+        return TypedResults.Ok(metricsService.GetMetrics());
+    }
+
+    private static Ok<AurPackage[]> Search(
         [FromServices] PackageQueryService queryService,
         [FromQuery(Name = "query")] ValuesQuery? query,
         [FromQuery(Name = "by")] ByQuery? by)
@@ -31,8 +40,57 @@ public static class Endpoints
         };
     }
 
-    private static Ok<Metrics> Metrics([FromServices] MetricsService metricsService)
+    private static void DefinePackageRoutes(RouteGroupBuilder packages)
     {
-        return TypedResults.Ok(metricsService.GetMetrics());
+        packages.MapGet("",
+            async ([FromServices] IPackageRepository repo) => TypedResults.Ok(await repo.ListAsync()));
+
+        packages.MapPost("/{name}/seed",
+            async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
+            {
+                await repo.SeedFromAurAsync(name);
+                return TypedResults.Created($"/packages/{name}");
+            });
+
+        packages.MapPost("/{name}",
+            async (
+                [FromRoute] string name,
+                [FromBody] PackageFiles files,
+                [FromQuery(Name = "message")] string message,
+                [FromServices] IPackageRepository repo) =>
+            {
+                await repo.CreateAsync(name, files, message);
+                return TypedResults.Created($"/packages/{name}");
+            });
+
+        packages.MapPut("/{name}",
+            async (
+                [FromRoute] string name,
+                [FromBody] PackageFiles files,
+                [FromQuery(Name = "message")] string message,
+                [FromServices] IPackageRepository repo) =>
+            {
+                await repo.UpdateAsync(name, files, message);
+                return TypedResults.NoContent();
+            });
+
+        packages.MapGet("/{name}",
+            async ([FromRoute] string name, [FromServices] IPackageRepository repo) => TypedResults.Ok(await repo.GetAsync(name)));
+
+        packages.MapGet("/{name}/versions",
+            async ([FromRoute] string name, [FromServices] IPackageRepository repo) => TypedResults.Ok(await repo.GetHistoryAsync(name)));
+
+        packages.MapGet("/{name}/versions/{sha}",
+            async (
+                [FromRoute] string name,
+                [FromRoute] string sha,
+                [FromServices] IPackageRepository repo) => TypedResults.Ok(await repo.GetAsync(name, sha)));
+
+        packages.MapDelete("/{name}",
+            async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
+            {
+                await repo.DeleteAsync(name);
+                return TypedResults.NoContent();
+            });
     }
 }
