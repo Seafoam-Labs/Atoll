@@ -40,7 +40,3 @@ docker compose up --build
 ## Configuration
 
 Main settings in `Atoll.Api/appsettings.json`:
-
-- `DataFile`
-- `DataFileUrl`
-- `RefreshIntervalMinutes`
