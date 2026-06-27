@@ -7,7 +7,7 @@ namespace Atoll.Api.Services.Aur;
 
 public sealed class S3BundleStorage(IAmazonS3 s3, IOptions<AtollOptions> options) : IBundleStorage
 {
-    private readonly string _bucket = options.Value.S3Bucket;
+    private readonly string _bucket = options.Value.Storage.S3.Bucket;
 
     public async Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)
     {

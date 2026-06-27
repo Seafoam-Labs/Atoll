@@ -8,7 +8,7 @@ public sealed class LocalBundleStorage : IBundleStorage
 
     public LocalBundleStorage(IOptions<AtollOptions> options)
     {
-        _bundlePath = Path.Combine(options.Value.DataPath, "bundles");
+        _bundlePath = Path.Combine(options.Value.Storage.Local.DataPath, "bundles");
         Directory.CreateDirectory(_bundlePath);
     }
 

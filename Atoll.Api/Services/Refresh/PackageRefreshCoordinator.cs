@@ -18,9 +18,9 @@ public sealed class PackageRefreshCoordinator(
     private DateTimeOffset? _lastSucceededUtc;
     private long _successes;
 
-    public string DataFilePath => options.Value.DataFile;
+    public string DataFilePath => options.Value.DataSource.DataFile;
 
-    public TimeSpan RefreshInterval => TimeSpan.FromMinutes(Math.Max(1, options.Value.RefreshIntervalMinutes));
+    public TimeSpan RefreshInterval => TimeSpan.FromMinutes(Math.Max(1, options.Value.DataSource.RefreshIntervalMinutes));
 
     public RefreshStatusSnapshot GetStatus()
     {
@@ -91,7 +91,7 @@ public sealed class PackageRefreshCoordinator(
     {
         var client = httpClientFactory.CreateClient();
 
-        await using var compressed = await client.GetStreamAsync(options.Value.DataFileUrl, cancellationToken);
+        await using var compressed = await client.GetStreamAsync(options.Value.DataSource.DataFileUrl, cancellationToken);
         await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
         await using var output = File.Create(DataFilePath);
         await gzip.CopyToAsync(output, cancellationToken);

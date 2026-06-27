@@ -1,21 +1,48 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Atoll.Api;
 
 public sealed class AtollOptions
 {
-    public string DataFile { get; init; } = "packages-meta-ext-v1.json";
-    public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
-    public int RefreshIntervalMinutes { get; init; } = 10;
+    public DataSourceOptions DataSource { get; init; } = new();
+    public StorageOptions Storage { get; init; } = new();
+}
 
-    public string DataPath { get; init; } = "/data/aur";
-    public StorageType StorageType { get; set; } = StorageType.Local;
+public sealed class DataSourceOptions
+{
+    [Required] public string DataFile { get; init; } = "packages-meta-ext-v1.json";
 
-    public string S3Bucket { get; init; } = "aur";
-    public string S3AccessKey { get; init; } = "";
-    public string S3SecretKey { get; init; } = "";
-    public string S3Endpoint { get; init; } = "";
-    public bool S3ForcePathStyle { get; init; } = false;
-    public bool S3UseHttp { get; init; } = true;
-    public string S3Region { get; init; } = "us-east-1";
+    [Required] [Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
+
+    [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 10;
+}
+
+public sealed class StorageOptions
+{
+    public StorageType Type { get; init; } = StorageType.Local;
+    public LocalStorageOptions Local { get; init; } = new();
+    public S3StorageOptions S3 { get; init; } = new();
+}
+
+public sealed class LocalStorageOptions
+{
+    [Required] public string DataPath { get; init; } = "/data/aur";
+}
+
+public sealed class S3StorageOptions
+{
+    [Required] public string Bucket { get; init; } = "aur";
+
+    public string AccessKey { get; init; } = string.Empty;
+    public string SecretKey { get; init; } = string.Empty;
+
+    public string Endpoint { get; init; } = string.Empty;
+
+    public bool ForcePathStyle { get; init; }
+
+    public bool UseHttp { get; init; }
+
+    public string Region { get; init; } = "us-east-1";
 }
 
 public enum StorageType
