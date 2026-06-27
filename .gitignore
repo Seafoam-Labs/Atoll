@@ -7,3 +7,4 @@ riderModule.iml
 .vscode/
 *.DotSettings.user
 packages-meta-ext-v1.json
+/Atoll.Api/data

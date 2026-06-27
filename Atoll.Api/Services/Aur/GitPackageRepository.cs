@@ -1,7 +1,4 @@
 using System.Globalization;
-using System.Net;
-using Amazon.S3;
-using Amazon.S3.Model;
 using CliWrap;
 using CliWrap.Buffered;
 using Microsoft.Extensions.Options;
@@ -15,44 +12,25 @@ public sealed class GitPackageRepository : IPackageRepository
     private const string Work = "work";
 
     private readonly string _basePath;
-    private readonly string _bucket;
-    private readonly IAmazonS3 _s3;
+    private readonly IBundleStorage _storage;
 
-    public GitPackageRepository(IAmazonS3 s3, IOptions<AtollOptions> options)
+    public GitPackageRepository(IBundleStorage storage, IOptions<AtollOptions> options)
     {
-        _s3 = s3;
+        _storage = storage;
         _basePath = options.Value.DataPath;
-        _bucket = options.Value.S3Bucket;
         Directory.CreateDirectory(Path.Combine(_basePath, Repos));
         Directory.CreateDirectory(Path.Combine(_basePath, Work));
     }
 
     public async Task<IReadOnlyList<string>> ListAsync()
     {
-        var response = await _s3.ListObjectsV2Async(new ListObjectsV2Request
-        {
-            BucketName = _bucket,
-            Prefix = "packages/"
-        });
-
-        return response.S3Objects
-            .Select(o => Path.GetFileNameWithoutExtension(o.Key["packages/".Length..]))
-            .ToList();
+        return await _storage.ListAsync();
     }
 
     public async Task<bool> ExistsAsync(string packageName)
     {
         if (Directory.Exists(RepoPath(packageName))) return true;
-
-        try
-        {
-            await _s3.GetObjectMetadataAsync(_bucket, BundleKey(packageName));
-            return true;
-        }
-        catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            return false;
-        }
+        return await _storage.ExistsAsync(packageName);
     }
 
     public async Task CreateAsync(string packageName, PackageFiles files, string message)
@@ -126,7 +104,6 @@ public sealed class GitPackageRepository : IPackageRepository
     {
         await EnsureLocalRepoAsync(packageName);
 
-        // %x00 is Git's format placeholder for a null byte
         var result = await RunGitAsync(["log", "--pretty=format:%H%x00%aI%x00%an%x00%s"], RepoPath(packageName));
 
         return result.StandardOutput
@@ -143,7 +120,7 @@ public sealed class GitPackageRepository : IPackageRepository
     public async Task DeleteAsync(string packageName)
     {
         DeleteDirectory(RepoPath(packageName));
-        await _s3.DeleteObjectAsync(_bucket, BundleKey(packageName));
+        await _storage.DeleteAsync(packageName);
     }
 
     public async Task SeedFromAurAsync(string packageName)
@@ -155,7 +132,6 @@ public sealed class GitPackageRepository : IPackageRepository
         {
             await RunGitAsync(["clone", "--mirror", $"https://aur.archlinux.org/{packageName}.git", RepoPath(packageName)],
                 Path.GetTempPath());
-
             await CreateAndUploadBundleAsync(packageName);
         }
         finally
@@ -164,25 +140,18 @@ public sealed class GitPackageRepository : IPackageRepository
         }
     }
 
-    public async Task SyncToS3Async(string packageName)
+    public async Task SyncToStorageAsync(string packageName)
     {
         if (!Directory.Exists(RepoPath(packageName))) return;
-
         await CreateAndUploadBundleAsync(packageName);
     }
 
-    public async Task SyncFromS3Async(string packageName)
+    public async Task SyncFromStorageAsync(string packageName)
     {
         var bundlePath = Path.Combine(_basePath, $"{packageName}.bundle");
         try
         {
-            var response = await _s3.GetObjectAsync(new GetObjectRequest
-            {
-                BucketName = _bucket,
-                Key = BundleKey(packageName)
-            });
-
-            await response.WriteResponseStreamToFileAsync(bundlePath, false, CancellationToken.None);
+            await _storage.DownloadAsync(packageName, bundlePath);
 
             DeleteDirectory(RepoPath(packageName));
             await RunGitAsync(["clone", "--mirror", bundlePath], RepoPath(packageName));
@@ -198,16 +167,10 @@ public sealed class GitPackageRepository : IPackageRepository
         return Path.Combine(_basePath, Repos, $"{packageName}.git");
     }
 
-    private static string BundleKey(string packageName)
-    {
-        return $"packages/{packageName}.bundle";
-    }
-
     private async Task EnsureLocalRepoAsync(string packageName)
     {
         if (Directory.Exists(RepoPath(packageName))) return;
-
-        await SyncFromS3Async(packageName);
+        await SyncFromStorageAsync(packageName);
     }
 
     private async Task CreateAndUploadBundleAsync(string packageName)
@@ -216,13 +179,7 @@ public sealed class GitPackageRepository : IPackageRepository
         try
         {
             await RunGitAsync(["bundle", "create", bundlePath, "--all"], RepoPath(packageName));
-
-            await _s3.PutObjectAsync(new PutObjectRequest
-            {
-                BucketName = _bucket,
-                Key = BundleKey(packageName),
-                FilePath = bundlePath
-            });
+            await _storage.UploadAsync(packageName, bundlePath);
         }
         finally
         {

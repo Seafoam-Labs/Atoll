@@ -8,6 +8,8 @@
       - "8080:8080"
     environment:
       - DataFile=/app/data/packages-meta-ext-v1.json
+      - DataPath=/app/data/aur
+      - StorageType=Local
     volumes:
       - atoll-data:/app/data
 
