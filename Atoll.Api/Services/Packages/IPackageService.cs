@@ -1,14 +1,6 @@
-namespace Atoll.Api.Services.Aur;
+namespace Atoll.Api.Services.Packages;
 
-public record PackageFiles(Dictionary<string, string> Files);
-
-public record PackageVersion(
-    string Sha,
-    DateTimeOffset Date,
-    string Message,
-    string Author);
-
-public interface IPackageRepository
+public interface IPackageService
 {
     Task<IReadOnlyList<string>> ListAsync();
     Task<bool> ExistsAsync(string packageName);

@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Packages;
+namespace Atoll.Api.Services.Search;
 
 /// <summary>
 ///     The type of query to perform for packages.
@@ -35,8 +35,7 @@ public readonly record struct ValuesQuery(string[] Values)
             return true;
         }
 
-        result = new ValuesQuery(source.Split(',',
-            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+        result = new ValuesQuery(source.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
         return true;
     }
 }

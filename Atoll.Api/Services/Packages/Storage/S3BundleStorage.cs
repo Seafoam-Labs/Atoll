@@ -3,7 +3,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Options;
 
-namespace Atoll.Api.Services.Aur;
+namespace Atoll.Api.Services.Packages.Storage;
 
 public sealed class S3BundleStorage(IAmazonS3 s3, IOptions<AtollOptions> options) : IBundleStorage
 {

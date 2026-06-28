@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-namespace Atoll.Api.Services.Aur;
+namespace Atoll.Api.Services.Packages.Storage;
 
 public sealed class LocalBundleStorage : IBundleStorage
 {

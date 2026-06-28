@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Search;
 using NUnit.Framework;
 
 namespace Atoll.Api.Tests;

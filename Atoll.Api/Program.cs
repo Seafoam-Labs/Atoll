@@ -2,7 +2,13 @@ using System.Text.Json.Serialization;
 using Amazon.Runtime;
 using Amazon.S3;
 using Atoll.Api;
-using Atoll.Api.Services.Aur;
+using Atoll.Api.Services.Metrics;
+using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Packages.Storage;
+using Atoll.Api.Services.Runtime;
+using Atoll.Api.Services.Search;
+using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Search.Refresh;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 
@@ -20,11 +26,11 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton<PackageIndexStore>();
-builder.Services.AddSingleton<PackageQueryService>();
-builder.Services.AddSingleton<PackageRefreshCoordinator>();
+builder.Services.AddSingleton<PackageSearchService>();
+builder.Services.AddSingleton<PackageIndexUpdater>();
 builder.Services.AddSingleton<MetricsService>();
 builder.Services.AddSingleton(new ApplicationRuntimeInfo(DateTimeOffset.UtcNow));
-builder.Services.AddSingleton<IPackageRepository, GitPackageRepository>();
+builder.Services.AddSingleton<IPackageService, GitPackageService>();
 
 builder.Services.AddSingleton<IAmazonS3, AmazonS3Client>(sp =>
 {
@@ -57,8 +63,8 @@ builder.Services.AddSingleton<IBundleStorage>(sp =>
     };
 });
 
-builder.Services.AddHostedService<PackageRefreshWorker>();
-builder.Services.AddHostedService<PackageSyncS3Worker>();
+builder.Services.AddHostedService<PackageIndexWorker>();
+builder.Services.AddHostedService<PackageSyncStorageWorker>();
 
 var app = builder.Build();
 

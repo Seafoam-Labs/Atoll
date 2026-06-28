@@ -1,15 +1,17 @@
+using Atoll.Api.Services.Search;
+using Atoll.Api.Services.Search.Indexing;
 using NUnit.Framework;
 
 namespace Atoll.Api.Tests;
 
-public class PackageQueryServiceTests
+public class PackageSearchServiceTests
 {
     [Test]
     public async Task QueryByProvidesAndWordsMatchesExpectedPackages()
     {
         var store = new PackageIndexStore();
         store.Replace(await TestData.LoadSampleIndexesAsync());
-        var query = new PackageQueryService(store);
+        var query = new PackageSearchService(store);
 
         var byProvides = query.FindByProvides(["shelly"]);
         var byWords = query.FindByWords(["handheld", "portable"]);
@@ -27,7 +29,7 @@ public class PackageQueryServiceTests
     {
         var store = new PackageIndexStore();
         store.Replace(await TestData.LoadSampleIndexesAsync());
-        var query = new PackageQueryService(store);
+        var query = new PackageSearchService(store);
 
         var result = query.FindByNames(["portable-kit", "not-real"]);
 

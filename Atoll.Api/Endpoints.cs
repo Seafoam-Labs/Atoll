@@ -1,4 +1,6 @@
-using Atoll.Api.Services.Aur;
+using Atoll.Api.Services.Metrics;
+using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Search;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,8 +25,8 @@ public static class Endpoints
         return TypedResults.Ok(metricsService.GetMetrics());
     }
 
-    private static Ok<AurPackage[]> Search(
-        [FromServices] PackageQueryService queryService,
+    private static Ok<AurPackageMetadata[]> Search(
+        [FromServices] PackageSearchService searchService,
         [FromQuery(Name = "query")] ValuesQuery? query,
         [FromQuery(Name = "by")] ByQuery? by)
     {
@@ -33,9 +35,9 @@ public static class Endpoints
 
         return byValue switch
         {
-            By.Name => TypedResults.Ok(queryService.FindByNames(queryValues)),
-            By.Words => TypedResults.Ok(queryService.FindByWords(queryValues)),
-            By.Provides => TypedResults.Ok(queryService.FindByProvides(queryValues)),
+            By.Name => TypedResults.Ok(searchService.FindByNames(queryValues)),
+            By.Words => TypedResults.Ok(searchService.FindByWords(queryValues)),
+            By.Provides => TypedResults.Ok(searchService.FindByProvides(queryValues)),
             _ => throw new ArgumentOutOfRangeException(nameof(by), by, null)
         };
     }
@@ -43,31 +45,31 @@ public static class Endpoints
     private static void DefinePackageRoutes(RouteGroupBuilder packages)
     {
         packages.MapGet("",
-            async ([FromServices] IPackageRepository repo) => TypedResults.Ok(await repo.ListAsync()));
+            async ([FromServices] IPackageService repo) => TypedResults.Ok(await repo.ListAsync()));
 
         packages.MapPost("/{name}/seed",
-            async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
+            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
             {
                 await repo.SeedFromAurAsync(name);
                 return TypedResults.Created($"/packages/{name}");
             });
 
         packages.MapGet("/{name}",
-            async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
+            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
             TypedResults.Ok(await repo.GetAsync(name)));
 
         packages.MapGet("/{name}/versions",
-            async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
+            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
             TypedResults.Ok(await repo.GetHistoryAsync(name)));
 
         packages.MapGet("/{name}/versions/{sha}",
             async (
                 [FromRoute] string name,
                 [FromRoute] string sha,
-                [FromServices] IPackageRepository repo) => TypedResults.Ok(await repo.GetAsync(name, sha)));
+                [FromServices] IPackageService repo) => TypedResults.Ok(await repo.GetAsync(name, sha)));
 
         packages.MapDelete("/{name}",
-            async ([FromRoute] string name, [FromServices] IPackageRepository repo) =>
+            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
             {
                 await repo.DeleteAsync(name);
                 return TypedResults.NoContent();

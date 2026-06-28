@@ -1,11 +1,13 @@
 using System.Net;
+using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Search.Refresh;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
 namespace Atoll.Api.Tests;
 
-public class PackageRefreshCoordinatorTests
+public class PackageIndexUpdaterTests
 {
     [Test]
     public async Task RefreshCoordinatorTracksAttemptAndFailureMetrics()
@@ -14,7 +16,7 @@ public class PackageRefreshCoordinatorTests
         var invalidPayload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
 
         var store = new PackageIndexStore();
-        var coordinator = new PackageRefreshCoordinator(store,
+        var coordinator = new PackageIndexUpdater(store,
             new StubHttpClientFactory(invalidPayload),
             Options.Create(new AtollOptions
             {
@@ -25,7 +27,7 @@ public class PackageRefreshCoordinatorTests
                     RefreshIntervalMinutes = 10
                 }
             }),
-            NullLogger<PackageRefreshCoordinator>.Instance);
+            NullLogger<PackageIndexUpdater>.Instance);
 
         var ok = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
         var status = coordinator.GetStatus();

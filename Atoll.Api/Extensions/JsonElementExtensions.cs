@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Atoll.Api.Services.Search;
 
 namespace Atoll.Api.Extensions;
 
@@ -50,9 +51,9 @@ public static class JsonElementExtensions
 
     extension(JsonElement element)
     {
-        public AurPackage DeserializeAurPackage()
+        public AurPackageMetadata DeserializeAurPackage()
         {
-            return new AurPackage(
+            return new AurPackageMetadata(
                 GetInt64(element, "ID"),
                 GetString(element, "Name") ?? string.Empty,
                 GetInt64(element, "PackageBaseID"),

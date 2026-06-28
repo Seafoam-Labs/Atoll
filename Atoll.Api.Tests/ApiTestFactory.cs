@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Search.Indexing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;

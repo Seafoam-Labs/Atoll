@@ -1,12 +1,14 @@
-namespace Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Search.Indexing;
 
-public sealed class PackageQueryService(PackageIndexStore store)
+namespace Atoll.Api.Services.Search;
+
+public sealed class PackageSearchService(PackageIndexStore store)
 {
     private long _requestCount;
 
     public long RequestCount => Interlocked.Read(ref _requestCount);
 
-    public AurPackage[] FindByNames(HashSet<string> names)
+    public AurPackageMetadata[] FindByNames(HashSet<string> names)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
@@ -14,11 +16,11 @@ public sealed class PackageQueryService(PackageIndexStore store)
         return names
             .Select(name => snapshot.ByNames.GetValueOrDefault(name))
             .Where(package => package is not null)
-            .Cast<AurPackage>()
+            .Cast<AurPackageMetadata>()
             .ToArray();
     }
 
-    public AurPackage[] FindByProvides(HashSet<string> names)
+    public AurPackageMetadata[] FindByProvides(HashSet<string> names)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
@@ -35,11 +37,11 @@ public sealed class PackageQueryService(PackageIndexStore store)
         return matchingNames
             .Select(name => snapshot.ByNames.GetValueOrDefault(name))
             .Where(package => package is not null)
-            .Cast<AurPackage>()
+            .Cast<AurPackageMetadata>()
             .ToArray();
     }
 
-    public AurPackage[] FindByWords(HashSet<string> words)
+    public AurPackageMetadata[] FindByWords(HashSet<string> words)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
@@ -67,7 +69,7 @@ public sealed class PackageQueryService(PackageIndexStore store)
         return intersection
             .Select(name => snapshot.ByNames.GetValueOrDefault(name))
             .Where(package => package is not null)
-            .Cast<AurPackage>()
+            .Cast<AurPackageMetadata>()
             .OrderByDescending(package => package.NumVotes)
             .Take(50)
             .ToArray();
