@@ -17,7 +17,7 @@ public sealed class GitPackageRepository : IPackageRepository
     public GitPackageRepository(IBundleStorage storage, IOptions<AtollOptions> options)
     {
         _storage = storage;
-        _basePath = options.Value.Storage.Local.DataPath;
+        _basePath = options.Value.Storage.DataPath;
         Directory.CreateDirectory(Path.Combine(_basePath, Repos));
     }
 

@@ -8,6 +8,7 @@ namespace Atoll.Api.Services.Aur;
 public sealed class S3BundleStorage(IAmazonS3 s3, IOptions<AtollOptions> options) : IBundleStorage
 {
     private readonly string _bucket = options.Value.Storage.S3.Bucket;
+    private readonly bool _chunked = options.Value.Storage.S3.ChunkedEncoding;
 
     public async Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)
     {
@@ -50,6 +51,7 @@ public sealed class S3BundleStorage(IAmazonS3 s3, IOptions<AtollOptions> options
     {
         await s3.PutObjectAsync(new PutObjectRequest
         {
+            UseChunkEncoding = _chunked,
             BucketName = _bucket,
             Key = BundleKey(packageName),
             FilePath = sourcePath
