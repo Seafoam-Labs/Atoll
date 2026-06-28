@@ -1,11 +1,12 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using Atoll.Api.Extensions;
 
-namespace Atoll.Api.Services.Indexing;
+namespace Atoll.Api.Services.Search.Indexing;
 
 public static class PackageDataLoader
 {
-    public static async Task<PackageIndexes> LoadAsync(string filePath, CancellationToken cancellationToken)
+    public static async Task<SearchIndexData> LoadAsync(string filePath, CancellationToken cancellationToken)
     {
         await using var stream = File.OpenRead(filePath);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
@@ -13,7 +14,7 @@ public static class PackageDataLoader
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("AUR package dump is not a JSON array.");
 
-        var byNamesBuilder = ImmutableDictionary.CreateBuilder<string, AurPackage>(StringComparer.Ordinal);
+        var byNamesBuilder = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
         var byProvidesMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         var byWordsMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
@@ -41,7 +42,7 @@ public static class PackageDataLoader
             kvp => kvp.Value.ToImmutableHashSet(StringComparer.Ordinal),
             StringComparer.Ordinal);
 
-        return new PackageIndexes(byNamesBuilder.ToImmutable(), byProvides, byWords);
+        return new SearchIndexData(byNamesBuilder.ToImmutable(), byProvides, byWords);
     }
 
     private static void IndexProvides(Dictionary<string, HashSet<string>> byProvides, string packageName,

@@ -39,4 +39,6 @@ docker compose up --build
 
 ## Configuration
 
-Main settings in `Atoll.Api/appsettings.json`:
+Main settings in `Atoll.Api/appsettings.json` and in `Atoll.Api/AtollOptions.cs`.
+
+Also, `compose.yaml` contains example for using environment variables.

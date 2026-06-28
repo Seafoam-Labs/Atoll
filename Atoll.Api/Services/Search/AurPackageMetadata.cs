@@ -1,9 +1,9 @@
-namespace Atoll.Api.Services.Packages;
+namespace Atoll.Api.Services.Search;
 
 /// <summary>
 ///     Represents a package from the AUR package repository.
 /// </summary>
-public sealed record AurPackage(
+public sealed record AurPackageMetadata(
     long Id,
     string Name,
     long PackageBaseId,

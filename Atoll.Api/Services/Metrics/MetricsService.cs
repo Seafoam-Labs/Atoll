@@ -1,20 +1,25 @@
+using Atoll.Api.Services.Runtime;
+using Atoll.Api.Services.Search;
+using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Search.Refresh;
+
 namespace Atoll.Api.Services.Metrics;
 
 public sealed class MetricsService(
     PackageIndexStore store,
-    PackageQueryService queryService,
-    PackageRefreshCoordinator refreshCoordinator,
+    PackageSearchService searchService,
+    PackageIndexUpdater updater,
     ApplicationRuntimeInfo runtimeInfo)
 {
     public Metrics GetMetrics()
     {
         var snapshot = store.Current;
-        var refresh = refreshCoordinator.GetStatus();
+        var refresh = updater.GetStatus();
 
         return new Metrics
         {
             UptimeSeconds = (long)(DateTimeOffset.UtcNow - runtimeInfo.StartedAtUtc).TotalSeconds,
-            RequestCount = queryService.RequestCount,
+            RequestCount = searchService.RequestCount,
             IndexSizes = new IndexSizes
             {
                 ByNames = snapshot.ByNames.Count,

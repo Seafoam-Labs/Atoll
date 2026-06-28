@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Aur;
+namespace Atoll.Api.Services.Packages.Storage;
 
 public interface IBundleStorage
 {

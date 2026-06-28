@@ -1,7 +1,7 @@
 namespace Atoll.Api.Services.Metrics;
 
 /// <summary>
-///     Represents the Atoll app API metrics.
+///     Represents the Atoll Search API metrics.
 /// </summary>
 public sealed class Metrics
 {

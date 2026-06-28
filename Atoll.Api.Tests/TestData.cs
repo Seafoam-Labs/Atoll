@@ -1,3 +1,5 @@
+using Atoll.Api.Services.Search.Indexing;
+
 namespace Atoll.Api.Tests;
 
 internal static class TestData
@@ -35,7 +37,7 @@ internal static class TestData
         return path;
     }
 
-    internal static async Task<PackageIndexes> LoadSampleIndexesAsync()
+    internal static async Task<SearchIndexData> LoadSampleIndexesAsync()
     {
         var path = await WriteSamplePackagesAsync();
         return await PackageDataLoader.LoadAsync(path, CancellationToken.None);

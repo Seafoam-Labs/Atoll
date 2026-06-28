@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Refresh;
+namespace Atoll.Api.Services.Search.Refresh;
 
 public sealed record RefreshStatusSnapshot(
     string DataFile,

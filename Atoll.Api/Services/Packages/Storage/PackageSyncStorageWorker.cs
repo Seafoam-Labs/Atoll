@@ -1,8 +1,8 @@
-namespace Atoll.Api.Services.Aur;
+namespace Atoll.Api.Services.Packages.Storage;
 
-public class PackageSyncS3Worker(
-    IPackageRepository repo,
-    ILogger<PackageSyncS3Worker> logger
+public class PackageSyncStorageWorker(
+    IPackageService repo,
+    ILogger<PackageSyncStorageWorker> logger
 ) : BackgroundService
 {
     private readonly TimeSpan _interval = TimeSpan.FromHours(1);
@@ -18,7 +18,7 @@ public class PackageSyncS3Worker(
                 foreach (var package in await repo.ListAsync())
                 {
                     await repo.SyncToStorageAsync(package);
-                    logger.LogInformation("Synced {Package} to S3", package);
+                    logger.LogInformation("Synced {Package} to Storage", package);
                 }
             }
             catch (Exception ex)

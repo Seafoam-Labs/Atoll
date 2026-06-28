@@ -1,20 +1,21 @@
 using System.Globalization;
+using Atoll.Api.Services.Packages.Storage;
 using CliWrap;
 using CliWrap.Buffered;
 using Microsoft.Extensions.Options;
 using static CliWrap.CommandResultValidation;
 
-namespace Atoll.Api.Services.Aur;
+namespace Atoll.Api.Services.Packages;
 
 ///<remarks>not thread safe</remarks>
-public sealed class GitPackageRepository : IPackageRepository
+public sealed class GitPackageService : IPackageService
 {
     private const string Repos = "repos";
 
     private readonly string _basePath;
     private readonly IBundleStorage _storage;
 
-    public GitPackageRepository(IBundleStorage storage, IOptions<AtollOptions> options)
+    public GitPackageService(IBundleStorage storage, IOptions<AtollOptions> options)
     {
         _storage = storage;
         _basePath = options.Value.Storage.DataPath;

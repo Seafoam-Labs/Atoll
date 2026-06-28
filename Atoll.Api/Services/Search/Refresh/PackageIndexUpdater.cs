@@ -1,13 +1,14 @@
 using System.IO.Compression;
+using Atoll.Api.Services.Search.Indexing;
 using Microsoft.Extensions.Options;
 
-namespace Atoll.Api.Services.Refresh;
+namespace Atoll.Api.Services.Search.Refresh;
 
-public sealed class PackageRefreshCoordinator(
+public sealed class PackageIndexUpdater(
     PackageIndexStore store,
     IHttpClientFactory httpClientFactory,
     IOptions<AtollOptions> options,
-    ILogger<PackageRefreshCoordinator> logger)
+    ILogger<PackageIndexUpdater> logger)
 {
     private readonly Lock _timeLock = new();
 
