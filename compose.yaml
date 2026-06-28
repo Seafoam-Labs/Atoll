@@ -10,10 +10,46 @@
       - Atoll__DataSource__DataFile=/app/data/packages-meta-ext-v1.json
       - Atoll__DataSource__DataFileUrl=https://aur.archlinux.org/packages-meta-ext-v1.json.gz
       - Atoll__DataSource__RefreshIntervalMinutes=10
-      - Atoll__Storage__Type=Local
-      - Atoll__Storage__Local__DataPath=/app/data/aur
+      - Atoll__Storage__DataPath=/app/data/aur
+      - Atoll__Storage__Type=S3
+      - Atoll__Storage__S3__Bucket=atoll-bucket
+      - Atoll__Storage__S3__AccessKey=atoll-access-key
+      - Atoll__Storage__S3__SecretKey=atoll-secret-key
+      - Atoll__Storage__S3__Endpoint=garage:3900
+      - Atoll__Storage__S3__Region=garage
+      - Atoll__Storage__S3__ForcePathStyle=true
+      - Atoll__Storage__S3__UseHttp=true
+      # Garage doesn't support chunked encoding, but it can be true on S3
+      - Atoll__Storage__S3__ChunkedEncoding=false
     volumes:
       - atoll-data:/app/data
 
+  garage:
+    image: dxflrs/garage:v2.3.0
+    restart: unless-stopped
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+      - "3902:3902"
+      - "3903:3903"
+    environment:
+      GARAGE_DEFAULT_BUCKET: atoll-bucket
+      GARAGE_DEFAULT_ACCESS_KEY: atoll-access-key
+      GARAGE_DEFAULT_SECRET_KEY: atoll-secret-key
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml
+      - garage-data:/var/lib/garage/data
+      - garage-meta:/var/lib/garage/meta
+    command: /garage server --single-node --default-bucket
+    healthcheck:
+      test: [ "CMD", "/garage", "stats", "-a" ]
+      interval: 5m
+      retries: 3
+      start_interval: 5s
+      start_period: 10s
+      timeout: 5s
+
 volumes:
   atoll-data:
+  garage-data:
+  garage-meta:

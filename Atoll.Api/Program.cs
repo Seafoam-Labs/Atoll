@@ -38,10 +38,9 @@ builder.Services.AddSingleton<IAmazonS3, AmazonS3Client>(sp =>
         AuthenticationRegion = s3.Region
     };
 
-    if (string.IsNullOrEmpty(s3.Endpoint))
-        return new AmazonS3Client(credentials, config);
+    if (!string.IsNullOrEmpty(s3.Endpoint))
+        config.ServiceURL = $"{(s3.UseHttp ? "http" : "https")}://{s3.Endpoint}";
 
-    config.ServiceURL = $"{(s3.UseHttp ? "http" : "https")}://{s3.Endpoint}";
     return new AmazonS3Client(credentials, config);
 });
 
