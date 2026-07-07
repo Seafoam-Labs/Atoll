@@ -18,9 +18,9 @@ public sealed class S3BundleStorage(IAmazonS3 s3, IOptions<AtollOptions> options
             Prefix = "packages/"
         }, cancellationToken);
 
-        return response.S3Objects
+        return response.S3Objects?
             .Select(o => Path.GetFileNameWithoutExtension(o.Key["packages/".Length..]))
-            .ToList();
+            .ToList() ?? [];
     }
 
     public async Task<bool> ExistsAsync(string packageName, CancellationToken cancellationToken = default)
