@@ -15,7 +15,7 @@ public static class Endpoints
         app.MapGet("/search", Search);
 
         var packages = app.MapGroup("/packages");
-        DefinePackageRoutes(packages);
+        MapPackageRoutes(packages);
 
         app.MapFallback("/{**path}", ([FromRoute] string? path) => TypedResults.NotFound());
     }
@@ -42,7 +42,7 @@ public static class Endpoints
         };
     }
 
-    private static void DefinePackageRoutes(RouteGroupBuilder packages)
+    private static void MapPackageRoutes(RouteGroupBuilder packages)
     {
         packages.MapGet("",
             async ([FromServices] IPackageService repo) => TypedResults.Ok(await repo.ListAsync()));
@@ -63,10 +63,8 @@ public static class Endpoints
             TypedResults.Ok(await repo.GetHistoryAsync(name)));
 
         packages.MapGet("/{name}/versions/{sha}",
-            async (
-                [FromRoute] string name,
-                [FromRoute] string sha,
-                [FromServices] IPackageService repo) => TypedResults.Ok(await repo.GetAsync(name, sha)));
+            async ([FromRoute] string name, [FromRoute] string sha, [FromServices] IPackageService repo) =>
+            TypedResults.Ok(await repo.GetAsync(name, sha)));
 
         packages.MapDelete("/{name}",
             async ([FromRoute] string name, [FromServices] IPackageService repo) =>
