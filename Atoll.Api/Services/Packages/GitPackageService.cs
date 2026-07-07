@@ -55,14 +55,14 @@ public sealed class GitPackageService : IPackageService
     {
         await EnsureLocalRepoAsync(packageName);
 
-        var result = await RunGitAsync(["log", "--pretty=format:%H%x00%aI%x00%an%x00%s"], RepoPath(packageName));
+        var result = await RunGitAsync(["log", "--pretty=format:%H%x00%aI%x00%an%x00%s%x00"], RepoPath(packageName));
 
         return result.StandardOutput
-            .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Chunk(4)
             .Select(parts => new PackageVersion(
                 parts[0],
-                DateTimeOffset.ParseExact(parts[1], "o", CultureInfo.InvariantCulture, DateTimeStyles.None),
+                DateTimeOffset.ParseExact(parts[1], "yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture, DateTimeStyles.None),
                 parts[3],
                 parts[2]))
             .ToList();
