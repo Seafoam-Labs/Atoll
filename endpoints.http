@@ -1,0 +1,45 @@
+@baseUrl = http://localhost:5290
+
+### Health Check
+GET {{baseUrl}}/health
+Accept: application/json
+
+### Get Metrics
+GET {{baseUrl}}/metrics
+Accept: application/json
+
+### Search Packages by Name
+GET {{baseUrl}}/search?query=shelly&by=name
+Accept: application/json
+
+### Search Packages by Words
+GET {{baseUrl}}/search?query=shelly&by=words
+Accept: application/json
+
+### Search Packages by Provides
+GET {{baseUrl}}/search?query=shelly&by=provides
+Accept: application/json
+
+### List All Packages
+GET {{baseUrl}}/packages
+Accept: application/json
+
+### Seed Package from AUR
+POST {{baseUrl}}/packages/shelly/seed
+Accept: application/json
+
+### Get Specific Package
+GET {{baseUrl}}/packages/shelly
+Accept: application/json
+
+### Get Package Versions
+GET {{baseUrl}}/packages/shelly/versions
+Accept: application/json
+
+### Get Specific Package Version
+GET {{baseUrl}}/packages/shelly/versions/7c28f4dc7bdd21bfacf9d020ec0f80bd6dff9bcd
+Accept: application/json
+
+### Delete Package
+DELETE {{baseUrl}}/packages/shelly
+Accept: application/json
