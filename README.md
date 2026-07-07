@@ -25,6 +25,29 @@ dotnet run --project Atoll.Api
 docker compose up --build
 ```
 
+## Garage S3 Storage (Development)
+
+Atoll supports using [Garage](https://garagehq.deuxfleurs.fr/) as an S3-compatible storage backend. A local Garage instance is included in `compose.yaml`.
+
+To run the app from your IDE using Garage S3 storage:
+
+1. Start the Garage service using Docker Compose:
+
+   ```bash
+   docker compose up -d garage
+   ```
+
+2. Configure your IDE or run command to use the `Garage` environment so that `Atoll.Api/appsettings.Garage.json` is loaded:
+
+   - **dotnet CLI**:
+
+     ```bash
+     dotnet run --project Atoll.Api --environment Garage
+     ```
+
+   - **IDE**:
+     - Add `ASPNETCORE_ENVIRONMENT` = `Garage` as Environment Variable (launchSettings.json)
+
 ## Endpoints
 
 - `GET /health` - health check
