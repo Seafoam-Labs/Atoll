@@ -2,7 +2,7 @@
 
 > Atoll - A ring-shaped coral reef; a community ecosystem for arch packages.
 
-Minimal API that mirrors Arch Linux AUR package metadata and provides fast package search endpoints.
+Minimal API that mirrors Arch Linux AUR package metadata, manages package versions and history, and provides fast package search endpoints.
 
 ## Requirements
 
@@ -50,15 +50,32 @@ To run the app from your IDE using Garage S3 storage:
 
 ## Endpoints
 
-- `GET /health` - health check
-- `GET /search?query=<value>&by=name|words|provides` - package search
+### Health
+
+- `GET /health`, `HEAD /health` - health check
+
+### Metrics
+
 - `GET /metrics` - service metrics
+
+### Search
+
+- `GET /search?query=<value>&by=name|words|provides` - package search
 
 **by** parameter:
 
 - `name`: search by package exact name
 - `words`: search by package words (Name, Description, Keywords)
 - `provides`: search by package provides
+
+### Packages
+
+- `GET /packages` - List all packages
+- `POST /packages/{name}/seed` - Seed package from AUR
+- `GET /packages/{name}` - Get specific package
+- `GET /packages/{name}/versions` - Get package versions
+- `GET /packages/{name}/versions/{sha}` - Get specific package version
+- `DELETE /packages/{name}` - Delete package
 
 ## Configuration
 
