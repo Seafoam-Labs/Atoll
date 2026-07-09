@@ -10,4 +10,5 @@ public interface IPackageService
     Task SyncFromStorageAsync(string packageName);
     Task SyncToStorageAsync(string packageName);
     Task SeedFromAurAsync(string packageName);
+    string? GetRepositoryPath(string packageName);
 }

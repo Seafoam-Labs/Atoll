@@ -16,6 +16,7 @@ public static class Endpoints
 
         var packages = app.MapGroup("/packages");
         MapPackageRoutes(packages);
+        MapGitProtocolRoutes(packages);
 
         app.MapFallback("/{**path}", ([FromRoute] string? path) => TypedResults.NotFound());
     }
@@ -72,5 +73,51 @@ public static class Endpoints
                 await repo.DeleteAsync(name);
                 return TypedResults.NoContent();
             });
+    }
+
+    private static void MapGitProtocolRoutes(RouteGroupBuilder packages)
+    {
+        packages.MapGet("/{name}.git/info/refs", GitInfoRefs);
+        packages.MapPost("/{name}.git/git-upload-pack", GitUploadPack);
+    }
+
+    private static async Task<IResult> GitInfoRefs(
+        [FromRoute] string name,
+        [FromQuery(Name = "service")] string? service,
+        [FromServices] IGitTransferService git,
+        HttpResponse response,
+        CancellationToken ct)
+    {
+        response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
+
+        if (!string.Equals(service, "git-upload-pack", StringComparison.Ordinal))
+            return TypedResults.Problem("Only git-upload-pack is supported.", statusCode: StatusCodes.Status403Forbidden);
+
+        response.ContentType = "application/x-git-upload-pack-advertisement";
+
+        var result = await git.AdvertiseRefsAsync(name, response.Body, ct);
+        if (result is GitTransferResult.Ok)
+            return TypedResults.Empty;
+
+        response.ContentType = null;
+        return TypedResults.NotFound();
+    }
+
+    private static async Task<IResult> GitUploadPack(
+        [FromRoute] string name,
+        [FromServices] IGitTransferService git,
+        HttpRequest request,
+        HttpResponse response,
+        CancellationToken ct)
+    {
+        response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
+        response.ContentType = "application/x-git-upload-pack-result";
+
+        var result = await git.UploadPackAsync(name, request.Body, response.Body, ct);
+        if (result is GitTransferResult.Ok)
+            return TypedResults.Empty;
+
+        response.ContentType = null;
+        return TypedResults.NotFound();
     }
 }

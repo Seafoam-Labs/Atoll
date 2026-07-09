@@ -114,6 +114,12 @@ public sealed class GitPackageService : IPackageService
         }
     }
 
+    public string? GetRepositoryPath(string packageName)
+    {
+        var path = RepoPath(packageName);
+        return Directory.Exists(path) ? path : null;
+    }
+
     private string RepoPath(string packageName)
     {
         return Path.Combine(_basePath, Repos, $"{packageName}.git");

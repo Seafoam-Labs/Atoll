@@ -77,6 +77,21 @@ To run the app from your IDE using Garage S3 storage:
 - `GET /packages/{name}/versions/{sha}` - Get specific package version
 - `DELETE /packages/{name}` - Delete package
 
+### Git Smart HTTP
+
+Package repositories are exposed over the [Git Smart HTTP protocol](https://git-scm.com/docs/http-protocol), so any seeded package can be cloned directly:
+
+```bash
+git clone http://localhost:5290/packages/{name}.git
+```
+
+Underlying endpoints (used by the Git client itself, rarely called by hand):
+
+- `GET /packages/{name}.git/info/refs?service=git-upload-pack` - ref advertisement
+- `POST /packages/{name}.git/git-upload-pack` - upload-pack negotiation and pack transfer
+
+Only `git-upload-pack` (fetch/clone) is supported; `git-receive-pack` (push) is not.
+
 ## Configuration
 
 Main settings in `Atoll.Api/appsettings.json` and in `Atoll.Api/AtollOptions.cs`.
