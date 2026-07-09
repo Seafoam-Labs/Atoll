@@ -25,6 +25,9 @@ builder.Services.Configure<JsonOptions>(options =>
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient();
 
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 builder.Services.AddSingleton<PackageIndexStore>();
 builder.Services.AddSingleton<PackageSearchService>();
 builder.Services.AddSingleton<PackageIndexUpdater>();
@@ -72,6 +75,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
+app.UseExceptionHandler();
 app.MapEndpoints();
 
 await app.RunAsync();
