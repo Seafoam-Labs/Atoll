@@ -38,13 +38,20 @@ public sealed class S3BundleStorage(IAmazonS3 s3, IOptions<AtollOptions> options
 
     public async Task DownloadAsync(string packageName, string destinationPath, CancellationToken cancellationToken = default)
     {
-        var response = await s3.GetObjectAsync(new GetObjectRequest
+        try
         {
-            BucketName = _bucket,
-            Key = BundleKey(packageName)
-        }, cancellationToken);
+            var response = await s3.GetObjectAsync(new GetObjectRequest
+            {
+                BucketName = _bucket,
+                Key = BundleKey(packageName)
+            }, cancellationToken);
 
-        await response.WriteResponseStreamToFileAsync(destinationPath, false, cancellationToken);
+            await response.WriteResponseStreamToFileAsync(destinationPath, false, cancellationToken);
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new FileNotFoundException($"Package bundle '{packageName}' not found in S3 storage.", destinationPath);
+        }
     }
 
     public async Task UploadAsync(string packageName, string sourcePath, CancellationToken cancellationToken = default)
