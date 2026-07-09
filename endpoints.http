@@ -43,3 +43,14 @@ Accept: application/json
 ### Delete Package
 DELETE {{baseUrl}}/packages/shelly
 Accept: application/json
+
+### Git Smart HTTP - Ref Advertisement
+# Returns the pkt-line ref advertisement. Prefer `git clone` for normal use:
+#   git clone http://localhost:5290/packages/shelly.git
+GET {{baseUrl}}/packages/shelly.git/info/refs?service=git-upload-pack
+
+### Git Smart HTTP - Upload Pack (POST)
+# Requires a binary pkt-line request body (want/have negotiation).
+# Not practical to craft by hand - use `git clone` / `git fetch` instead.
+# POST {{baseUrl}}/packages/shelly.git/git-upload-pack
+# Content-Type: application/x-git-upload-pack-request

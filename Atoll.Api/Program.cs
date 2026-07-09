@@ -31,6 +31,7 @@ builder.Services.AddSingleton<PackageIndexUpdater>();
 builder.Services.AddSingleton<MetricsService>();
 builder.Services.AddSingleton(new ApplicationRuntimeInfo(DateTimeOffset.UtcNow));
 builder.Services.AddSingleton<IPackageService, GitPackageService>();
+builder.Services.AddSingleton<IGitTransferService, GitTransferService>();
 
 builder.Services.AddSingleton<IAmazonS3, AmazonS3Client>(sp =>
 {
