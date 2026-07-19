@@ -25,28 +25,27 @@ dotnet run --project Atoll.Api
 docker compose up --build
 ```
 
-## Garage S3 Storage (Development)
+## MongoDB Storage (Packages)
 
-Atoll supports using [Garage](https://garagehq.deuxfleurs.fr/) as an S3-compatible storage backend. A local Garage instance is included in `compose.yaml`.
+Package data (current files and revision history) is stored in MongoDB.
 
-To run the app from your IDE using Garage S3 storage:
+Configure MongoDB under `Atoll:Mongo` in `appsettings.json`:
 
-1. Start the Garage service using Docker Compose:
+```json
+"Atoll": {
+  "Mongo": {
+    "ConnectionString": "mongodb://localhost:27017",
+    "Database": "atoll",
+    "PackagesCollection": "packages",
+    "MaxRevisions": 10,
+    "MaxFileBytes": 5242880
+  }
+}
+```
 
-   ```bash
-   docker compose up -d garage
-   ```
-
-2. Configure your IDE or run command to use the `Garage` environment so that `Atoll.Api/appsettings.Garage.json` is loaded:
-
-   - **dotnet CLI**:
-
-     ```bash
-     dotnet run --project Atoll.Api --environment Garage
-     ```
-
-   - **IDE**:
-     - Add `ASPNETCORE_ENVIRONMENT` = `Garage` as Environment Variable (launchSettings.json)
+`MaxRevisions` caps embedded revision history per package. `MaxFileBytes` rejects
+oversized files at seed time. Keep both conservative to stay under MongoDB's
+16 MB document size limit.
 
 ## Endpoints
 
@@ -71,26 +70,15 @@ To run the app from your IDE using Garage S3 storage:
 ### Packages
 
 - `GET /packages` - List all packages
-- `POST /packages/{name}/seed` - Seed package from AUR
-- `GET /packages/{name}` - Get specific package
+- `POST /packages/{name}/seed` - Seed package from AUR (returns `409 Conflict` if package already exists)
+- `GET /packages/{name}` - Get specific package (head revision)
 - `GET /packages/{name}/versions` - Get package versions
 - `GET /packages/{name}/versions/{sha}` - Get specific package version
 - `DELETE /packages/{name}` - Delete package
 
 ### Git Smart HTTP
 
-Package repositories are exposed over the [Git Smart HTTP protocol](https://git-scm.com/docs/http-protocol), so any seeded package can be cloned directly:
-
-```bash
-git clone http://localhost:5290/packages/{name}.git
-```
-
-Underlying endpoints (used by the Git client itself, rarely called by hand):
-
-- `GET /packages/{name}.git/info/refs?service=git-upload-pack` - ref advertisement
-- `POST /packages/{name}.git/git-upload-pack` - upload-pack negotiation and pack transfer
-
-Only `git-upload-pack` (fetch/clone) is supported; `git-receive-pack` (push) is not.
+Git Smart HTTP routes return `410 Gone`.
 
 ## Configuration
 

@@ -1,16 +1,14 @@
 using System.Text.Json.Serialization;
-using Amazon.Runtime;
-using Amazon.S3;
 using Atoll.Api;
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Storage;
 using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Search.Refresh;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,42 +31,17 @@ builder.Services.AddSingleton<PackageSearchService>();
 builder.Services.AddSingleton<PackageIndexUpdater>();
 builder.Services.AddSingleton<MetricsService>();
 builder.Services.AddSingleton(new ApplicationRuntimeInfo(DateTimeOffset.UtcNow));
-builder.Services.AddSingleton<IPackageService, GitPackageService>();
-builder.Services.AddSingleton<IGitTransferService, GitTransferService>();
 
-builder.Services.AddSingleton<IAmazonS3, AmazonS3Client>(sp =>
+builder.Services.AddSingleton<IMongoClient>(sp =>
 {
     var options = sp.GetRequiredService<IOptions<AtollOptions>>().Value;
-    var s3 = options.Storage.S3;
-    var credentials = new BasicAWSCredentials(s3.AccessKey, s3.SecretKey);
-    var config = new AmazonS3Config
-    {
-        ForcePathStyle = s3.ForcePathStyle,
-        UseHttp = s3.UseHttp,
-        AuthenticationRegion = s3.Region
-    };
-
-    if (!string.IsNullOrEmpty(s3.Endpoint))
-        config.ServiceURL = $"{(s3.UseHttp ? "http" : "https")}://{s3.Endpoint}";
-
-    return new AmazonS3Client(credentials, config);
+    return new MongoClient(options.Mongo.ConnectionString);
 });
 
-builder.Services.AddSingleton<IBundleStorage>(sp =>
-{
-    var options = sp.GetRequiredService<IOptions<AtollOptions>>();
-    return options.Value.Storage.Type switch
-    {
-        StorageType.S3 => new S3BundleStorage(
-            sp.GetRequiredService<IAmazonS3>(), options),
-        StorageType.Local => new LocalBundleStorage(options),
-        _ => throw new NotSupportedException(
-            $"Storage type {options.Value.Storage.Type} is not supported")
-    };
-});
+builder.Services.AddSingleton<IPackageRepository, MongoPackageRepository>();
+builder.Services.AddSingleton<IPackageService, MongoPackageService>();
 
 builder.Services.AddHostedService<PackageIndexWorker>();
-builder.Services.AddHostedService<PackageSyncStorageWorker>();
 
 var app = builder.Build();
 

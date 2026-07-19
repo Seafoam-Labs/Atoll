@@ -9,43 +9,37 @@
       - Atoll__DataSource__DataFile=/app/data/packages-meta-ext-v1.json
       - Atoll__DataSource__DataFileUrl=https://aur.archlinux.org/packages-meta-ext-v1.json.gz
       - Atoll__DataSource__RefreshIntervalMinutes=10
-      - Atoll__Storage__DataPath=/app/data/aur
-      - Atoll__Storage__Type=S3
-      - Atoll__Storage__S3__Bucket=atoll-bucket
-      - Atoll__Storage__S3__AccessKey=atoll-access-key
-      - Atoll__Storage__S3__SecretKey=atoll-secret-key
-      - Atoll__Storage__S3__Endpoint=garage:3900
-      - Atoll__Storage__S3__Region=garage
-      - Atoll__Storage__S3__ForcePathStyle=true
-      - Atoll__Storage__S3__UseHttp=true
-      # Garage doesn't support chunked encoding, but it can be true on S3
-      - Atoll__Storage__S3__ChunkedEncoding=false
+      - Atoll__Mongo__ConnectionString=mongodb://admin:change_me@mongo:27017/atoll?authSource=admin
+      - Atoll__Mongo__Database=atoll
+      - Atoll__Mongo__PackagesCollection=packages
+      - Atoll__Mongo__MaxRevisions=10
+      - Atoll__Mongo__MaxFileBytes=5242880
     volumes:
       - atoll-data:/app/data
+    depends_on:
+      mongo:
+        condition: service_healthy
 
-  garage:
-    image: dxflrs/garage:v2.3.0
+  mongo:
+    image: mongo:8.3.4
     restart: unless-stopped
     ports:
-      - "3900:3900"
-    environment:
-      GARAGE_DEFAULT_BUCKET: atoll-bucket
-      GARAGE_DEFAULT_ACCESS_KEY: atoll-access-key
-      GARAGE_DEFAULT_SECRET_KEY: atoll-secret-key
+      - "27017:27017"
     volumes:
-      - ./garage/garage.toml:/etc/garage.toml
-      - garage-data:/var/lib/garage/data
-      - garage-meta:/var/lib/garage/meta
-    command: /garage server --single-node --default-bucket
+      - mongo-data:/data/db
+    environment:
+      # https://jira.mongodb.org/browse/SERVER-121912
+      - GLIBC_TUNABLES=glibc.pthread.rseq=1
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=change_me
     healthcheck:
-      test: [ "CMD", "/garage", "stats", "-a" ]
-      interval: 5m
-      retries: 3
-      start_interval: 5s
-      start_period: 10s
+      test:
+        [ "CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok" ]
+      interval: 30s
+      retries: 5
+      start_period: 15s
       timeout: 5s
 
 volumes:
   atoll-data:
-  garage-data:
-  garage-meta:
+  mongo-data:

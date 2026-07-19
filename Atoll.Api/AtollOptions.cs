@@ -5,7 +5,20 @@ namespace Atoll.Api;
 public sealed class AtollOptions
 {
     public DataSourceOptions DataSource { get; init; } = new();
-    public StorageOptions Storage { get; init; } = new();
+    public MongoOptions Mongo { get; init; } = new();
+}
+
+public sealed class MongoOptions
+{
+    [Required] public string ConnectionString { get; init; } = "mongodb://localhost:27017";
+
+    [Required] public string Database { get; init; } = "atoll";
+
+    [Required] public string PackagesCollection { get; init; } = "packages";
+
+    [Range(1, 200)] public int MaxRevisions { get; init; } = 10;
+
+    [Range(1_024, 10_485_760)] public int MaxFileBytes { get; init; } = 5_242_880;
 }
 
 public sealed class DataSourceOptions
@@ -15,32 +28,4 @@ public sealed class DataSourceOptions
     [Required] [Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
 
     [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 10;
-}
-
-public sealed class StorageOptions
-{
-    public StorageType Type { get; init; } = StorageType.Local;
-    public S3StorageOptions S3 { get; init; } = new();
-
-    [Required] public string DataPath { get; init; } = "/data/aur";
-}
-
-public sealed class S3StorageOptions
-{
-    [Required] public string Bucket { get; init; } = string.Empty;
-
-    public string AccessKey { get; init; } = string.Empty;
-    public string SecretKey { get; init; } = string.Empty;
-    public string Endpoint { get; init; } = string.Empty;
-
-    public bool ForcePathStyle { get; init; }
-    public bool UseHttp { get; init; }
-    public string Region { get; init; } = string.Empty;
-    public bool ChunkedEncoding { get; set; } = true;
-}
-
-public enum StorageType
-{
-    Local,
-    S3
 }

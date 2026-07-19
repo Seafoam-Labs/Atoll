@@ -37,20 +37,16 @@ GET {{baseUrl}}/packages/shelly/versions
 Accept: application/json
 
 ### Get Specific Package Version
-GET {{baseUrl}}/packages/shelly/versions/7c28f4dc7bdd21bfacf9d020ec0f80bd6dff9bcd
+GET {{baseUrl}}/packages/shelly/versions/bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
 Accept: application/json
 
 ### Delete Package
 DELETE {{baseUrl}}/packages/shelly
 Accept: application/json
 
-### Git Smart HTTP - Ref Advertisement
-# Returns the pkt-line ref advertisement. Prefer `git clone` for normal use:
-#   git clone http://localhost:5290/packages/shelly.git
+### Git Smart HTTP - Ref Advertisement (NOT IMPLEMENTED, returns 410 Gone)
 GET {{baseUrl}}/packages/shelly.git/info/refs?service=git-upload-pack
 
-### Git Smart HTTP - Upload Pack (POST)
-# Requires a binary pkt-line request body (want/have negotiation).
-# Not practical to craft by hand - use `git clone` / `git fetch` instead.
+### Git Smart HTTP - Upload Pack (NOT IMPLEMENTED, returns 410 Gone)
 # POST {{baseUrl}}/packages/shelly.git/git-upload-pack
 # Content-Type: application/x-git-upload-pack-request

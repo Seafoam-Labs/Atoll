@@ -1,11 +1,12 @@
 using System.Diagnostics;
 using System.Security;
+using Atoll.Api.Services.Packages;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Atoll.Api;
 
-public class GlobalExceptionHandler(
+public sealed class GlobalExceptionHandler(
     ILogger<GlobalExceptionHandler> logger,
     IProblemDetailsService problemDetailsService
 ) : IExceptionHandler
@@ -19,6 +20,9 @@ public class GlobalExceptionHandler(
         {
             ArgumentException or ArgumentOutOfRangeException or NotSupportedException
                 => (StatusCodes.Status400BadRequest, exception.Message),
+
+            PackageConflictException
+                => (StatusCodes.Status409Conflict, exception.Message),
 
             FileNotFoundException or KeyNotFoundException or NotImplementedException
                 => (StatusCodes.Status404NotFound, "Resource not found"),
@@ -44,7 +48,7 @@ public class GlobalExceptionHandler(
         {
             Status = statusCode,
             Title = title,
-            Instance = httpContext.Request.Path,
+            Instance = httpContext.Request.Path
         };
 
         return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
