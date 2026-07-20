@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Atoll.Api;
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
@@ -40,6 +41,7 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
 
 builder.Services.AddSingleton<IPackageRepository, MongoPackageRepository>();
 builder.Services.AddSingleton<IPackageService, MongoPackageService>();
+builder.Services.AddSingleton<IGitTransferService, GitTransferService>();
 
 builder.Services.AddHostedService<PackageIndexWorker>();
 

@@ -1,5 +1,6 @@
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -77,14 +78,47 @@ public static class Endpoints
 
     private static void MapGitProtocolRoutes(RouteGroupBuilder packages)
     {
-        packages.MapGet("/{name}.git/info/refs", () =>
-            Results.Problem(
-                "Git Smart HTTP is not implemented for this API. Use /packages/{name} instead.",
-                statusCode: StatusCodes.Status410Gone));
+        packages.MapGet("/{name}.git/info/refs", GitInfoRefs);
+        packages.MapPost("/{name}.git/git-upload-pack", GitUploadPack);
+    }
 
-        packages.MapPost("/{name}.git/git-upload-pack", () =>
-            Results.Problem(
-                "Git Smart HTTP is not implemented for this API. Use /packages/{name} instead.",
-                statusCode: StatusCodes.Status410Gone));
+    private static async Task<IResult> GitInfoRefs(
+        [FromRoute] string name,
+        [FromQuery(Name = "service")] string? service,
+        [FromServices] IGitTransferService git,
+        HttpResponse response,
+        CancellationToken ct)
+    {
+        response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
+
+        if (!string.Equals(service, "git-upload-pack", StringComparison.Ordinal))
+            return TypedResults.Problem("Only git-upload-pack is supported.", statusCode: StatusCodes.Status403Forbidden);
+
+        response.ContentType = "application/x-git-upload-pack-advertisement";
+
+        var result = await git.AdvertiseRefsAsync(name, response.Body, ct);
+        if (result is GitTransferResult.Ok)
+            return TypedResults.Empty;
+
+        response.ContentType = null;
+        return TypedResults.NotFound();
+    }
+
+    private static async Task<IResult> GitUploadPack(
+        [FromRoute] string name,
+        [FromServices] IGitTransferService git,
+        HttpRequest request,
+        HttpResponse response,
+        CancellationToken ct)
+    {
+        response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
+        response.ContentType = "application/x-git-upload-pack-result";
+
+        var result = await git.UploadPackAsync(name, request.Body, response.Body, ct);
+        if (result is GitTransferResult.Ok)
+            return TypedResults.Empty;
+
+        response.ContentType = null;
+        return TypedResults.NotFound();
     }
 }

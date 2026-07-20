@@ -14,6 +14,7 @@
       - Atoll__Mongo__PackagesCollection=packages
       - Atoll__Mongo__MaxRevisions=10
       - Atoll__Mongo__MaxFileBytes=5242880
+      - Atoll__Git__RepositoriesPath=/app/data/repos
     volumes:
       - atoll-data:/app/data
     depends_on:

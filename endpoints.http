@@ -44,9 +44,9 @@ Accept: application/json
 DELETE {{baseUrl}}/packages/shelly
 Accept: application/json
 
-### Git Smart HTTP - Ref Advertisement (NOT IMPLEMENTED, returns 410 Gone)
+### Git Smart HTTP - Ref Advertisement
 GET {{baseUrl}}/packages/shelly.git/info/refs?service=git-upload-pack
 
-### Git Smart HTTP - Upload Pack (NOT IMPLEMENTED, returns 410 Gone)
+### Git Smart HTTP - Upload Pack
 # POST {{baseUrl}}/packages/shelly.git/git-upload-pack
 # Content-Type: application/x-git-upload-pack-request

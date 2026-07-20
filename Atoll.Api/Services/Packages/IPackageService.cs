@@ -3,7 +3,7 @@ namespace Atoll.Api.Services.Packages;
 public interface IPackageService
 {
     Task<IReadOnlyList<string>> ListAsync();
-    Task<bool> ExistsAsync(string packageName);
+    Task<bool> ExistsAsync(string packageName, CancellationToken ct = default);
     Task<PackageFiles> GetAsync(string packageName, string? commitSha = null);
     Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName);
     Task DeleteAsync(string packageName);
@@ -11,4 +11,5 @@ public interface IPackageService
     Task SyncToStorageAsync(string packageName);
     Task SeedFromAurAsync(string packageName);
     string? GetRepositoryPath(string packageName);
+    Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default);
 }

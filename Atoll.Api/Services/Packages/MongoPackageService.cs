@@ -1,8 +1,7 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
-using CliWrap;
 using Microsoft.Extensions.Options;
-using static CliWrap.CommandResultValidation;
 
 namespace Atoll.Api.Services.Packages;
 
@@ -10,6 +9,7 @@ public sealed class MongoPackageService(
     IPackageRepository repo,
     IOptions<AtollOptions> options) : IPackageService
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
     private readonly AtollOptions _options = options.Value;
 
     public Task<IReadOnlyList<string>> ListAsync()
@@ -17,9 +17,9 @@ public sealed class MongoPackageService(
         return repo.ListAsync();
     }
 
-    public Task<bool> ExistsAsync(string packageName)
+    public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
     {
-        return repo.ExistsAsync(packageName);
+        return repo.ExistsAsync(packageName, ct);
     }
 
     public async Task<PackageFiles> GetAsync(string packageName, string? commitSha = null)
@@ -32,8 +32,7 @@ public sealed class MongoPackageService(
         }
 
         var rev = await repo.GetRevisionAsync(packageName, commitSha)
-                  ?? throw new KeyNotFoundException(
-                      $"Revision '{commitSha}' not found for package '{packageName}'.");
+                  ?? throw new KeyNotFoundException($"Revision '{commitSha}' not found for package '{packageName}'.");
 
         return ToPackageFiles(rev.Files);
     }
@@ -58,7 +57,7 @@ public sealed class MongoPackageService(
         try
         {
             Directory.CreateDirectory(tempPath);
-            await CloneAurAsync(packageName, tempPath);
+            await Git.GitClient.CloneAsync($"https://aur.archlinux.org/{packageName}.git", tempPath);
             files = await ReadFilesAsync(tempPath);
         }
         finally
@@ -82,7 +81,146 @@ public sealed class MongoPackageService(
 
     public string? GetRepositoryPath(string packageName)
     {
-        return null;
+        var root = _options.Git.RepositoriesPath;
+        return string.IsNullOrWhiteSpace(root)
+            ? null
+            : Path.GetFullPath(Path.Combine(root, packageName + ".git"));
+    }
+
+    public async Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
+    {
+        var path = GetRepositoryPath(packageName);
+        if (path is null)
+            return;
+
+        var doc = await repo.GetHeadAsync(packageName, ct);
+        if (doc is null)
+            return;
+
+        var marker = Path.Combine(path, ".atoll-head");
+        var headMarker = doc.HeadRevisionId;
+
+        if (IsUpToDate(path, marker, headMarker))
+            return;
+
+        var lockObj = RepoLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
+        await lockObj.WaitAsync(ct);
+        try
+        {
+            if (IsUpToDate(path, marker, headMarker))
+                return;
+
+            Directory.CreateDirectory(path);
+
+            if (!File.Exists(Path.Combine(path, "HEAD")))
+            {
+                string[] arguments = ["init", "--bare", "--quiet"];
+                await Git.GitClient.ExecuteAsync(path, arguments, null, null, ct);
+            }
+
+            var parent = string.Empty;
+            foreach (var revision in doc.Revisions.OrderBy(r => r.CreatedAt))
+            {
+                var tree = await WriteTreeAsync(path, revision.Files, ct);
+                parent = await WriteCommitAsync(path, tree, parent, revision, ct);
+            }
+
+            if (!string.IsNullOrEmpty(parent))
+            {
+                string[] arguments = ["update-ref", "refs/heads/main", parent];
+                await Git.GitClient.ExecuteAsync(path, arguments, null, null, ct);
+            }
+
+            string[] arguments1 = ["symbolic-ref", "HEAD", "refs/heads/main"];
+            await Git.GitClient.ExecuteAsync(path, arguments1, null, null, ct);
+            await File.WriteAllTextAsync(marker, headMarker, ct);
+        }
+        finally
+        {
+            lockObj.Release();
+        }
+    }
+
+    private static bool IsUpToDate(string path, string marker, string headMarker)
+    {
+        return Directory.Exists(path)
+               && File.Exists(Path.Combine(path, "HEAD"))
+               && File.Exists(marker)
+               && File.ReadAllText(marker) == headMarker;
+    }
+
+    private static async Task<string> WriteTreeAsync(
+        string repoPath,
+        IReadOnlyDictionary<string, PackageFile> files,
+        CancellationToken ct)
+    {
+        using var tempIndex = new TempFile();
+        var env = new Dictionary<string, string> { ["GIT_INDEX_FILE"] = tempIndex.Path };
+
+        await Git.GitClient.ExecuteAsync(repoPath, ["read-tree", "--empty"], null, env, ct);
+
+        foreach (var (name, file) in files)
+        {
+            var blob = (await Git.GitClient.ExecuteAsync(repoPath, ["hash-object", "--stdin", "-w"], file.Content, env, ct))
+                .Trim();
+
+            // Mark shell scripts as executable to match typical AUR expectations.
+            var mode = IsExecutable(name, file.Content) ? "100755" : "100644";
+
+            await Git.GitClient.ExecuteAsync(repoPath, ["update-index", "--add", "--cacheinfo", mode, blob, name], null, env, ct);
+        }
+
+        return (await Git.GitClient.ExecuteAsync(repoPath, ["write-tree"], null, env, ct))
+            .Trim();
+    }
+
+    private static bool IsExecutable(string name, string? content)
+    {
+        if (name.EndsWith(".sh", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return !string.IsNullOrEmpty(content) && content.StartsWith("#!", StringComparison.Ordinal);
+    }
+
+    private static async Task<string> WriteCommitAsync(
+        string repoPath,
+        string treeSha,
+        string parent,
+        PackageRevisionDocument revision,
+        CancellationToken ct)
+    {
+        using var messageFile = new TempFile();
+        await File.WriteAllTextAsync(messageFile.Path, revision.Message, ct);
+
+        string[] args = string.IsNullOrEmpty(parent)
+            ? ["commit-tree", treeSha, "-F", messageFile.Path]
+            : ["commit-tree", treeSha, "-p", parent, "-F", messageFile.Path];
+
+        var env = new Dictionary<string, string>
+        {
+            ["GIT_AUTHOR_NAME"] = SanitizeIdent(revision.Author),
+            ["GIT_AUTHOR_EMAIL"] = $"{SanitizeIdent(revision.Author)}@atoll.local",
+            ["GIT_COMMITTER_NAME"] = "atoll",
+            ["GIT_COMMITTER_EMAIL"] = "atoll@local"
+        };
+
+        if (revision.CreatedAt != default)
+        {
+            var unix = revision.CreatedAt.ToUnixTimeSeconds().ToString();
+            env["GIT_AUTHOR_DATE"] = unix;
+            env["GIT_COMMITTER_DATE"] = unix;
+        }
+
+        return (await Git.GitClient.ExecuteAsync(repoPath, args, null, env, ct)).Trim();
+    }
+
+    private static string SanitizeIdent(string value)
+    {
+        var sanitized = value.Trim()
+            .Where(c => c is not ('<' or '>' or '\n' or '\r'))
+            .ToString();
+
+        return string.IsNullOrEmpty(sanitized) ? "unknown" : sanitized;
     }
 
     internal async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
@@ -153,14 +291,6 @@ public sealed class MongoPackageService(
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static async Task CloneAurAsync(string packageName, string workDir)
-    {
-        await Cli.Wrap("git")
-            .WithArguments(["clone", $"https://aur.archlinux.org/{packageName}.git", workDir])
-            .WithValidation(ZeroExitCode)
-            .ExecuteAsync();
-    }
-
     private static async Task<Dictionary<string, string>> ReadFilesAsync(string workDir)
     {
         var files = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -183,5 +313,23 @@ public sealed class MongoPackageService(
     private static PackageFiles ToPackageFiles(IReadOnlyDictionary<string, PackageFile> files)
     {
         return new PackageFiles(files.ToDictionary(kv => kv.Key, kv => kv.Value.Content));
+    }
+
+    private sealed class TempFile : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName());
+
+        public void Dispose()
+        {
+            try
+            {
+                File.Delete(Path);
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+        }
     }
 }
