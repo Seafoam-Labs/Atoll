@@ -37,7 +37,7 @@ public sealed class DataSourceOptions
 {
     [Required] public string DataFile { get; init; } = "packages-meta-ext-v1.json";
 
-    [Required] [Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
+    [Required][Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
 
     [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 10;
 }
