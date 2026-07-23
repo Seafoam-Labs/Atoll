@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Text.Json;
+using Atoll.Api.Extensions;
 using Atoll.Api.Services.Search.Indexing;
 using Microsoft.Extensions.Options;
 
@@ -6,6 +8,7 @@ namespace Atoll.Api.Services.Search.Refresh;
 
 public sealed class PackageIndexUpdater(
     PackageIndexStore store,
+    IAurMetadataRepository aurMetadataRepository,
     IHttpClientFactory httpClientFactory,
     IOptions<AtollOptions> options,
     ILogger<PackageIndexUpdater> logger)
@@ -19,7 +22,7 @@ public sealed class PackageIndexUpdater(
     private DateTimeOffset? _lastSucceededUtc;
     private long _successes;
 
-    public string DataFilePath => options.Value.DataSource.DataFile;
+    private string MetadataCollection => options.Value.Mongo.Collections.AurMetadata;
 
     public TimeSpan RefreshInterval => TimeSpan.FromMinutes(Math.Max(1, options.Value.DataSource.RefreshIntervalMinutes));
 
@@ -28,7 +31,7 @@ public sealed class PackageIndexUpdater(
         lock (_timeLock)
         {
             return new RefreshStatusSnapshot(
-                DataFilePath,
+                MetadataCollection,
                 RefreshInterval,
                 Interlocked.Read(ref _attempts),
                 Interlocked.Read(ref _successes),
@@ -39,16 +42,18 @@ public sealed class PackageIndexUpdater(
         }
     }
 
-    public async Task InitializeFromDiskAsync(CancellationToken cancellationToken)
+    public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(DataFilePath))
+        var packages = await aurMetadataRepository.LoadAsync(cancellationToken);
+        if (packages.Count == 0)
         {
-            logger.LogWarning("No local package data found at {Path}. The API starts with empty indexes.",
-                DataFilePath);
+            logger.LogWarning("No cached package metadata. The API starts with empty indexes.");
             return;
         }
 
-        await ReloadFromDiskAsync(cancellationToken);
+        logger.LogInformation("Loaded {Count} packages. Building indexes.", packages.Count);
+        var next = PackageDataLoader.BuildFromPackages(packages);
+        store.Replace(next);
     }
 
     public async Task<bool> DownloadAndReloadAsync(CancellationToken cancellationToken)
@@ -61,11 +66,21 @@ public sealed class PackageIndexUpdater(
 
         try
         {
-            logger.LogInformation("Fetching updated package data.");
-            await DownloadPackageDataAsync(cancellationToken);
+            logger.LogInformation("Fetching updated package data from AUR.");
 
-            logger.LogInformation("Reforming package indices...");
-            await ReloadFromDiskAsync(cancellationToken);
+            var client = httpClientFactory.CreateClient();
+            await using var compressed = await client.GetStreamAsync(
+                options.Value.DataSource.DataFileUrl, cancellationToken);
+            await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
+
+            var packages = await ParsePackagesAsync(gzip, cancellationToken);
+            logger.LogInformation("Parsed {Count} packages.", packages.Count);
+
+            await aurMetadataRepository.SaveAsync(packages, cancellationToken);
+            logger.LogInformation("Stored {Count} packages.", packages.Count);
+
+            var next = PackageDataLoader.BuildFromPackages(packages);
+            store.Replace(next);
 
             Interlocked.Increment(ref _successes);
             lock (_timeLock)
@@ -83,24 +98,34 @@ public sealed class PackageIndexUpdater(
                 _lastFailedUtc = DateTimeOffset.UtcNow;
             }
 
-            logger.LogWarning(ex, "Unable to fetch new package data.");
+            logger.LogWarning(ex, "Unable to fetch and store new package data.");
             return false;
         }
     }
 
-    private async Task DownloadPackageDataAsync(CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<AurPackageMetadata>> ParsePackagesAsync(
+        Stream gzipStream,
+        CancellationToken ct)
     {
-        var client = httpClientFactory.CreateClient();
+        // The whole decompressed dump is held in memory (~110k packages today).
+        // If the dump grows significantly, switch to Utf8JsonReader / DeserializeAsyncEnumerable.
+        using var doc = await JsonDocument.ParseAsync(gzipStream, cancellationToken: ct);
 
-        await using var compressed = await client.GetStreamAsync(options.Value.DataSource.DataFileUrl, cancellationToken);
-        await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
-        await using var output = File.Create(DataFilePath);
-        await gzip.CopyToAsync(output, cancellationToken);
-    }
+        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("AUR package dump is not a JSON array.");
 
-    private async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
-    {
-        var next = await PackageDataLoader.LoadAsync(DataFilePath, cancellationToken);
-        store.Replace(next);
+        var packages = new List<AurPackageMetadata>();
+        foreach (var element in doc.RootElement.EnumerateArray())
+        {
+            if (!element.TryGetProperty("Name", out var nameElement) ||
+                nameElement.ValueKind != JsonValueKind.String) continue;
+
+            var name = nameElement.GetString();
+            if (string.IsNullOrEmpty(name)) continue;
+
+            packages.Add(element.DeserializeAurPackage());
+        }
+
+        return packages;
     }
 }

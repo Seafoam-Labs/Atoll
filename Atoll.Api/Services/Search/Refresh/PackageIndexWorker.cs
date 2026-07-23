@@ -1,16 +1,19 @@
+using Atoll.Api.Services.Search.Indexing;
+
 namespace Atoll.Api.Services.Search.Refresh;
 
 public sealed class PackageIndexWorker(
     PackageIndexUpdater manager,
+    IAurMetadataRepository repository,
     ILogger<PackageIndexWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await manager.InitializeFromDiskAsync(stoppingToken);
+        await manager.InitializeAsync(stoppingToken);
 
-        if (File.Exists(manager.DataFilePath))
+        if (await repository.ExistsAsync(stoppingToken))
         {
-            logger.LogInformation("Local data already exists. Sleeping...");
+            logger.LogInformation("Metadata already present. Sleeping before next refresh.");
             await Task.Delay(manager.RefreshInterval, stoppingToken);
         }
 

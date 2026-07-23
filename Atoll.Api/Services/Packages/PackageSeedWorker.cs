@@ -25,7 +25,7 @@ public sealed class PackageSeedWorker(
             if (index.ByNames.Count == 0)
             {
                 logger.LogInformation("Index is empty. Waiting before next attempt...");
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
                 continue;
             }
 
@@ -53,7 +53,7 @@ public sealed class PackageSeedWorker(
                 {
                     await packageService.SeedFromAurAsync(packageName);
                     Interlocked.Increment(ref seeded);
-                    logger.LogDebug("Seeded {PackageName}.", packageName);
+                    logger.LogInformation("Seeded {PackageName}.", packageName);
                 }
                 catch (PackageConflictException)
                 {
@@ -78,7 +78,6 @@ public sealed class PackageSeedWorker(
             {
                 logger.LogInformation("No packages were seeded. Waiting before next attempt...");
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
-                continue;
             }
         }
 

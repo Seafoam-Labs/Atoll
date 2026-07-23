@@ -11,7 +11,7 @@ public sealed class MongoPackageRepository : IPackageRepository
     {
         var o = options.Value.Mongo;
         var db = client.GetDatabase(o.Database);
-        _packages = db.GetCollection<PackageDocument>(o.PackagesCollection);
+        _packages = db.GetCollection<PackageDocument>(o.Collections.Packages);
     }
 
     public async Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)

@@ -121,7 +121,7 @@ public class GitTransferServiceTests
             await packages.EnsureGitRepositoryAsync("shelly");
             var gitDir = packages.GetRepositoryPath("shelly")!;
             string[] args = ["clone", "--quiet", gitDir, cloneDir];
-            await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, input: null, env: null, CancellationToken.None);
+            await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, null, null, CancellationToken.None);
 
             foreach (var (name, content) in SampleFiles)
             {

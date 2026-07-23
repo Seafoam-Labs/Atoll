@@ -14,22 +14,29 @@ public static class PackageDataLoader
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("AUR package dump is not a JSON array.");
 
+        var packages = doc.RootElement.EnumerateArray()
+            .Where(element => element.TryGetProperty("Name", out var nameElement) &&
+                              nameElement.ValueKind == JsonValueKind.String &&
+                              !string.IsNullOrEmpty(nameElement.GetString()))
+            .Select(element => element.DeserializeAurPackage())
+            .ToList();
+
+        return BuildFromPackages(packages);
+    }
+
+    public static SearchIndexData BuildFromPackages(IEnumerable<AurPackageMetadata> packages)
+    {
         var byNamesBuilder = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
         var byProvidesMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         var byWordsMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
-        foreach (var packageElement in doc.RootElement.EnumerateArray())
+        foreach (var package in packages)
         {
-            if (!packageElement.TryGetProperty("Name", out var nameElement) ||
-                nameElement.ValueKind != JsonValueKind.String) continue;
+            if (string.IsNullOrEmpty(package.Name)) continue;
 
-            var name = nameElement.GetString();
-            if (string.IsNullOrEmpty(name)) continue;
-
-            var package = packageElement.DeserializeAurPackage();
-            byNamesBuilder[name] = package;
-            IndexProvides(byProvidesMap, name, packageElement);
-            IndexWords(byWordsMap, name, packageElement);
+            byNamesBuilder[package.Name] = package;
+            IndexProvides(byProvidesMap, package);
+            IndexWords(byWordsMap, package);
         }
 
         var byProvides = byProvidesMap.ToImmutableDictionary(
@@ -45,12 +52,12 @@ public static class PackageDataLoader
         return new SearchIndexData(byNamesBuilder.ToImmutable(), byProvides, byWords);
     }
 
-    private static void IndexProvides(Dictionary<string, HashSet<string>> byProvides, string packageName,
-        JsonElement package)
+    private static void IndexProvides(Dictionary<string, HashSet<string>> byProvides, AurPackageMetadata package)
     {
-        var provides = package.TryGetStringArray("Provides");
+        var packageName = package.Name;
+        var provides = package.Provides;
 
-        if (provides.Length == 0)
+        if (provides.Count == 0)
         {
             AddValue(byProvides, packageName, packageName);
             return;
@@ -59,18 +66,15 @@ public static class PackageDataLoader
         foreach (var provided in provides) AddValue(byProvides, provided, packageName);
     }
 
-    private static void IndexWords(Dictionary<string, HashSet<string>> byWords, string packageName, JsonElement package)
+    private static void IndexWords(Dictionary<string, HashSet<string>> byWords, AurPackageMetadata package)
     {
-        var desc = package.TryGetProperty("Description", out var descriptionElement) &&
-                   descriptionElement.ValueKind == JsonValueKind.String
-            ? descriptionElement.GetString() ?? string.Empty
-            : string.Empty;
+        var packageName = package.Name;
+        var desc = package.Description;
 
         var nameTerms = packageName.Split(['-', '_'], StringSplitOptions.None);
         var descTerms = desc.Split(' ');
-        var keywords = package.TryGetStringArray("Keywords");
 
-        foreach (var word in TokenCleaning.SplitAndClean(nameTerms.Concat(descTerms).Concat(keywords)))
+        foreach (var word in TokenCleaning.SplitAndClean(nameTerms.Concat(descTerms).Concat(package.Keywords)))
             AddValue(byWords, word, packageName);
     }
 

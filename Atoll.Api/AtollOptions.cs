@@ -26,18 +26,23 @@ public sealed class MongoOptions
 
     [Required] public string Database { get; init; } = "atoll";
 
-    [Required] public string PackagesCollection { get; init; } = "packages";
+    public MongoCollections Collections { get; init; } = new();
 
     [Range(1, 200)] public int MaxRevisions { get; init; } = 10;
 
     [Range(1_024, 10_485_760)] public int MaxFileBytes { get; init; } = 5_242_880;
 }
 
+public sealed class MongoCollections
+{
+    [Required] public string Packages { get; init; } = "packages";
+
+    [Required] public string AurMetadata { get; init; } = "aur-metadata";
+}
+
 public sealed class DataSourceOptions
 {
-    [Required] public string DataFile { get; init; } = "packages-meta-ext-v1.json";
-
-    [Required][Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
+    [Required] [Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
 
     [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 10;
 }

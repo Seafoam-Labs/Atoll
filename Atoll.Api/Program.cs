@@ -29,6 +29,7 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddSingleton<PackageIndexStore>();
 builder.Services.AddSingleton<PackageSearchService>();
+builder.Services.AddSingleton<IAurMetadataRepository, AurMetadataRepository>();
 builder.Services.AddSingleton<PackageIndexUpdater>();
 builder.Services.AddSingleton<MetricsService>();
 builder.Services.AddSingleton(new ApplicationRuntimeInfo(DateTimeOffset.UtcNow));

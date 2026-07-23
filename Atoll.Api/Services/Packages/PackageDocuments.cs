@@ -3,14 +3,6 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace Atoll.Api.Services.Packages;
 
-/// <summary>
-///     MongoDB document for a single package. One document per package name.
-/// </summary>
-/// <remarks>
-///     Revisions are embedded and capped (see <see cref="MongoOptions.MaxRevisions" />).
-///     Keep <c>MaxFileBytes</c> and <c>MaxRevisions</c> conservative to stay under
-///     MongoDB's 16 MB document size limit.
-/// </remarks>
 public sealed class PackageDocument
 {
     [BsonId]

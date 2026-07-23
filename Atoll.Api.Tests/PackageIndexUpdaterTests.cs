@@ -1,6 +1,7 @@
 using System.Net;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -12,17 +13,16 @@ public class PackageIndexUpdaterTests
     [Test]
     public async Task RefreshCoordinatorTracksAttemptAndFailureMetrics()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"atoll-refresh-{Guid.NewGuid():N}.json");
         var invalidPayload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
 
         var store = new PackageIndexStore();
         var coordinator = new PackageIndexUpdater(store,
+            new InMemoryAurMetadataRepository(),
             new StubHttpClientFactory(invalidPayload),
             Options.Create(new AtollOptions
             {
                 DataSource = new DataSourceOptions
                 {
-                    DataFile = path,
                     DataFileUrl = "https://example.test/packages.json.gz",
                     RefreshIntervalMinutes = 10
                 }
@@ -32,13 +32,16 @@ public class PackageIndexUpdaterTests
         var ok = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
         var status = coordinator.GetStatus();
 
-        Assert.That(ok, Is.False);
-        Assert.That(status.Attempts, Is.EqualTo(1));
-        Assert.That(status.Successes, Is.EqualTo(0));
-        Assert.That(status.Failures, Is.EqualTo(1));
-        Assert.That(status.LastStartedUtc, Is.Not.Null);
-        Assert.That(status.LastFailedUtc, Is.Not.Null);
-        Assert.That(store.Current.ByNames, Is.Empty);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ok, Is.False);
+            Assert.That(status.Attempts, Is.EqualTo(1));
+            Assert.That(status.Successes, Is.EqualTo(0));
+            Assert.That(status.Failures, Is.EqualTo(1));
+            Assert.That(status.LastStartedUtc, Is.Not.Null);
+            Assert.That(status.LastFailedUtc, Is.Not.Null);
+            Assert.That(store.Current.ByNames, Is.Empty);
+        });
     }
 
     private sealed class StubHttpClientFactory(byte[] payload) : IHttpClientFactory

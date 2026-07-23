@@ -29,29 +29,26 @@ docker compose up --build
 
 Package data (current files and revision history) is stored in MongoDB.
 
-Configure MongoDB under `Atoll:Mongo` in `appsettings.json`:
-
-```json
-"Atoll": {
-  "Mongo": {
-    "ConnectionString": "mongodb://localhost:27017",
-    "Database": "atoll",
-    "PackagesCollection": "packages",
-    "MaxRevisions": 10,
-    "MaxFileBytes": 5242880
-  }
-}
-```
+Configure MongoDB under `Atoll:Mongo` in `appsettings.json`.
 
 `MaxRevisions` caps embedded revision history per package. `MaxFileBytes` rejects
 oversized files at seed time. Keep both conservative to stay under MongoDB's
 16 MB document size limit.
 
+## MongoDB Storage (AUR Metadata)
+
+The AUR package dump (`packages-meta-ext-v1.json.gz`) is downloaded,
+decompressed in memory, and stored as typed documents in MongoDB. The search
+index is rebuilt from MongoDB on startup and on each refresh.
+
+The AUR metadata collection is configured under `Atoll:Mongo:Collections:AurMetadata`
+(shown above), alongside the user-package collection (`Collections:Packages`).
+
 ## Endpoints
 
 ### Health
 
-- `GET /health`, `HEAD /health` - health check
+- `GET /health`, `HEAD /health` - basic liveness check
 
 ### Metrics
 
@@ -97,7 +94,11 @@ Two background services run automatically when the application starts.
 
 ### Package Index Worker
 
-Periodically downloads and refreshes the AUR package index. The interval is controlled by `Atoll:DataSource:RefreshIntervalMinutes`.
+Periodically downloads the AUR package dump, persists the parsed packages to
+MongoDB, and rebuilds the in-memory search index. On startup the index is
+hydrated from MongoDB; if MongoDB is empty, the API starts with empty indexes
+and waits for the first refresh. The interval is controlled by
+`Atoll:DataSource:RefreshIntervalMinutes`.
 
 ### Package Seed Worker
 

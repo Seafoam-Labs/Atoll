@@ -28,13 +28,11 @@ public static class GitClient
             cmd = cmd.WithStandardInputPipe(PipeSource.FromString(input));
 
         if (env is not null)
-        {
             cmd = cmd.WithEnvironmentVariables(b =>
             {
                 foreach (var (key, value) in env)
                     b.Set(key, value);
             });
-        }
 
         try
         {
@@ -53,7 +51,7 @@ public static class GitClient
         CancellationToken cancellationToken = default)
     {
         string[] arguments = ["clone", sourceUrl, targetPath];
-        await ExecuteAsync(Directory.GetCurrentDirectory(), arguments, input: null, env: null, cancellationToken);
+        await ExecuteAsync(Directory.GetCurrentDirectory(), arguments, null, null, cancellationToken);
     }
 
     public static async Task<(int ExitCode, string Output)> TryExecuteAsync(

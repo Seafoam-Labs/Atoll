@@ -6,15 +6,16 @@
     ports:
       - "8080:8080"
     environment:
-      - Atoll__DataSource__DataFile=/app/data/packages-meta-ext-v1.json
       - Atoll__DataSource__DataFileUrl=https://aur.archlinux.org/packages-meta-ext-v1.json.gz
       - Atoll__DataSource__RefreshIntervalMinutes=10
       - Atoll__Mongo__ConnectionString=mongodb://admin:change_me@mongo:27017/atoll?authSource=admin
       - Atoll__Mongo__Database=atoll
-      - Atoll__Mongo__PackagesCollection=packages
+      - Atoll__Mongo__Collections__Packages=packages
+      - Atoll__Mongo__Collections__AurMetadata=aur-metadata
       - Atoll__Mongo__MaxRevisions=10
       - Atoll__Mongo__MaxFileBytes=5242880
       - Atoll__Git__RepositoriesPath=/app/data/repos
+      - Atoll__Seed__SeedDelayMs=10000
     volumes:
       - atoll-data:/app/data
     depends_on:

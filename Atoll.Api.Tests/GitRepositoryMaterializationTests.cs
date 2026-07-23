@@ -62,7 +62,7 @@ public class GitRepositoryMaterializationTests
                 Is.EqualTo("ref: refs/heads/main"));
 
             string[] args = ["rev-parse", "refs/heads/main"];
-            var refSha = (await GitClient.ExecuteAsync(gitDir, args, input: null, env: null, CancellationToken.None)).Trim();
+            var refSha = (await GitClient.ExecuteAsync(gitDir, args, null, null, CancellationToken.None)).Trim();
             Assert.That(refSha, Has.Length.EqualTo(40));
         }
         finally
@@ -109,7 +109,7 @@ public class GitRepositoryMaterializationTests
             var gitDir = service.GetRepositoryPath("shelly")!;
 
             string[] args = ["clone", "--quiet", gitDir, cloneDir];
-            await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, input: null, env: null, CancellationToken.None);
+            await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, null, null, CancellationToken.None);
 
             foreach (var (name, content) in SampleFiles)
             {
@@ -119,7 +119,7 @@ public class GitRepositoryMaterializationTests
             }
 
             string[] args1 = ["rev-list", "--count", "HEAD"];
-            var logCount = (await GitClient.ExecuteAsync(cloneDir, args1, input: null, env: null, CancellationToken.None)).Trim();
+            var logCount = (await GitClient.ExecuteAsync(cloneDir, args1, null, null, CancellationToken.None)).Trim();
             Assert.That(logCount, Is.EqualTo("1"));
         }
         finally

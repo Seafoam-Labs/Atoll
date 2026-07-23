@@ -20,7 +20,7 @@ public sealed class IndexSizes
 
 public sealed class RefreshStatus
 {
-    public string? DataFile { get; set; }
+    public string? MetadataCollection { get; set; }
     public long IntervalSeconds { get; set; }
     public long Attempts { get; set; }
     public long Successes { get; set; }

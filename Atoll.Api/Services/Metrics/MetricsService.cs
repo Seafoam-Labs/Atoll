@@ -28,7 +28,7 @@ public sealed class MetricsService(
             },
             Refresh = new RefreshStatus
             {
-                DataFile = refresh.DataFile,
+                MetadataCollection = refresh.MetadataCollection,
                 IntervalSeconds = (long)refresh.Interval.TotalSeconds,
                 Attempts = refresh.Attempts,
                 Successes = refresh.Successes,

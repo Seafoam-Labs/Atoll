@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using Atoll.Api.Services.Packages.Git;
 using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Packages;
@@ -57,7 +58,7 @@ public sealed class MongoPackageService(
         try
         {
             Directory.CreateDirectory(tempPath);
-            await Git.GitClient.CloneAsync($"https://aur.archlinux.org/{packageName}.git", tempPath);
+            await GitClient.CloneAsync($"https://aur.archlinux.org/{packageName}.git", tempPath);
             files = await ReadFilesAsync(tempPath);
         }
         finally
@@ -115,7 +116,7 @@ public sealed class MongoPackageService(
             if (!File.Exists(Path.Combine(path, "HEAD")))
             {
                 string[] arguments = ["init", "--bare", "--quiet"];
-                await Git.GitClient.ExecuteAsync(path, arguments, null, null, ct);
+                await GitClient.ExecuteAsync(path, arguments, null, null, ct);
             }
 
             var parent = string.Empty;
@@ -128,11 +129,11 @@ public sealed class MongoPackageService(
             if (!string.IsNullOrEmpty(parent))
             {
                 string[] arguments = ["update-ref", "refs/heads/main", parent];
-                await Git.GitClient.ExecuteAsync(path, arguments, null, null, ct);
+                await GitClient.ExecuteAsync(path, arguments, null, null, ct);
             }
 
             string[] arguments1 = ["symbolic-ref", "HEAD", "refs/heads/main"];
-            await Git.GitClient.ExecuteAsync(path, arguments1, null, null, ct);
+            await GitClient.ExecuteAsync(path, arguments1, null, null, ct);
             await File.WriteAllTextAsync(marker, headMarker, ct);
         }
         finally
@@ -157,21 +158,19 @@ public sealed class MongoPackageService(
         using var tempIndex = new TempFile();
         var env = new Dictionary<string, string> { ["GIT_INDEX_FILE"] = tempIndex.Path };
 
-        await Git.GitClient.ExecuteAsync(repoPath, ["read-tree", "--empty"], null, env, ct);
+        await GitClient.ExecuteAsync(repoPath, ["read-tree", "--empty"], null, env, ct);
 
         foreach (var (name, file) in files)
         {
-            var blob = (await Git.GitClient.ExecuteAsync(repoPath, ["hash-object", "--stdin", "-w"], file.Content, env, ct))
-                .Trim();
+            var blob = (await GitClient.ExecuteAsync(repoPath, ["hash-object", "--stdin", "-w"], file.Content, env, ct)).Trim();
 
             // Mark shell scripts as executable to match typical AUR expectations.
             var mode = IsExecutable(name, file.Content) ? "100755" : "100644";
 
-            await Git.GitClient.ExecuteAsync(repoPath, ["update-index", "--add", "--cacheinfo", mode, blob, name], null, env, ct);
+            await GitClient.ExecuteAsync(repoPath, ["update-index", "--add", "--cacheinfo", mode, blob, name], null, env, ct);
         }
 
-        return (await Git.GitClient.ExecuteAsync(repoPath, ["write-tree"], null, env, ct))
-            .Trim();
+        return (await GitClient.ExecuteAsync(repoPath, ["write-tree"], null, env, ct)).Trim();
     }
 
     private static bool IsExecutable(string name, string? content)
@@ -211,7 +210,7 @@ public sealed class MongoPackageService(
             env["GIT_COMMITTER_DATE"] = unix;
         }
 
-        return (await Git.GitClient.ExecuteAsync(repoPath, args, null, env, ct)).Trim();
+        return (await GitClient.ExecuteAsync(repoPath, args, null, env, ct)).Trim();
     }
 
     private static string SanitizeIdent(string value)
