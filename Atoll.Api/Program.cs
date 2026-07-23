@@ -44,6 +44,7 @@ builder.Services.AddSingleton<IPackageService, MongoPackageService>();
 builder.Services.AddSingleton<IGitTransferService, GitTransferService>();
 
 builder.Services.AddHostedService<PackageIndexWorker>();
+builder.Services.AddHostedService<PackageSeedWorker>();
 
 var app = builder.Build();
 

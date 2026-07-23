@@ -7,6 +7,12 @@ public sealed class AtollOptions
     public DataSourceOptions DataSource { get; init; } = new();
     public MongoOptions Mongo { get; init; } = new();
     public GitOptions Git { get; init; } = new();
+    public SeedOptions Seed { get; init; } = new();
+}
+
+public sealed class SeedOptions
+{
+    [Range(100, 60_000)] public int SeedDelayMs { get; init; } = 1000;
 }
 
 public sealed class GitOptions

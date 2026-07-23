@@ -91,6 +91,28 @@ Underlying endpoints (used by the Git client itself, rarely called by hand):
 
 Only `git-upload-pack` (fetch/clone) is supported; `git-receive-pack` (push) is not.
 
+## Hosted Services
+
+Two background services run automatically when the application starts.
+
+### Package Index Worker
+
+Periodically downloads and refreshes the AUR package index. The interval is controlled by `Atoll:DataSource:RefreshIntervalMinutes`.
+
+### Package Seed Worker
+
+Iterates over the package index and seeds missing packages from the AUR into MongoDB. A delay between each seed request avoids rate-limiting:
+
+```json
+"Atoll": {
+  "Seed": {
+    "SeedDelayMs": 1000
+  }
+}
+```
+
+`SeedDelayMs` accepts values between **100** and **60000** milliseconds (default: **1000**).
+
 ## Configuration
 
 Main settings in `Atoll.Api/appsettings.json` and in `Atoll.Api/AtollOptions.cs`.
