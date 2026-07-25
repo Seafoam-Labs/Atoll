@@ -1,6 +1,7 @@
 using System.Text;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -33,7 +34,7 @@ public class GitTransferServiceTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        var packages = new MongoPackageService(repo, options);
+        var packages = new MongoPackageService(repo, new PackageIndexStore(), options);
         var git = new GitTransferService(packages);
         return (git, packages, reposRoot);
     }

@@ -2,12 +2,14 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Search.Indexing;
 using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Packages;
 
 public sealed class MongoPackageService(
     IPackageRepository repo,
+    PackageIndexStore indexStore,
     IOptions<AtollOptions> options) : IPackageService
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
@@ -53,12 +55,14 @@ public sealed class MongoPackageService(
         if (await repo.ExistsAsync(packageName))
             throw new PackageConflictException(packageName);
 
+        var packageBase = ResolvePackageBase(packageName);
+
         var tempPath = Path.Combine(Path.GetTempPath(), $"atoll-{packageName}-{Guid.NewGuid():N}");
         Dictionary<string, string> files;
         try
         {
             Directory.CreateDirectory(tempPath);
-            await GitClient.CloneAsync($"https://aur.archlinux.org/{packageName}.git", tempPath);
+            await GitClient.CloneAsync($"https://aur.archlinux.org/{packageBase}.git", tempPath);
             files = await ReadFilesAsync(tempPath);
         }
         finally
@@ -140,6 +144,15 @@ public sealed class MongoPackageService(
         {
             lockObj.Release();
         }
+    }
+
+    internal string ResolvePackageBase(string packageName)
+    {
+        if (indexStore.Current.ByNames.TryGetValue(packageName, out var metadata)
+            && !string.IsNullOrEmpty(metadata.PackageBase))
+            return metadata.PackageBase;
+
+        return packageName;
     }
 
     private static bool IsUpToDate(string path, string marker, string headMarker)

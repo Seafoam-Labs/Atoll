@@ -10,11 +10,9 @@ public sealed class AurPackageMetadataDocument
     [BsonRepresentation(BsonType.ObjectId)]
     public string Id { get; set; } = null!;
 
-    [BsonElement("batch")]
-    public string BatchId { get; set; } = null!;
+    [BsonElement("batch")] public string BatchId { get; set; } = null!;
 
-    [BsonElement("aur_id")]
-    public long AurId { get; set; }
+    [BsonElement("aur_id")] public long AurId { get; set; }
 
     [BsonElement("name")] public string Name { get; set; } = null!;
 

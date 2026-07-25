@@ -1,5 +1,6 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -38,7 +39,7 @@ public class GitRepositoryMaterializationTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        return (new MongoPackageService(repo, options), reposRoot);
+        return (new MongoPackageService(repo, new PackageIndexStore(), options), reposRoot);
     }
 
     [SetUp]
@@ -153,7 +154,7 @@ public class GitRepositoryMaterializationTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = "" }
         });
-        var service = new MongoPackageService(repo, options);
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options);
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 
