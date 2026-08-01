@@ -56,7 +56,11 @@ public class PackageBulkSeedWorkerTests
         BulkSeedStatusStore status,
         ISeedExclusionRepository? exclusions = null)
     {
-        var service = new MongoPackageService(repo, store, Options.Create(BulkOptions()));
+        var service = new MongoPackageService(
+            repo,
+            store,
+            Options.Create(BulkOptions()),
+            new InMemoryPackageSecurityRepository());
         exclusions ??= new InMemorySeedExclusionRepository();
         return new PackageBulkSeedWorker(
             store,
@@ -194,7 +198,11 @@ public class PackageBulkSeedWorkerTests
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("other", "other"));
         var repo = new InMemoryPackageRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(BulkOptions()));
+        var service = new MongoPackageService(
+            repo,
+            store,
+            Options.Create(BulkOptions()),
+            new InMemoryPackageSecurityRepository());
         await service.SeedFilesAsync("shelly", BaseFiles); // pre-seeded
 
         var mirror = new FakeMirror { Branches = { "shelly", "other" } };

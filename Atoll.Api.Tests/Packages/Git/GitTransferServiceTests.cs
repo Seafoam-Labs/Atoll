@@ -34,7 +34,11 @@ public class GitTransferServiceTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        var packages = new MongoPackageService(repo, new PackageIndexStore(), options);
+        var packages = new MongoPackageService(
+            repo,
+            new PackageIndexStore(),
+            options,
+            new InMemoryPackageSecurityRepository());
         var git = new GitTransferService(packages);
         return (git, packages, reposRoot);
     }

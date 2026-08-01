@@ -8,10 +8,9 @@ public interface IPackageRepository
 
     Task<PackageDocument?> GetHeadAsync(string packageName, CancellationToken ct = default);
 
-    Task<PackageRevisionDocument?> GetRevisionAsync(
-        string packageName,
-        string revisionId,
-        CancellationToken ct = default);
+    Task<PackageHeadFiles?> GetHeadFilesAsync(string packageName, CancellationToken ct = default);
+
+    Task<PackageRevisionDocument?> GetRevisionAsync(string packageName, string revisionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName, CancellationToken ct = default);
 

@@ -19,7 +19,9 @@ internal sealed class MongoApiTestFactory : WebApplicationFactory<Program>
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Atoll:Mongo:ConnectionString"] = MongoFixture.ConnectionString,
-                ["Atoll:Mongo:Database"] = Database
+                ["Atoll:Mongo:Database"] = Database,
+                // These tests check Mongo storage mechanics, not security.
+                ["Atoll:Security:Enabled"] = "false"
             })
             .Build());
 

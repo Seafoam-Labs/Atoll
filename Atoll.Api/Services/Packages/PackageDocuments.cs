@@ -43,3 +43,10 @@ public sealed class PackageRevisionDocument
 
     [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
 }
+
+public sealed class PackageHeadFiles
+{
+    [BsonElement("headRevisionId")] public string HeadRevisionId { get; init; } = string.Empty;
+
+    [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
+}

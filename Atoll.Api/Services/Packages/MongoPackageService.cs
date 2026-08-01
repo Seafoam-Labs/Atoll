@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Security;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 
@@ -11,7 +12,8 @@ namespace Atoll.Api.Services.Packages;
 public sealed class MongoPackageService(
     IPackageRepository repo,
     PackageIndexStore indexStore,
-    IOptions<AtollOptions> options) : IPackageService
+    IOptions<AtollOptions> options,
+    IPackageSecurityRepository securityRepository) : IPackageService
 {
     private const int MongoMaxDocumentSizeBytes = 16 * 1024 * 1024;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
@@ -182,6 +184,7 @@ public sealed class MongoPackageService(
                 MongoMaxDocumentSizeBytes);
 
         await repo.InsertSeedAsync(doc);
+        await securityRepository.MarkPendingAsync(packageName, revisionId);
     }
 
     internal string ResolvePackageBase(string packageName)

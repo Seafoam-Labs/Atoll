@@ -12,11 +12,16 @@ using Microsoft.Extensions.Hosting;
 
 namespace Atoll.Api.Tests.Support;
 
-internal sealed class GitTestFactory : WebApplicationFactory<Program>
+/// <summary>
+///     Test factory with security gating enabled and an in-memory package
+///     repository so endpoint-level gating can be exercised without Mongo.
+/// </summary>
+internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
 {
-    private InMemoryPackageRepository Repository { get; } = new();
+    public InMemoryPackageRepository Repository { get; } = new();
+    public InMemoryPackageSecurityRepository SecurityRepository { get; } = new();
 
-    private string RepositoriesRoot { get; } = Path.Combine(Path.GetTempPath(), $"atoll-http-git-{Guid.NewGuid():N}");
+    private string RepositoriesRoot { get; } = Path.Combine(Path.GetTempPath(), $"atoll-security-{Guid.NewGuid():N}");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -26,8 +31,7 @@ internal sealed class GitTestFactory : WebApplicationFactory<Program>
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Atoll:Git:RepositoriesPath"] = RepositoriesRoot,
-                // These tests check Git transfer mechanics, not security.
-                ["Atoll:Security:Enabled"] = "false"
+                ["Atoll:Security:Enabled"] = "true"
             })
             .Build());
 
@@ -44,7 +48,7 @@ internal sealed class GitTestFactory : WebApplicationFactory<Program>
             services.AddSingleton(store);
 
             services.AddSingleton<IPackageRepository>(Repository);
-            services.AddSingleton<IPackageSecurityRepository>(new InMemoryPackageSecurityRepository());
+            services.AddSingleton<IPackageSecurityRepository>(SecurityRepository);
             services.AddSingleton<IPackageService, MongoPackageService>();
             services.AddSingleton<IGitTransferService, GitTransferService>();
         });

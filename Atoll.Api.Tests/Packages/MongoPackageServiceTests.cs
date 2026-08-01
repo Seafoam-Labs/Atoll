@@ -1,6 +1,7 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -18,13 +19,18 @@ public class MongoPackageServiceTests
 
     private static MongoPackageService CreateService(
         InMemoryPackageRepository repo,
-        PackageIndexStore? indexStore = null)
+        PackageIndexStore? indexStore = null,
+        IPackageSecurityRepository? securityRepository = null)
     {
         var options = Options.Create(new AtollOptions
         {
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         });
-        return new MongoPackageService(repo, indexStore ?? new PackageIndexStore(), options);
+        return new MongoPackageService(
+            repo,
+            indexStore ?? new PackageIndexStore(),
+            options,
+            securityRepository ?? new InMemoryPackageSecurityRepository());
     }
 
     [Test]
@@ -102,7 +108,11 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 1_024, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options);
+        var service = new MongoPackageService(
+            repo,
+            new PackageIndexStore(),
+            options,
+            new InMemoryPackageSecurityRepository());
 
         var big = new Dictionary<string, string>
         {
@@ -123,7 +133,11 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options);
+        var service = new MongoPackageService(
+            repo,
+            new PackageIndexStore(),
+            options,
+            new InMemoryPackageSecurityRepository());
         var files = new Dictionary<string, string> { ["large.txt"] = new('x', 9_000_000) };
 
         var ex = Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () => await service.SeedFilesAsync("too-large", files))!;

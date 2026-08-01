@@ -1,8 +1,5 @@
 namespace Atoll.Api.Services.Metrics;
 
-/// <summary>
-///     Represents the Atoll Search API metrics.
-/// </summary>
 public sealed class Metrics
 {
     public long UptimeSeconds { get; set; }

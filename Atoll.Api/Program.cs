@@ -8,6 +8,7 @@ using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
@@ -16,6 +17,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOptions<AtollOptions>()
     .Bind(builder.Configuration.GetSection("Atoll"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddOptions<SecurityOptions>()
+    .Bind(builder.Configuration.GetSection("Atoll:Security"))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
@@ -46,9 +52,14 @@ builder.Services.AddSingleton<ISeedExclusionRepository, MongoSeedExclusionReposi
 builder.Services.AddSingleton<IPackageService, MongoPackageService>();
 builder.Services.AddSingleton<IGitTransferService, GitTransferService>();
 
+builder.Services.AddSingleton<IPackageSecurityScanner, PkgBuildSecurityScanner>();
+builder.Services.AddSingleton<IPackageSecurityRepository, MongoPackageSecurityRepository>();
+builder.Services.AddSingleton<IPackageSecurityAccess, PackageSecurityAccess>();
+builder.Services.AddHostedService<PackageSecurityWorker>();
+
 var seedMode = builder.Configuration.GetSection("Atoll:Seed").Get<SeedOptions>()?.Mode ?? SeedMode.Direct;
 var bulkEnabled = seedMode == SeedMode.Bulk;
-// Always added for Metrics. Not needed to be always once Opentelemetry is added.
+// Always added for Metrics. Not needed to be always once Open-telemetry is added.
 builder.Services.AddSingleton(new BulkSeedStatusStore(bulkEnabled));
 
 if (bulkEnabled)

@@ -39,7 +39,11 @@ public class GitRepositoryMaterializationTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        return (new MongoPackageService(repo, new PackageIndexStore(), options), reposRoot);
+        return (new MongoPackageService(
+            repo,
+            new PackageIndexStore(),
+            options,
+            new InMemoryPackageSecurityRepository()), reposRoot);
     }
 
     [SetUp]
@@ -154,7 +158,11 @@ public class GitRepositoryMaterializationTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = "" }
         });
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options);
+        var service = new MongoPackageService(
+            repo,
+            new PackageIndexStore(),
+            options,
+            new InMemoryPackageSecurityRepository());
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 
