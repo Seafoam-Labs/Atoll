@@ -75,7 +75,7 @@ The Git transport contract, plain-Git verification steps, failure recovery, conf
 
 ## State & Storage
 
-- **MongoDB (authoritative):** `packages` collection stores package documents with embedded files and revision history; `aur-metadata` collection stores the full AUR package dump as typed documents; `seed-exclusions` records pkgbases that cannot currently fit in a MongoDB document. A unique index on package name is assumed but not yet explicitly created (gap).
+- **MongoDB (authoritative):** `packages` stores package documents with embedded files and revision history; `aur-metadata` stores the full AUR package dump as typed documents; `seed-exclusions` records pkgbases that cannot currently fit in a MongoDB document; `package-security-scans` stores the current security state and latest findings for each package (keyed by package name; compound-indexed on `(status, leaseUntil)` for the scan work queue). The `packages` collection is indexed on `packageName` at startup so the head/exists/history/revision/delete lookups (which filter on `packageName`, not `_id`) are index-served; the index is non-unique to tolerate pre-existing data even though `packageName` is effectively unique in production. The security-state schema and lifecycle are documented in [Package security scanning](SECURITY.md).
 - **In-memory index (cache):** `PackageIndexStore` - immutable snapshot of `ByNames`, `ByWords`, `ByProvides` dictionaries; rebuilt from MongoDB on startup and after each AUR refresh.
 - **On-disk Git repos (cache):** bare repositories under `data/repos/` (configurable via `Atoll:Git:RepositoriesPath`), one per seeded package, materialized lazily from MongoDB.
 - **Limits:** `MaxRevisions` (default 10) caps embedded history per package; `MaxFileBytes` (default 5 MB) rejects oversized individual files at seed time. Every initial package document is BSON-size checked before insertion against MongoDB's fixed 16 MiB limit. Oversized bulk-seed documents are recorded as pkgbase exclusions instead of being retried indefinitely. This is a containment measure, not a way to store large packages.
@@ -96,21 +96,35 @@ The Git transport contract, plain-Git verification steps, failure recovery, conf
 
 ### Endpoints
 
-| Method   | Path                                                     | Description                                               |
-| -------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| GET/HEAD | `/health`                                                | Liveness only - does not check MongoDB or index readiness |
-| GET      | `/metrics`                                               | Service metrics (see Operations)                          |
-| GET      | `/search?query=…&by=name\|words\|provides`               | In-memory package search (comma-separated values)         |
-| GET      | `/packages`                                              | List all seeded package names                             |
-| POST     | `/packages/{name}/seed`                                  | Clone from AUR and persist (409 if exists)                |
-| GET      | `/packages/{name}`                                       | Get head revision files                                   |
-| GET      | `/packages/{name}/versions`                              | Get revision history                                      |
-| GET      | `/packages/{name}/versions/{sha}`                        | Get specific revision files                               |
-| DELETE   | `/packages/{name}`                                       | Delete package (MongoDB document only - see note below)   |
-| GET      | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement                                     |
-| POST     | `/packages/{name}.git/git-upload-pack`                   | Git pack negotiation and transfer                         |
+| Method   | Path                                       | Description                                               |
+| -------- | ------------------------------------------ | --------------------------------------------------------- |
+| GET/HEAD | `/health`                                  | Liveness only - does not check MongoDB or index readiness |
+| GET      | `/metrics`                                 | Service metrics (see Operations)                          |
+| GET      | `/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values)         |
+| GET      | `/packages`                                | List all seeded package names                             |
+| POST     | `/packages/{name}/seed`                    | Clone from AUR and persist (409 if exists)                |
+| GET      | `/packages/{name}`                         | Get head revision files                                   |
+| GET      | `/packages/{name}/versions`                | Get revision history                                      |
+| GET      | `/packages/{name}/versions/{sha}`          | Get specific revision files                               |
+| DELETE   | `/packages/{name}`                         | Delete package (MongoDB document only - see note below)   |
+| GET      | `/packages/{name}/security`                | Get effective security status + latest scan summary       |
+| POST | `/packages/{name}/security/rescan` | Mark the head revision for re-scan |
+| GET | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement |
+| POST | `/packages/{name}.git/git-upload-pack` | Git pack negotiation and transfer |
 
 > **Known issue:** `DELETE` removes the MongoDB document but leaves the bare repo on disk, so `git clone` keeps serving the deleted package's content indefinitely. Fix by either deleting the directory or having `GitTransferService` verify the MongoDB document exists first.
+
+### Security scanning
+
+Seeded AUR content is user-submitted and may execute arbitrary shell at build/install time, so Atoll runs deterministic static analysis on stored files and gates read access to package content and Git on a per-package security status. Search and the package list remain ungated (they serve public AUR metadata).
+
+Each package has one security-state document in `package-security-scans` (`Pending` / `Verified` / `Flagged` / `Error`), keyed by package name and tied to its current revision. The persisted `Pending` state is the durable work queue: `PackageSecurityWorker` runs `ScannerConcurrency` poll loops, atomically leases a pending document (`leaseUntil`/`leaseOwner`, 5-minute lease), scans the head revision, and writes the result back guarded by `(id, revisionId, leaseOwner)`. A new seed or rescan re-marks the state `Pending`; expired leases are reclaimable after a restart.
+
+`PkgBuildSecurityScanner` matches a rule set against the `PKGBUILD` and script-like companion files, after de-obfuscating each line (quote-splitting and backslash escapes) and detecting hidden/invisible characters used for homograph spoofing. Rules that match only after de-obfuscation are escalated to `Critical`. `Critical` and `High` findings flag a package; `Medium` findings are retained without blocking.
+
+`PackageSecurityAccess.CheckAsync` is enforced in `Endpoints.cs` on `GET /packages/{name}`, `GET /packages/{name}/versions/{sha}`, and both Git Smart HTTP routes. Blocked requests return `403 Forbidden` with an RFC 9457 problem-details body carrying a non-sensitive `reason` code (`security_status_pending` / `security_status_flagged` / `security_scan_error`). Version history (`/versions`) and the status endpoint (`/packages/{name}/security`) are not gated — they expose metadata and the scan summary, not content. When security is disabled (`Atoll:Security:Enabled=false`) everything is served regardless of status.
+
+The threat model, full rule table, pipeline internals, decision table, configuration (`Enabled` / `ScannerConcurrency` / `PollIntervalMs`), manual verification steps, and known limitations are documented in [Package security scanning](SECURITY.md).
 
 ## Key Decisions (ADRs)
 
@@ -144,11 +158,7 @@ Continuously re-sync seeded packages so the latest version is always available, 
 
 ### 2. Security scanning of PKGBUILD and package scripts
 
-Scan PKGBUILD files and any accompanying scripts (`*.install`, hooks, etc.) before a package becomes accessible, since AUR content is user-submitted and executes arbitrary shell at build time. Requirements:
-
-- **Verification status** - add a per-package status field (e.g. `Pending` / `Verified` / `Flagged`) persisted in MongoDB on seeded package documents. **Scoping note:** search is served from the AUR metadata dump (all ~116k packages) while verification status applies only to seeded packages (a small subset) - gating search on it would empty the index. The workable split: gate _file and Git access_ on verification status, and leave _metadata search_ ungated (it is public AUR metadata), or carry a status field into the index snapshot (interacts with TODO #3).
-- **Scanning rules** - detect dangerous patterns (e.g. `curl | sh`, base64-obfuscated payloads, writes outside `$pkgdir`, unexpected network fetches, suspicious `source` URLs); evaluate existing rule sets (OWASP/CWE-style) before writing custom ones.
-- **Pipeline integration** - run scans at seed/refresh time (TODO #1) in the background worker, recording scan results and timestamps alongside each revision.
+**Implemented** (see [Security scanning](#security-scanning) above and [Package security scanning](SECURITY.md)). Remaining follow-ups: richer rule coverage, source-host allow/deny lists, manual override state (`ForceVerified` / `ForceBlocked`), and security metrics under `/metrics`.
 
 ### 3. Incremental index updates
 

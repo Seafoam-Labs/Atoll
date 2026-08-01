@@ -2,6 +2,7 @@ using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search;
+using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -57,16 +58,30 @@ public static class Endpoints
             });
 
         packages.MapGet("/{name}",
-            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
-            TypedResults.Ok(await repo.GetAsync(name)));
+            async ([FromRoute] string name, [FromServices] IPackageService repo,
+                [FromServices] IPackageSecurityAccess security) =>
+            {
+                var access = await security.CheckAsync(name);
+                if (!access.Allowed)
+                    return SecurityBlocked(access.ReasonCode);
+
+                return TypedResults.Ok(await repo.GetAsync(name));
+            });
 
         packages.MapGet("/{name}/versions",
             async ([FromRoute] string name, [FromServices] IPackageService repo) =>
             TypedResults.Ok(await repo.GetHistoryAsync(name)));
 
         packages.MapGet("/{name}/versions/{sha}",
-            async ([FromRoute] string name, [FromRoute] string sha, [FromServices] IPackageService repo) =>
-            TypedResults.Ok(await repo.GetAsync(name, sha)));
+            async ([FromRoute] string name, [FromRoute] string sha, [FromServices] IPackageService repo,
+                [FromServices] IPackageSecurityAccess security) =>
+            {
+                var access = await security.CheckAsync(name);
+                if (!access.Allowed)
+                    return SecurityBlocked(access.ReasonCode);
+
+                return TypedResults.Ok(await repo.GetAsync(name, sha));
+            });
 
         packages.MapDelete("/{name}",
             async ([FromRoute] string name, [FromServices] IPackageService repo) =>
@@ -74,6 +89,42 @@ public static class Endpoints
                 await repo.DeleteAsync(name);
                 return TypedResults.NoContent();
             });
+
+        packages.MapGet("/{name}/security", SecurityStatus);
+        packages.MapPost("/{name}/security/rescan", SecurityRescan);
+    }
+
+    private static async Task<IResult> SecurityStatus(
+        [FromRoute] string name,
+        [FromServices] IPackageRepository packages,
+        [FromServices] IPackageSecurityRepository security)
+    {
+        var package = await packages.GetHeadAsync(name);
+        if (package is null)
+            return TypedResults.NotFound();
+
+        var scan = await security.GetAsync(name);
+        return TypedResults.Ok(new
+        {
+            packageName = name,
+            status = (scan?.Status ?? Services.Security.SecurityStatus.Pending).ToString(),
+            revisionId = scan?.RevisionId ?? package.HeadRevisionId,
+            scannedAt = scan?.ScannedAt,
+            findingCount = scan?.Findings.Count ?? 0
+        });
+    }
+
+    private static async Task<IResult> SecurityRescan(
+        [FromRoute] string name,
+        [FromServices] IPackageRepository packages,
+        [FromServices] IPackageSecurityRepository security)
+    {
+        var package = await packages.GetHeadAsync(name);
+        if (package is null)
+            return TypedResults.NotFound();
+
+        await security.MarkPendingAsync(name, package.HeadRevisionId);
+        return TypedResults.Accepted($"/packages/{name}/security");
     }
 
     private static void MapGitProtocolRoutes(RouteGroupBuilder packages)
@@ -86,6 +137,7 @@ public static class Endpoints
         [FromRoute] string name,
         [FromQuery(Name = "service")] string? service,
         [FromServices] IGitTransferService git,
+        [FromServices] IPackageSecurityAccess security,
         HttpResponse response,
         CancellationToken ct)
     {
@@ -93,6 +145,10 @@ public static class Endpoints
 
         if (!string.Equals(service, "git-upload-pack", StringComparison.Ordinal))
             return TypedResults.Problem("Only git-upload-pack is supported.", statusCode: StatusCodes.Status403Forbidden);
+
+        var access = await security.CheckAsync(name, ct);
+        if (!access.Allowed)
+            return SecurityBlocked(access.ReasonCode);
 
         response.ContentType = "application/x-git-upload-pack-advertisement";
 
@@ -107,11 +163,17 @@ public static class Endpoints
     private static async Task<IResult> GitUploadPack(
         [FromRoute] string name,
         [FromServices] IGitTransferService git,
+        [FromServices] IPackageSecurityAccess security,
         HttpRequest request,
         HttpResponse response,
         CancellationToken ct)
     {
         response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
+
+        var access = await security.CheckAsync(name, ct);
+        if (!access.Allowed)
+            return SecurityBlocked(access.ReasonCode);
+
         response.ContentType = "application/x-git-upload-pack-result";
 
         var result = await git.UploadPackAsync(name, request.Body, response.Body, ct);
@@ -120,5 +182,13 @@ public static class Endpoints
 
         response.ContentType = null;
         return TypedResults.NotFound();
+    }
+
+    private static IResult SecurityBlocked(string? reasonCode)
+    {
+        return TypedResults.Problem(
+            "Package content is not available because it has not passed security verification.",
+            statusCode: StatusCodes.Status403Forbidden,
+            extensions: new Dictionary<string, object?> { ["reason"] = reasonCode });
     }
 }

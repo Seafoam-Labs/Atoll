@@ -8,6 +8,7 @@ public sealed class AtollOptions
     public MongoOptions Mongo { get; init; } = new();
     public GitOptions Git { get; init; } = new();
     public SeedOptions Seed { get; init; } = new();
+    public SecurityOptions Security { get; init; } = new();
 }
 
 public enum SeedMode
@@ -68,6 +69,8 @@ public sealed class MongoCollections
     [Required] public string AurMetadata { get; init; } = "aur-metadata";
 
     [Required] public string SeedExclusions { get; init; } = "seed-exclusions";
+
+    [Required] public string PackageSecurityScans { get; init; } = "package-security-scans";
 }
 
 public sealed class DataSourceOptions
@@ -75,4 +78,13 @@ public sealed class DataSourceOptions
     [Required] [Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
 
     [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 10;
+}
+
+public sealed class SecurityOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    [Range(1, 64)] public int ScannerConcurrency { get; init; } = 16;
+
+    [Range(100, 300_000)] public int PollIntervalMs { get; init; } = 100;
 }

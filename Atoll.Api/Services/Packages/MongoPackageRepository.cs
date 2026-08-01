@@ -12,6 +12,8 @@ public sealed class MongoPackageRepository : IPackageRepository
         var o = options.Value.Mongo;
         var db = client.GetDatabase(o.Database);
         _packages = db.GetCollection<PackageDocument>(o.Collections.Packages);
+
+        EnsureIndexes();
     }
 
     public async Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
@@ -35,6 +37,18 @@ public sealed class MongoPackageRepository : IPackageRepository
     {
         return await _packages
             .Find(Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<PackageHeadFiles?> GetHeadFilesAsync(string packageName, CancellationToken ct = default)
+    {
+        return await _packages
+            .Find(Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName))
+            .Project(p => new PackageHeadFiles
+            {
+                HeadRevisionId = p.HeadRevisionId,
+                Files = p.Files
+            })
             .FirstOrDefaultAsync(ct);
     }
 
@@ -106,5 +120,12 @@ public sealed class MongoPackageRepository : IPackageRepository
         await _packages.DeleteOneAsync(
             Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName),
             ct);
+    }
+
+    private void EnsureIndexes()
+    {
+        _packages.Indexes.CreateOne(
+            new CreateIndexModel<PackageDocument>(
+                Builders<PackageDocument>.IndexKeys.Ascending(p => p.PackageName)));
     }
 }

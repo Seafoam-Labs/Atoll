@@ -22,6 +22,18 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
         return Task.FromResult(_docs.TryGetValue(packageName, out var doc) ? doc : null);
     }
 
+    public Task<PackageHeadFiles?> GetHeadFilesAsync(string packageName, CancellationToken ct = default)
+    {
+        if (!_docs.TryGetValue(packageName, out var doc))
+            return Task.FromResult<PackageHeadFiles?>(null);
+
+        return Task.FromResult<PackageHeadFiles?>(new PackageHeadFiles
+        {
+            HeadRevisionId = doc.HeadRevisionId,
+            Files = doc.Files
+        });
+    }
+
     public Task<PackageRevisionDocument?> GetRevisionAsync(
         string packageName,
         string revisionId,

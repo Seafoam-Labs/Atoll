@@ -81,16 +81,13 @@ public sealed class PackageBulkSeedWorker(
 
             var targets = BulkSeedPlan.BuildPkgBaseTargets(missing, name => ResolvePackageBase(index, name));
             var excludedBases = await exclusions.ListDocumentTooLargePackageBasesAsync(stoppingToken);
-            var excludedTargets = targets.Where(x => excludedBases.Contains(x.Key)).ToList();
-            packagesExcluded = excludedTargets.Sum(x => x.Value.Count);
-            var excludedPackageNames = excludedTargets.SelectMany(x => x.Value).ToList();
+            packagesExcluded = targets.Where(x => excludedBases.Contains(x.Key)).Sum(x => x.Value.Count);
             targets = targets.Where(x => !excludedBases.Contains(x.Key)).ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
-            var seedablePackageNames = targets.SelectMany(x => x.Value).ToList();
+            var seedablePackageCount = targets.Values.Sum(x => x.Count);
 
             logger.LogDebug(
-                "Bulk seed plan: {SeedablePackageCount} packages to seed ({SeedablePackageNames}) across {PackageBaseCount} pkgbases; {ExcludedPackageCount} packages excluded due to document size ({ExcludedPackageNames}).",
-                seedablePackageNames.Count, string.Join(", ", seedablePackageNames), targets.Count, packagesExcluded,
-                string.Join(", ", excludedPackageNames));
+                "Bulk seed plan: {SeedablePackageCount} packages to seed across {PackageBaseCount} pkgbases; {ExcludedPackageCount} packages excluded due to document size.",
+                seedablePackageCount, targets.Count, packagesExcluded);
 
             if (targets.Count == 0)
             {
