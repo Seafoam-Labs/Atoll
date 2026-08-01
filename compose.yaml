@@ -15,7 +15,14 @@
       - Atoll__Mongo__MaxRevisions=10
       - Atoll__Mongo__MaxFileBytes=5242880
       - Atoll__Git__RepositoriesPath=/app/data/repos
-      - Atoll__Seed__SeedDelayMs=10000
+      - Atoll__Seed__Direct__SeedDelayMs=1000
+      - Atoll__Seed__Mode=Direct
+      # Bulk mode (GitHub mirror, ~10-30 min full sync): set Atoll__Seed__Mode=Bulk and uncomment.
+      # - Atoll__Seed__Bulk__MirrorUrl=https://github.com/archlinux/aur
+      # - Atoll__Seed__Bulk__CachePath=/app/data/aur-mirror
+      # - Atoll__Seed__Bulk__BatchSize=1000
+      # - Atoll__Seed__Bulk__BatchDelayMs=1000
+      # - Atoll__Seed__Bulk__AurFallbackForNotOnMirror=false
     volumes:
       - atoll-data:/app/data
     depends_on:
@@ -23,7 +30,7 @@
         condition: service_healthy
 
   mongo:
-    image: mongo:8.3.4
+    image: mongo:8.3.7
     restart: unless-stopped
     ports:
       - "27017:27017"

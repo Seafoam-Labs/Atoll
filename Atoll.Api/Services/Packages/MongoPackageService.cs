@@ -4,6 +4,7 @@ using System.Text;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 
 namespace Atoll.Api.Services.Packages;
 
@@ -12,6 +13,7 @@ public sealed class MongoPackageService(
     PackageIndexStore indexStore,
     IOptions<AtollOptions> options) : IPackageService
 {
+    private const int MongoMaxDocumentSizeBytes = 16 * 1024 * 1024;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
     private readonly AtollOptions _options = options.Value;
 
@@ -146,6 +148,42 @@ public sealed class MongoPackageService(
         }
     }
 
+    public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
+    {
+        var packageFiles = BuildAndValidatePackageFiles(files);
+        var revisionId = ComputeRevisionId(packageName, packageFiles);
+        var now = DateTimeOffset.UtcNow;
+
+        var revision = new PackageRevisionDocument
+        {
+            RevisionId = revisionId,
+            CreatedAt = now,
+            Author = "aur",
+            Message = "seed from AUR",
+            Files = packageFiles
+        };
+
+        var doc = new PackageDocument
+        {
+            Id = packageName,
+            PackageName = packageName,
+            CreatedAt = now,
+            UpdatedAt = now,
+            HeadRevisionId = revisionId,
+            Files = packageFiles,
+            Revisions = [revision]
+        };
+
+        var serializedSizeBytes = doc.ToBson().LongLength;
+        if (serializedSizeBytes > MongoMaxDocumentSizeBytes)
+            throw new PackageDocumentTooLargeException(
+                packageName,
+                serializedSizeBytes,
+                MongoMaxDocumentSizeBytes);
+
+        await repo.InsertSeedAsync(doc);
+    }
+
     internal string ResolvePackageBase(string packageName)
     {
         if (indexStore.Current.ByNames.TryGetValue(packageName, out var metadata)
@@ -233,35 +271,6 @@ public sealed class MongoPackageService(
             .ToString();
 
         return string.IsNullOrEmpty(sanitized) ? "unknown" : sanitized;
-    }
-
-    internal async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
-    {
-        var packageFiles = BuildAndValidatePackageFiles(files);
-        var revisionId = ComputeRevisionId(packageName, packageFiles);
-        var now = DateTimeOffset.UtcNow;
-
-        var revision = new PackageRevisionDocument
-        {
-            RevisionId = revisionId,
-            CreatedAt = now,
-            Author = "aur",
-            Message = "seed from AUR",
-            Files = packageFiles
-        };
-
-        var doc = new PackageDocument
-        {
-            Id = packageName,
-            PackageName = packageName,
-            CreatedAt = now,
-            UpdatedAt = now,
-            HeadRevisionId = revisionId,
-            Files = packageFiles,
-            Revisions = [revision]
-        };
-
-        await repo.InsertSeedAsync(doc);
     }
 
     private Dictionary<string, PackageFile> BuildAndValidatePackageFiles(

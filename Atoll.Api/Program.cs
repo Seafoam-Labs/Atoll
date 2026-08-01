@@ -3,6 +3,7 @@ using Atoll.Api;
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Packages.Seed;
 using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
@@ -41,11 +42,32 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
 });
 
 builder.Services.AddSingleton<IPackageRepository, MongoPackageRepository>();
+builder.Services.AddSingleton<ISeedExclusionRepository, MongoSeedExclusionRepository>();
 builder.Services.AddSingleton<IPackageService, MongoPackageService>();
 builder.Services.AddSingleton<IGitTransferService, GitTransferService>();
 
+var seedMode = builder.Configuration.GetSection("Atoll:Seed").Get<SeedOptions>()?.Mode ?? SeedMode.Direct;
+var bulkEnabled = seedMode == SeedMode.Bulk;
+// Always added for Metrics. Not needed to be always once Opentelemetry is added.
+builder.Services.AddSingleton(new BulkSeedStatusStore(bulkEnabled));
+
+if (bulkEnabled)
+{
+    builder.Services.AddSingleton<IAurMirror>(sp =>
+    {
+        var options = sp.GetRequiredService<IOptions<AtollOptions>>().Value;
+        var bulk = options.Seed.Bulk;
+        var logger = sp.GetRequiredService<ILogger<AurMirror>>();
+        return new AurMirror(bulk.MirrorUrl, bulk.CachePath, logger);
+    });
+    builder.Services.AddHostedService<PackageBulkSeedWorker>();
+}
+else
+{
+    builder.Services.AddHostedService<DirectSeedWorker>();
+}
+
 builder.Services.AddHostedService<PackageIndexWorker>();
-builder.Services.AddHostedService<PackageSeedWorker>();
 
 var app = builder.Build();
 

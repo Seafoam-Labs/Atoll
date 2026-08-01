@@ -10,9 +10,37 @@ public sealed class AtollOptions
     public SeedOptions Seed { get; init; } = new();
 }
 
+public enum SeedMode
+{
+    Direct,
+    Bulk
+}
+
 public sealed class SeedOptions
 {
+    public SeedMode Mode { get; init; } = SeedMode.Direct;
+
+    public DirectSeedOptions Direct { get; init; } = new();
+
+    public BulkSeedOptions Bulk { get; init; } = new();
+}
+
+public sealed class DirectSeedOptions
+{
     [Range(100, 60_000)] public int SeedDelayMs { get; init; } = 1000;
+}
+
+public sealed class BulkSeedOptions
+{
+    [Required] [Url] public string MirrorUrl { get; init; } = "https://github.com/archlinux/aur";
+
+    [Required] public string CachePath { get; init; } = "./data/aur-mirror";
+
+    [Range(10, 10_000)] public int BatchSize { get; init; } = 1000;
+
+    [Range(100, 60_000)] public int BatchDelayMs { get; init; } = 1000;
+
+    public bool AurFallbackForNotOnMirror { get; init; } = false;
 }
 
 public sealed class GitOptions
@@ -38,6 +66,8 @@ public sealed class MongoCollections
     [Required] public string Packages { get; init; } = "packages";
 
     [Required] public string AurMetadata { get; init; } = "aur-metadata";
+
+    [Required] public string SeedExclusions { get; init; } = "seed-exclusions";
 }
 
 public sealed class DataSourceOptions

@@ -10,6 +10,7 @@ public interface IPackageService
     Task SyncFromStorageAsync(string packageName);
     Task SyncToStorageAsync(string packageName);
     Task SeedFromAurAsync(string packageName);
+    Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files);
     string? GetRepositoryPath(string packageName);
     Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default);
 }

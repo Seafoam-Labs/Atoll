@@ -80,7 +80,7 @@ public static class JsonElementExtensions
             );
         }
 
-        public string[] TryGetStringArray(string property)
+        private string[] TryGetStringArray(string property)
         {
             if (!element.TryGetProperty(property, out var propertyElement) ||
                 propertyElement.ValueKind != JsonValueKind.Array) return [];
