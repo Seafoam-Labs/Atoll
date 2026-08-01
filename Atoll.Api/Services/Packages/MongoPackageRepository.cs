@@ -90,11 +90,7 @@ public sealed class MongoPackageRepository : IPackageRepository
             .Set(p => p.Files, headFiles)
             .Set(p => p.HeadRevisionId, revision.RevisionId)
             .Set(p => p.UpdatedAt, DateTimeOffset.UtcNow)
-            .PushEach(
-                p => p.Revisions,
-                [revision],
-                position: 0,
-                slice: -maxRevisions);
+            .PushEach(p => p.Revisions, [revision], position: 0, slice: maxRevisions);
 
         var result = await _packages.UpdateOneAsync(
             Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName),

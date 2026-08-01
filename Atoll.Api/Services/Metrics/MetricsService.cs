@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Packages.Seed;
 using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
@@ -9,6 +10,7 @@ public sealed class MetricsService(
     PackageIndexStore store,
     PackageSearchService searchService,
     PackageIndexUpdater updater,
+    BulkSeedStatusStore bulkSeedStatus,
     ApplicationRuntimeInfo runtimeInfo)
 {
     public Metrics GetMetrics()
@@ -36,7 +38,26 @@ public sealed class MetricsService(
                 LastStartedUtc = refresh.LastStartedUtc,
                 LastSucceededUtc = refresh.LastSucceededUtc,
                 LastFailedUtc = refresh.LastFailedUtc
-            }
+            },
+            BulkSeed = MapBulkSeed(bulkSeedStatus.GetSnapshot())
+        };
+    }
+
+    private static BulkSeedStatus MapBulkSeed(BulkSeedStatusSnapshot s)
+    {
+        return new BulkSeedStatus
+        {
+            Enabled = s.Enabled,
+            BatchesAttempted = s.BatchesAttempted,
+            BatchesSucceeded = s.BatchesSucceeded,
+            BatchesFailed = s.BatchesFailed,
+            RefsSkipped = s.RefsSkipped,
+            RefsFailed = s.RefsFailed,
+            PackagesSeeded = s.PackagesSeeded,
+            PackagesSkipped = s.PackagesSkipped,
+            PackagesExcluded = s.PackagesExcluded,
+            LastStartedUtc = s.LastStartedUtc,
+            LastFinishedUtc = s.LastFinishedUtc
         };
     }
 }

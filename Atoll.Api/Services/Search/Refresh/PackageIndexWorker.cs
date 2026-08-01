@@ -9,19 +9,31 @@ public sealed class PackageIndexWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await manager.InitializeAsync(stoppingToken);
+        logger.LogInformation("Package index refresh worker started with a {RefreshInterval} refresh interval.",
+            manager.RefreshInterval);
 
-        if (await repository.ExistsAsync(stoppingToken))
+        try
         {
-            logger.LogInformation("Metadata already present. Sleeping before next refresh.");
-            await Task.Delay(manager.RefreshInterval, stoppingToken);
+            await manager.InitializeAsync(stoppingToken);
+
+            if (await repository.ExistsAsync(stoppingToken))
+            {
+                logger.LogDebug("Cached metadata is available; waiting until the next scheduled refresh.");
+                await Task.Delay(manager.RefreshInterval, stoppingToken);
+            }
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                var refreshed = await manager.DownloadAndReloadAsync(stoppingToken);
+                logger.LogDebug(
+                    "Package index refresh {RefreshResult}; waiting {RefreshInterval} until the next refresh.",
+                    refreshed ? "completed" : "failed", manager.RefreshInterval);
+                await Task.Delay(manager.RefreshInterval, stoppingToken);
+            }
         }
-
-        while (!stoppingToken.IsCancellationRequested)
+        finally
         {
-            _ = await manager.DownloadAndReloadAsync(stoppingToken);
-            logger.LogInformation("Sleeping...");
-            await Task.Delay(manager.RefreshInterval, stoppingToken);
+            logger.LogInformation("Package index refresh worker stopped.");
         }
     }
 }

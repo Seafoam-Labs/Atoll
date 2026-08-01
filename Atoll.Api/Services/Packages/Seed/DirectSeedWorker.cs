@@ -1,22 +1,22 @@
 using Atoll.Api.Services.Search.Indexing;
 using Microsoft.Extensions.Options;
 
-namespace Atoll.Api.Services.Packages;
+namespace Atoll.Api.Services.Packages.Seed;
 
-public sealed class PackageSeedWorker(
+public sealed class DirectSeedWorker(
     PackageIndexStore indexStore,
     IPackageRepository repo,
     IPackageService packageService,
     IOptions<AtollOptions> options,
-    ILogger<PackageSeedWorker> logger) : BackgroundService
+    ILogger<DirectSeedWorker> logger) : BackgroundService
 {
     private readonly AtollOptions _options = options.Value;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var seedDelay = TimeSpan.FromMilliseconds(Math.Max(1000, _options.Seed.SeedDelayMs));
+        var seedDelay = TimeSpan.FromMilliseconds(Math.Max(100, _options.Seed.Direct.SeedDelayMs));
 
-        logger.LogInformation("Package seeding started.");
+        logger.LogInformation("Direct package seeding started with a {SeedDelay} delay between packages.", seedDelay);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -24,7 +24,7 @@ public sealed class PackageSeedWorker(
 
             if (index.ByNames.Count == 0)
             {
-                logger.LogInformation("Index is empty. Waiting before next attempt...");
+                logger.LogDebug("Package index is empty; waiting 15 seconds before the next seed attempt.");
                 await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
                 continue;
             }
@@ -34,30 +34,32 @@ public sealed class PackageSeedWorker(
 
             if (missing.Count == 0)
             {
-                logger.LogInformation("All indexed packages are already in the database.");
+                logger.LogDebug("All indexed packages are already seeded; waiting five minutes before checking again.");
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
                 continue;
             }
 
-            logger.LogInformation("Found {Count} packages to seed.", missing.Count);
+            logger.LogDebug("Starting a direct seed cycle for {CandidateCount} missing packages.", missing.Count);
 
             var seeded = 0;
             var failed = 0;
+            var conflicts = 0;
 
             foreach (var packageName in missing)
             {
-                if (stoppingToken.IsCancellationRequested)
-                    break;
+                if (stoppingToken.IsCancellationRequested) break;
 
                 try
                 {
                     await packageService.SeedFromAurAsync(packageName);
                     Interlocked.Increment(ref seeded);
-                    logger.LogInformation("Seeded {PackageName}.", packageName);
+                    logger.LogTrace("Seeded package {PackageName}.", packageName);
                 }
-                catch (PackageConflictException)
+                catch (PackageConflictException ex)
                 {
                     // Race condition: package was seeded between list and seed.
+                    Interlocked.Increment(ref conflicts);
+                    logger.LogDebug(ex, "Package {PackageName} was seeded by another operation.", packageName);
                 }
                 catch (Exception ex)
                 {
@@ -69,14 +71,12 @@ public sealed class PackageSeedWorker(
             }
 
             logger.LogInformation(
-                "Seed batch complete: {Seeded} seeded, {Failed} failed, {Remaining} remaining.",
-                seeded,
-                failed,
-                missing.Count - seeded);
+                "Direct seed cycle complete: {Candidates} candidates, {Seeded} seeded, {Conflicts} already seeded, {Failed} failed.",
+                missing.Count, seeded, conflicts, failed);
 
             if (seeded == 0)
             {
-                logger.LogInformation("No packages were seeded. Waiting before next attempt...");
+                logger.LogDebug("No packages were seeded; waiting five minutes before the next seed attempt.");
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
             }
         }

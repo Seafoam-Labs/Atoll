@@ -66,7 +66,7 @@ public sealed class PackageIndexUpdater(
 
         try
         {
-            logger.LogInformation("Fetching updated package data from AUR.");
+            logger.LogDebug("Fetching updated package data from AUR.");
 
             var client = httpClientFactory.CreateClient();
             await using var compressed = await client.GetStreamAsync(
@@ -74,13 +74,13 @@ public sealed class PackageIndexUpdater(
             await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
 
             var packages = await ParsePackagesAsync(gzip, cancellationToken);
-            logger.LogInformation("Parsed {Count} packages.", packages.Count);
+            logger.LogDebug("Parsed {PackageCount} packages from the AUR metadata dump.", packages.Count);
 
             await aurMetadataRepository.SaveAsync(packages, cancellationToken);
-            logger.LogInformation("Stored {Count} packages.", packages.Count);
 
             var next = PackageDataLoader.BuildFromPackages(packages);
             store.Replace(next);
+            logger.LogInformation("Package index refreshed with {PackageCount} packages.", packages.Count);
 
             Interlocked.Increment(ref _successes);
             lock (_timeLock)

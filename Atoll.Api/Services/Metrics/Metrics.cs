@@ -9,6 +9,7 @@ public sealed class Metrics
     public long RequestCount { get; set; }
     public IndexSizes IndexSizes { get; set; } = new();
     public RefreshStatus Refresh { get; set; } = new();
+    public BulkSeedStatus? BulkSeed { get; set; }
 }
 
 public sealed class IndexSizes
@@ -28,4 +29,19 @@ public sealed class RefreshStatus
     public DateTimeOffset? LastStartedUtc { get; set; }
     public DateTimeOffset? LastSucceededUtc { get; set; }
     public DateTimeOffset? LastFailedUtc { get; set; }
+}
+
+public sealed class BulkSeedStatus
+{
+    public bool Enabled { get; set; }
+    public long BatchesAttempted { get; set; }
+    public long BatchesSucceeded { get; set; }
+    public long BatchesFailed { get; set; }
+    public long RefsSkipped { get; set; }
+    public long RefsFailed { get; set; }
+    public long PackagesSeeded { get; set; }
+    public long PackagesSkipped { get; set; }
+    public long PackagesExcluded { get; set; }
+    public DateTimeOffset? LastStartedUtc { get; set; }
+    public DateTimeOffset? LastFinishedUtc { get; set; }
 }

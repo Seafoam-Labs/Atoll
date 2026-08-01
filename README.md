@@ -41,8 +41,9 @@ The AUR package dump (`packages-meta-ext-v1.json.gz`) is downloaded,
 decompressed in memory, and stored as typed documents in MongoDB. The search
 index is rebuilt from MongoDB on startup and on each refresh.
 
-The AUR metadata collection is configured under `Atoll:Mongo:Collections:AurMetadata`
-(shown above), alongside the user-package collection (`Collections:Packages`).
+The AUR metadata collection is configured under `Atoll:Mongo:Collections:AurMetadata`,
+alongside the user-package collection (`Collections:Packages`) and the bulk-seed exclusion
+collection (`Collections:SeedExclusions`).
 
 ## Endpoints
 
@@ -102,20 +103,52 @@ and waits for the first refresh. The interval is controlled by
 
 ### Package Seed Worker
 
-Iterates over the package index and seeds missing packages from the AUR into MongoDB. A delay between each seed request avoids rate-limiting:
+Iterates over the package index and seeds missing packages from the AUR into MongoDB. The
+strategy is selected by `Atoll:Seed:Mode`:
 
-```json
-"Atoll": {
-  "Seed": {
-    "SeedDelayMs": 1000
-  }
-}
-```
+- **`Direct`** (default) — `DirectSeedWorker` runs one `git clone` per package from
+  `aur.archlinux.org`, with a delay between each seed to avoid rate-limiting. `Seed:Direct:SeedDelayMs` accepts values between
+  **1000** and **60000** milliseconds (default: **1000**).
 
-`SeedDelayMs` accepts values between **100** and **60000** milliseconds (default: **1000**).
+- **`Bulk`** — batch-fetches pkgbase branches from the read-only GitHub AUR mirror
+  (`https://github.com/archlinux/aur`) into a shared local cache, then feeds the extracted
+  files into the existing seed path. Much faster for a full sync (~10 min vs. ~hours/days),
+  at the cost of a ~3 GB local cache and relying on an upstream-experimental mirror. Its settings are
+  under `Atoll:Seed:Bulk`.
+
+The two modes are mutually exclusive (only one worker runs). For Docker, set
+`Atoll__Seed__Mode=Bulk` and uncomment the `Atoll__Seed__Bulk__*` lines in `compose.yaml`.
+Bulk-seed progress is exposed at `GET /metrics` under `bulkSeed`.
 
 ## Configuration
 
 Main settings in `Atoll.Api/appsettings.json` and in `Atoll.Api/AtollOptions.cs`.
 
 Also, `compose.yaml` contains example for using environment variables.
+
+## Tests
+
+The test suite is split into tiers so fast unit/contract tests don't require Docker.
+
+- **Fast tier** (default): in-memory fakes and contract tests. No Docker needed.
+
+  ```bash
+  dotnet test --filter "Category!=RequiresGit&Category!=RequiresMongo"
+  ```
+
+- **Mongo tier**: exercises `MongoPackageRepository` and `AurMetadataRepository` against a real
+  MongoDB spun up with [Testcontainers](https://testcontainers.com/) (`mongo:8.3.7`, matching
+  `compose.yaml`). Requires a running Docker daemon; skips gracefully if unavailable.
+
+  ```bash
+  dotnet test --filter "Category=RequiresMongo"
+  ```
+
+- **Full suite**: everything, including tests that need the real `git` CLI.
+
+  ```bash
+  dotnet test
+  ```
+
+Each Mongo test uses its own database (`atoll-test-*`) and drops it on teardown, so tests are
+isolated from each other and from the app's runtime database.

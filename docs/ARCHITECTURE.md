@@ -6,7 +6,7 @@ Atoll is a self-hosted Arch Linux AUR mirror API. It downloads AUR package metad
 
 - **Problem:** Provide a private, searchable AUR package registry with version history and Git-compatible read access to PKGBUILD files.
 - **Scope:** Mirrors AUR metadata and package files read-only _from AUR's perspective_ - Atoll never writes upstream. Locally it exposes unauthenticated seed and delete endpoints, so it must not be reachable by untrusted clients. Git push (`git-receive-pack`) and authentication are currently out of scope.
-- **Success criteria:** Search queries served from memory in < 10 ms end-to-end; metadata index stays in sync with AUR within the configured refresh interval (default 10 minutes). Note: sync applies to _metadata_ only - seeded package files are frozen at seed time until periodic re-sync (TODO #2) lands.
+- **Success criteria:** Search queries served from memory in < 10 ms end-to-end; metadata index stays in sync with AUR within the configured refresh interval (default 10 minutes). Note: sync applies to _metadata_ only - seeded package files are frozen at seed time until periodic re-sync (TODO #1) lands.
 
 ## Architecture Principles
 
@@ -48,17 +48,18 @@ Atoll is a self-hosted Arch Linux AUR mirror API. It downloads AUR package metad
      ▼
 [AUR packages-meta-ext-v1.json.gz]
 
-[PackageSeedWorker (background)]
+[DirectSeedWorker (background)]
      │  clones missing packages from aur.archlinux.org, delay between seeds
      ▼
 [MongoDB packages collection]
 ```
 
 - **PackageIndexWorker** periodically downloads the AUR dump, persists it to MongoDB, and atomically swaps the in-memory `PackageIndexStore` snapshot. On startup it first rebuilds the index from the cached MongoDB metadata (if any) so search is available before the first download.
-- **PackageSeedWorker** continuously polls the index for packages not yet in MongoDB and clones them, pausing `SeedDelayMs` between packages (default 1 s; 10 s in the container image) and backing off when the index is empty or fully seeded.
+- **DirectSeedWorker** continuously polls the index for packages not yet in MongoDB and clones them, pausing `Seed:Direct:SeedDelayMs` between packages (default 1 s; 10 s in the container image) and backing off when the index is empty or fully seeded. This is the default `Seed:Mode=Direct` seeder.
+- **PackageBulkSeedWorker** (`Seed:Mode=Bulk`) is the mutually-exclusive alternative. It batch-fetches pkgbase branches from the read-only GitHub AUR mirror and seeds their files through the existing `SeedFilesAsync` path. See [Bulk Seeding](SEED.md).
 - **PackageSearchService** serves all search queries from the immutable in-memory snapshot with no database round-trips.
 - **GitTransferService** shells out to `git upload-pack` to serve clone/fetch requests. Bare repositories under `data/repos/` are materialized lazily from MongoDB documents by `MongoPackageService.EnsureGitRepositoryAsync` (commits are synthesized from stored revisions; a `.atoll-head` marker tracks the last materialized revision). Because commits are synthesized rather than imported, **the SHAs served over Git do not match upstream AUR commit SHAs** - the SHAs returned by `/packages/{name}/versions` are the authoritative namespace.
-- **Package name semantics:** `{name}` in all `/packages/{name}` routes is the AUR **pkgname**. Seeding resolves the **pkgbase** from the in-memory AUR metadata index (`MongoPackageService.ResolvePackageBase`) before cloning `aur.archlinux.org/{pkgbase}.git`, since AUR Git URLs are keyed by pkgbase - not pkgname. For split packages where `pkgname != pkgbase` this mapping is required; for non-split packages or when the index is unavailable (cold start, stale snapshot) it falls back to the pkgname, which is correct for non-split packages. TODO #1's branch pre-filtering must apply the same pkgname → pkgbase mapping before matching against `git ls-remote --heads` output.
+- **Package name semantics:** `{name}` in all `/packages/{name}` routes is the AUR **pkgname**. Seeding resolves the **pkgbase** from the in-memory AUR metadata index (`MongoPackageService.ResolvePackageBase`) before cloning `aur.archlinux.org/{pkgbase}.git`, since AUR Git URLs are keyed by pkgbase - not pkgname. For split packages where `pkgname != pkgbase` this mapping is required; for non-split packages or when the index is unavailable (cold start, stale snapshot) it falls back to the pkgname, which is correct for non-split packages. Bulk fetching applies the same pkgname → pkgbase mapping before matching mirror branches.
 
 Request paths of note (everything else is standard Minimal API routing with `GlobalExceptionHandler` converting unhandled exceptions to RFC 9457 `ProblemDetails`):
 
@@ -66,12 +67,18 @@ Request paths of note (everything else is standard Minimal API routing with `Glo
 - **Package CRUD:** `MongoPackageService` delegates to `MongoPackageRepository`; seeding clones the AUR Git repo to a temp directory, reads the files, and persists them to MongoDB.
 - **Git Smart HTTP:** `GitTransferService` ensures the on-disk bare repository exists and is current (materializing from MongoDB on first use or after a new revision), then pipes stdin/stdout to `git upload-pack`.
 
+## Bulk Seeding
+
+Bulk seeding is the opt-in, mutually exclusive alternative to direct AUR cloning (`Atoll:Seed:Mode=Bulk`). It groups missing **pkgnames** by **pkgbase**, fetches each mirror branch once, and fans the extracted files back out through the normal `SeedFilesAsync` path. This preserves split-package semantics while reducing network requests.
+
+The Git transport contract, plain-Git verification steps, failure recovery, configuration, metrics, and cache lifecycle are documented in [Bulk package seeding](SEED.md).
+
 ## State & Storage
 
-- **MongoDB (authoritative):** `packages` collection stores package documents with embedded files and revision history; `aur-metadata` collection stores the full AUR package dump as typed documents. A unique index on package name is assumed but not yet explicitly created (gap).
+- **MongoDB (authoritative):** `packages` collection stores package documents with embedded files and revision history; `aur-metadata` collection stores the full AUR package dump as typed documents; `seed-exclusions` records pkgbases that cannot currently fit in a MongoDB document. A unique index on package name is assumed but not yet explicitly created (gap).
 - **In-memory index (cache):** `PackageIndexStore` - immutable snapshot of `ByNames`, `ByWords`, `ByProvides` dictionaries; rebuilt from MongoDB on startup and after each AUR refresh.
 - **On-disk Git repos (cache):** bare repositories under `data/repos/` (configurable via `Atoll:Git:RepositoriesPath`), one per seeded package, materialized lazily from MongoDB.
-- **Limits:** `MaxRevisions` (default 10) caps embedded history per package; `MaxFileBytes` (default 5 MB) rejects oversized individual files at seed time. **Known gap:** these limits are per-file/per-revision, not per-document - 10 revisions × 5 MB files can exceed MongoDB's 16 MB BSON document cap. There is currently no enforced per-document byte budget; an oversized write surfaces as an unhandled MongoDB error → `ProblemDetails` 500. GridFS is the alternative if large files must be supported.
+- **Limits:** `MaxRevisions` (default 10) caps embedded history per package; `MaxFileBytes` (default 5 MB) rejects oversized individual files at seed time. Every initial package document is BSON-size checked before insertion against MongoDB's fixed 16 MiB limit. Oversized bulk-seed documents are recorded as pkgbase exclusions instead of being retried indefinitely. This is a containment measure, not a way to store large packages.
 - **Disk growth:** unbounded. Seeding all ~116k AUR packages lazily materializes up to ~116k bare repos on disk with no eviction, TTL, or sizing guidance (inode pressure is a real concern at that count). The seed worker is on by default; plan capacity accordingly.
 
 ## API
@@ -112,7 +119,7 @@ Request paths of note (everything else is standard Minimal API routing with `Glo
 | In-memory search index (no Elasticsearch) | Fast reads; AUR metadata fits comfortably in RAM             | Index must be rebuilt on restart; no ranked full-text scoring                                                          | Active                                                |
 | MongoDB for package storage               | Flexible schema; embedded revisions avoid joins              | 16 MB document cap requires conservative revision and file-size limits (currently unenforced per-document - see above) | Active                                                |
 | Shell out to `git upload-pack`            | Reuses the complete and reliable Git transfer implementation | Requires `git` installed in the container; subprocess overhead per request                                             | Active                                                |
-| Atomic `PackageIndexStore` snapshot swap  | Lock-free reads; consistent view per request                 | Full index rebuild on each refresh; 2× peak memory while both snapshots are live                                       | Active - full-rebuild trade-off superseded by TODO #4 |
+| Atomic `PackageIndexStore` snapshot swap  | Lock-free reads; consistent view per request                 | Full index rebuild on each refresh; 2× peak memory while both snapshots are live                                       | Active - full-rebuild trade-off superseded by TODO #3 |
 | No authentication                         | Keeps the API simple for trusted private deployments         | Unauthenticated callers can seed **and delete** packages; must sit behind a reverse proxy / firewall if exposed        | Active                                                |
 
 Security notes not covered by the ADRs: options are validated on startup via Data Annotations (`[Required]`, `[Range]`, `[Url]`); raw stack traces are never returned to clients; `git-receive-pack` (push) is explicitly rejected with `403 Forbidden`.
@@ -127,35 +134,31 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 
 ## Follow-up TODOs
 
-### 1. Bulk fetching of AUR packages
-
-Replace the current one-by-one seeding (`git clone` per package) with bulk batch fetching from the GitHub AUR mirror (`https://github.com/archlinux/aur`, one branch per **pkgbase** - not per pkgname, so the pkgname → pkgbase mapping must be applied before branch pre-filtering). Verified feasibility findings are in `wip/git-fetch.md`:
-
-- Batch-fetch 500–1,000 branches per `git fetch --depth=1` request (~160 batches, ~10 min at 1–2 s between batches, ~3 GB local cache). Each `git fetch` re-advertises all ~95k refs (~10 MB) unless protocol v2 `ref-prefix` filtering is forced - that's ~1.6 GB of pure ref-advertisement traffic across 160 batches, so the filtering matters.
-- Pre-filter requested branches against a cached `git ls-remote --heads` result, since `git fetch` fails atomically if any ref is missing.
-- Feed fetched files into the existing `SeedFilesAsync` path; rate-limit per batch instead of per package.
-- ETA context: the "~44 h for a full sync" figure for the current seeder assumes `SeedDelayMs = 1000`; the container image ships `SeedDelayMs = 10000`, i.e. ~116,000 × 10 s ≈ **13 days** for a full sync at shipped defaults.
-- Caveats: the mirror is marked experimental upstream, may lag behind AUR, and needs a configurable storage path for the local cache.
-
-### 2. Periodic refresh and sync of packages from AUR upstream
+### 1. Periodic refresh and sync of packages from AUR upstream
 
 Continuously re-sync seeded packages so the latest version is always available, instead of seeding once and freezing. Open questions that need research before implementation:
 
 - **Change detection** - cheap ways to discover updated packages (e.g. `git ls-remote` on the GitHub mirror vs. stored head SHAs, AUR RPC `info` calls, or the `LastModified` field in the metadata dump).
 - **Sync rate** - how often to poll without abusing upstream rate limits; likely tiered (popular/recently-updated packages more frequently).
-- **Update path** - integrate with the bulk-fetch worker (TODO #1) so refreshes are also batched; append new revisions to the embedded history respecting `MaxRevisions`, and refresh materialized bare repos when the head changes.
+- **Update path** - integrate with the bulk-fetch worker so refreshes are also batched; append new revisions to the embedded history respecting `MaxRevisions`, and refresh materialized bare repos when the head changes.
 
-### 3. Security scanning of PKGBUILD and package scripts
+### 2. Security scanning of PKGBUILD and package scripts
 
 Scan PKGBUILD files and any accompanying scripts (`*.install`, hooks, etc.) before a package becomes accessible, since AUR content is user-submitted and executes arbitrary shell at build time. Requirements:
 
-- **Verification status** - add a per-package status field (e.g. `Pending` / `Verified` / `Flagged`) persisted in MongoDB on seeded package documents. **Scoping note:** search is served from the AUR metadata dump (all ~116k packages) while verification status applies only to seeded packages (a small subset) - gating search on it would empty the index. The workable split: gate _file and Git access_ on verification status, and leave _metadata search_ ungated (it is public AUR metadata), or carry a status field into the index snapshot (interacts with TODO #4).
+- **Verification status** - add a per-package status field (e.g. `Pending` / `Verified` / `Flagged`) persisted in MongoDB on seeded package documents. **Scoping note:** search is served from the AUR metadata dump (all ~116k packages) while verification status applies only to seeded packages (a small subset) - gating search on it would empty the index. The workable split: gate _file and Git access_ on verification status, and leave _metadata search_ ungated (it is public AUR metadata), or carry a status field into the index snapshot (interacts with TODO #3).
 - **Scanning rules** - detect dangerous patterns (e.g. `curl | sh`, base64-obfuscated payloads, writes outside `$pkgdir`, unexpected network fetches, suspicious `source` URLs); evaluate existing rule sets (OWASP/CWE-style) before writing custom ones.
-- **Pipeline integration** - run scans at seed/refresh time (TODO #2) in the background worker, recording scan results and timestamps alongside each revision.
+- **Pipeline integration** - run scans at seed/refresh time (TODO #1) in the background worker, recording scan results and timestamps alongside each revision.
 
-### 4. Incremental index updates
+### 3. Incremental index updates
 
-Full-rebuild-on-refresh costs redundant CPU and doubles peak memory while both snapshots are live. Replace it with a diff-based update that touches only changed entries - e.g. `ImmutableDictionary.Builder` plus one atomic swap, which preserves the per-request consistent view from the snapshot ADR. (A `ConcurrentDictionary` is an alternative - `ImmutableDictionary` already provides lock-free concurrent reads, so the real gain would be incremental mutation - but it gives up cross-map snapshot consistency and needs its own concurrency story for the `ByWords` collection values.) Pairs with TODO #2. **Supersedes** the "Atomic snapshot swap" ADR's full-rebuild trade-off.
+Full-rebuild-on-refresh costs redundant CPU and doubles peak memory while both snapshots are live. Replace it with a diff-based update that touches only changed entries - e.g. `ImmutableDictionary.Builder` plus one atomic swap, which preserves the per-request consistent view from the snapshot ADR. (A `ConcurrentDictionary` is an alternative - `ImmutableDictionary` already provides lock-free concurrent reads, so the real gain would be incremental mutation - but it gives up cross-map snapshot consistency and needs its own concurrency story for the `ByWords` collection values.) Pairs with TODO #1.
+
+### 4. Normalize package revision content
+
+`PackageDocument` currently embeds identical file content in both the head and its initial revision, and embeds every retained revision in the same MongoDB document. MongoDB's 16 MiB BSON limit therefore remains a structural storage constraint; the bulk-seed exclusion mechanism only prevents futile retries.
+
+Move revision file content to a separate collection keyed by `(packageName, revisionId)` and retain only package and revision metadata plus `HeadRevisionId` in `packages`. The head should reference its revision rather than duplicate its file map. Store files that can individually exceed a practical BSON-document budget in GridFS or chunked file documents. This migration must update package reads, history reads, Git materialization, deletion, and the refresh/append-revision path atomically enough to avoid serving a revision whose content is absent.
 
 ## References
 
