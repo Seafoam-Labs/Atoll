@@ -6,7 +6,7 @@ using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Packages.Git;
 
 [Category("RequiresGit")]
 public class GitTransferServiceTests
@@ -197,7 +197,7 @@ public class GitTransferServiceTests
         }
         catch
         {
-            // best-effort cleanup
+            // ignore
         }
     }
 }

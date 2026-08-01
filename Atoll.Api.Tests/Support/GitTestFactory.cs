@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Support;
 
 internal sealed class GitTestFactory : WebApplicationFactory<Program>
 {
@@ -55,7 +55,7 @@ internal sealed class GitTestFactory : WebApplicationFactory<Program>
             }
             catch
             {
-                // best-effort cleanup
+                // ignore
             }
 
         base.Dispose(disposing);

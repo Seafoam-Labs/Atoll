@@ -5,7 +5,7 @@ using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Packages.Git;
 
 [Category("RequiresGit")]
 public class GitRepositoryMaterializationTests
@@ -173,7 +173,7 @@ public class GitRepositoryMaterializationTests
         }
         catch
         {
-            // best-effort cleanup
+            // ignore
         }
     }
 }

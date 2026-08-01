@@ -1,0 +1,100 @@
+using System.Net;
+using System.Text.Json;
+using Atoll.Api.Services.Packages;
+using Atoll.Api.Tests.Support;
+using MongoDB.Driver;
+using NUnit.Framework;
+
+namespace Atoll.Api.Tests.Endpoints;
+
+[Category("RequiresMongo")]
+public class MongoApiEndpointsTests
+{
+    private HttpClient _client = null!;
+    private MongoApiTestFactory _factory = null!;
+    private IMongoClient _mongo = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        Assume.That(
+            MongoFixture.IsAvailable,
+            Is.True,
+            $"Mongo unavailable: {MongoFixture.UnavailableReason}");
+
+        _factory = new MongoApiTestFactory();
+        _client = _factory.CreateClient();
+        _mongo = MongoRepositoryFactory.CreateClient();
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        _client.Dispose();
+        await _factory.DisposeAsync();
+        await MongoRepositoryFactory.DropDatabaseAsync(_mongo, _factory.Database);
+    }
+
+    [Test]
+    public async Task SeededPackageIsServedFromRealMongoStorage()
+    {
+        var repo = _factory.CreatePackageRepository();
+        var now = DateTimeOffset.UtcNow;
+        var revision = new PackageRevisionDocument
+        {
+            RevisionId = "rev-1",
+            CreatedAt = now,
+            Author = "test",
+            Message = "seed",
+            Files = new Dictionary<string, PackageFile>
+            {
+                ["PKGBUILD"] = new() { Content = "pkgname=atoll-test\n", Size = 18, Hash = "h" }
+            }
+        };
+        await repo.InsertSeedAsync(new PackageDocument
+        {
+            Id = "atoll-test",
+            PackageName = "atoll-test",
+            CreatedAt = now,
+            UpdatedAt = now,
+            HeadRevisionId = "rev-1",
+            Files = revision.Files,
+            Revisions = [revision]
+        });
+
+        var list = await _client.GetAsync("/packages");
+        var head = await _client.GetAsync("/packages/atoll-test");
+        var versions = await _client.GetAsync("/packages/atoll-test/versions");
+
+        Assert.That(list.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(versions.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var listBody = await list.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(listBody);
+        Assert.That(doc.RootElement.GetArrayLength(), Is.EqualTo(1));
+        Assert.That(doc.RootElement[0].GetString(), Is.EqualTo("atoll-test"));
+    }
+
+    [Test]
+    public async Task DeletePackagePersistsToRealMongo()
+    {
+        var repo = _factory.CreatePackageRepository();
+        var now = DateTimeOffset.UtcNow;
+        await repo.InsertSeedAsync(new PackageDocument
+        {
+            Id = "to-delete",
+            PackageName = "to-delete",
+            CreatedAt = now,
+            UpdatedAt = now,
+            HeadRevisionId = "rev-1",
+            Files = new Dictionary<string, PackageFile>(),
+            Revisions = []
+        });
+
+        var del = await _client.DeleteAsync("/packages/to-delete");
+        Assert.That(del.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+
+        Assert.That(await repo.ExistsAsync("to-delete"), Is.False);
+    }
+}

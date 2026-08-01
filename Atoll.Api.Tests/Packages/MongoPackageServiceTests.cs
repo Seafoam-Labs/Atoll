@@ -5,7 +5,7 @@ using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Packages;
 
 public class MongoPackageServiceTests
 {
@@ -116,6 +116,28 @@ public class MongoPackageServiceTests
     }
 
     [Test]
+    public async Task SeedFilesAsync_document_larger_than_mongo_limit_throws_typed_exception_before_insert()
+    {
+        var repo = new InMemoryPackageRepository();
+        var options = Options.Create(new AtollOptions
+        {
+            Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
+        });
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options);
+        var files = new Dictionary<string, string> { ["large.txt"] = new('x', 9_000_000) };
+
+        var ex = Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () => await service.SeedFilesAsync("too-large", files))!;
+        var packageExists = await repo.ExistsAsync("too-large");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ex.PackageName, Is.EqualTo("too-large"));
+            Assert.That(ex.SerializedSizeBytes, Is.GreaterThan(ex.MaxDocumentSizeBytes));
+            Assert.That(packageExists, Is.False);
+        });
+    }
+
+    [Test]
     public async Task DeleteAsync_then_GetAsync_throws_not_found()
     {
         var repo = new InMemoryPackageRepository();
@@ -164,7 +186,6 @@ public class MongoPackageServiceTests
     [Test]
     public async Task SeedFilesAsync_same_content_produces_same_revision_sha()
     {
-        // Determinism check: identical content must produce identical revision ids.
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
 
@@ -202,7 +223,6 @@ public class MongoPackageServiceTests
     [Test]
     public void ResolvePackageBase_non_split_package_returns_pkgname()
     {
-        // Non-split packages have pkgname == pkgbase, so the lookup is a no-op.
         var store = new PackageIndexStore();
         store.Replace(PackageDataLoader.BuildFromPackages([
             SampleMetadata("shelly", "shelly")
