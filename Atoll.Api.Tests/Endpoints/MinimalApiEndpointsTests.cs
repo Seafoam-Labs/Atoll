@@ -1,8 +1,9 @@
 using System.Net;
 using System.Text.Json;
+using Atoll.Api.Tests.Support;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Endpoints;
 
 public class MinimalApiEndpointsTests
 {

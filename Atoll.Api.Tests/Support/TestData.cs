@@ -1,6 +1,6 @@
 using Atoll.Api.Services.Search.Indexing;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Support;
 
 internal static class TestData
 {

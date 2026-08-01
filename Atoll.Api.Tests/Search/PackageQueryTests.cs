@@ -1,9 +1,9 @@
 using Atoll.Api.Services.Search;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Search;
 
-public class ByQueryTests
+public class PackageQueryTests
 {
     [TestCase("Name", By.Name)]
     [TestCase("Provides", By.Provides)]
@@ -53,5 +53,25 @@ public class ByQueryTests
 
         Assert.That(parsed, Is.False);
         Assert.That(result.Value, Is.EqualTo(default(By)));
+    }
+
+    [Test]
+    public void NamesAreSplitByComma()
+    {
+        var parsed = ValuesQuery.TryParse("shelly,portable,portable", out var result);
+
+        Assert.That(parsed, Is.True);
+        Assert.That(result.Values.Length, Is.EqualTo(3));
+        Assert.That(result.Values[0], Is.EqualTo("shelly"));
+        Assert.That(result.Values[1], Is.EqualTo("portable"));
+        Assert.That(result.Values[2], Is.EqualTo("portable"));
+    }
+
+    [Test]
+    public void EmptySourceProducesNoParts()
+    {
+        _ = ValuesQuery.TryParse("", out var result);
+
+        Assert.That(result.Values, Is.Empty);
     }
 }

@@ -1,8 +1,9 @@
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Tests.Support;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Search;
 
 public class PackageSearchServiceTests
 {

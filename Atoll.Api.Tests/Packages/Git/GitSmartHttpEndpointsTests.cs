@@ -3,10 +3,11 @@ using System.Net.Http.Headers;
 using System.Text;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Packages.Git;
 
 [Category("RequiresGit")]
 public class GitSmartHttpEndpointsTests

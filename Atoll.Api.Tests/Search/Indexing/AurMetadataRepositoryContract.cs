@@ -1,16 +1,12 @@
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
-using Atoll.Api.Tests.Fakes;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Search.Indexing;
 
-public class AurMetadataRepositoryTests
+public abstract class AurMetadataRepositoryContract
 {
-    private static IAurMetadataRepository CreateRepository()
-    {
-        return new InMemoryAurMetadataRepository();
-    }
+    private protected abstract IAurMetadataRepository CreateRepository();
 
     [Test]
     public async Task EmptyRepository_HasNoData_AndZeroCount()
@@ -59,7 +55,6 @@ public class AurMetadataRepositoryTests
         await repo.SaveAsync(firstBatch, CancellationToken.None);
         Assert.That(await repo.CountAsync(CancellationToken.None), Is.EqualTo(firstBatch.Count));
 
-        // Second batch with different packages — old ones must disappear from the active batch.
         var secondBatch = SamplePackages("v2").ToList();
         await repo.SaveAsync(secondBatch, CancellationToken.None);
 
@@ -187,37 +182,19 @@ public class AurMetadataRepositoryTests
     private static IEnumerable<AurPackageMetadata> SamplePackages(string prefix = "")
     {
         var p = string.IsNullOrEmpty(prefix) ? "" : prefix + "-";
-        yield return new AurPackageMetadata(
-            Random.Shared.NextInt64(),
-            $"{p}shelly-bin",
-            1, $"{p}shelly", "1.0-1",
-            "Shelly: A Modern Arch Package Manager (prebuilt binary)",
-            null, 10, 0.5, null,
-            null, null, 0, 0,
-            "", [], [], [],
-            [], ["shelly"], [],
-            ["helper", "AUR"], []);
+        yield return NewMeta(1001, $"{p}shelly-bin", $"{p}shelly");
+        yield return NewMeta(1002, $"{p}portable-kit", $"{p}portable");
+        yield return NewMeta(1003, $"{p}portable-pro", $"{p}portable-pro");
+    }
 
-        yield return new AurPackageMetadata(
-            Random.Shared.NextInt64(),
-            $"{p}portable-kit",
-            2, $"{p}portable", "1.0-1",
-            "Handheld gaming toolkit 1337 i3",
-            null, 5, 0.2, null,
+    private static AurPackageMetadata NewMeta(long id, string name, string packageBase)
+    {
+        return new AurPackageMetadata(
+            id, name, id, packageBase, "1.0-1",
+            "sample metadata", null, 0, 0, null,
             null, null, 0, 0,
             "", [], [], [],
             [], [], [],
-            ["handheld"], []);
-
-        yield return new AurPackageMetadata(
-            Random.Shared.NextInt64(),
-            $"{p}portable-pro",
-            3, $"{p}portable-pro", "1.0-1",
-            "Handheld gaming emulator",
-            null, 20, 0.7, null,
-            null, null, 0, 0,
-            "", [], [], [],
-            [], ["portable"], [],
-            ["emulator", "fast"], []);
+            ["sample"], []);
     }
 }

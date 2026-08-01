@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
-namespace Atoll.Api.Tests;
+namespace Atoll.Api.Tests.Support;
 
 internal sealed class ApiTestFactory : WebApplicationFactory<Program>
 {
