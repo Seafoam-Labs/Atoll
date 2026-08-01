@@ -13,6 +13,7 @@ public sealed class AtollOptions
 
 public enum SeedMode
 {
+    Off,
     Direct,
     Bulk
 }

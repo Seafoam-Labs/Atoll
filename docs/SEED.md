@@ -6,13 +6,30 @@ Atoll seeds missing packages listed in the metadata index into the package repos
 
 - **`Direct`** - clones each missing **pkgname** directly from AUR. This is the default mode and does not need a mirror cache.
 - **`Bulk`** - discovers and batch-fetches **pkgbase** branches from the GitHub AUR mirror into a persistent bare cache, then seeds each mapped pkgname from the extracted tree.
+- **`Off`** - does not register an automated seed worker. Metadata indexing and explicit `POST /packages/{name}/seed` requests remain available.
 
-The modes are mutually exclusive: startup registers exactly one seed worker, so Direct and Bulk never race to seed the same package. The application-level implementation is in:
+The modes are mutually exclusive: startup registers one worker for Direct or Bulk, and no seed worker for Off. The application-level implementation is in:
 
 - `Atoll.Api/Services/Packages/Seed/DirectSeedWorker.cs`
 - `Atoll.Api/Services/Packages/Seed/PackageBulkSeedWorker.cs`
 - `Atoll.Api/Services/Packages/Seed/AurMirror.cs`
 - `Atoll.Api/Services/Packages/Seed/BulkSeedPlan.cs`
+
+## Off mode
+
+Use Off when Atoll should retain its metadata index and support only manually requested seeds:
+
+```json
+{
+  "Atoll": {
+    "Seed": {
+      "Mode": "Off"
+    }
+  }
+}
+```
+
+Off does not remove or alter packages already stored in MongoDB; it only prevents the application from automatically finding and seeding missing packages. The Direct and Bulk configuration sections may remain present but are ignored.
 
 ## Direct mode
 
@@ -196,7 +213,7 @@ Do not use a missing ref as a normal control path: discovery is the normal prote
 
 ### Bulk configuration and observability
 
-Bulk mode is active only when `Atoll:Seed:Mode` is `Bulk`. It is mutually exclusive with Direct mode, so the two workers do not race to seed the same missing package.
+Bulk mode is active only when `Atoll:Seed:Mode` is `Bulk`. It is mutually exclusive with Direct mode, so the two workers do not race to seed the same missing package. Set `Atoll:Seed:Mode` to `Off` to register neither worker.
 
 ```json
 {

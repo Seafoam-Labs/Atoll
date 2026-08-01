@@ -62,20 +62,25 @@ var bulkEnabled = seedMode == SeedMode.Bulk;
 // Always added for Metrics. Not needed to be always once Open-telemetry is added.
 builder.Services.AddSingleton(new BulkSeedStatusStore(bulkEnabled));
 
-if (bulkEnabled)
+switch (seedMode)
 {
-    builder.Services.AddSingleton<IAurMirror>(sp =>
-    {
-        var options = sp.GetRequiredService<IOptions<AtollOptions>>().Value;
-        var bulk = options.Seed.Bulk;
-        var logger = sp.GetRequiredService<ILogger<AurMirror>>();
-        return new AurMirror(bulk.MirrorUrl, bulk.CachePath, logger);
-    });
-    builder.Services.AddHostedService<PackageBulkSeedWorker>();
-}
-else
-{
-    builder.Services.AddHostedService<DirectSeedWorker>();
+    case SeedMode.Bulk:
+        builder.Services.AddSingleton<IAurMirror>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<AtollOptions>>().Value;
+            var bulk = options.Seed.Bulk;
+            var logger = sp.GetRequiredService<ILogger<AurMirror>>();
+            return new AurMirror(bulk.MirrorUrl, bulk.CachePath, logger);
+        });
+        builder.Services.AddHostedService<PackageBulkSeedWorker>();
+        break;
+    case SeedMode.Direct:
+        builder.Services.AddHostedService<DirectSeedWorker>();
+        break;
+    case SeedMode.Off:
+        break;
+    default:
+        throw new InvalidOperationException($"Unsupported seed mode: {seedMode}.");
 }
 
 builder.Services.AddHostedService<PackageIndexWorker>();

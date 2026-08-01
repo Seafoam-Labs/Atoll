@@ -116,9 +116,13 @@ strategy is selected by `Atoll:Seed:Mode`:
   at the cost of a ~3 GB local cache and relying on an upstream-experimental mirror. Its settings are
   under `Atoll:Seed:Bulk`.
 
-The two modes are mutually exclusive (only one worker runs). For Docker, set
-`Atoll__Seed__Mode=Bulk` and uncomment the `Atoll__Seed__Bulk__*` lines in `compose.yaml`.
-Bulk-seed progress is exposed at `GET /metrics` under `bulkSeed`.
+- **`Off`** — disables automated package seeding. The metadata index worker continues to
+  run, and packages can still be seeded explicitly with `POST /packages/{name}/seed`.
+
+The modes are mutually exclusive: `Direct` and `Bulk` each register one worker, while `Off`
+registers none. For Docker, set `Atoll__Seed__Mode=Bulk` and uncomment the
+`Atoll__Seed__Bulk__*` lines in `compose.yaml`, or set `Atoll__Seed__Mode=Off` to disable
+automatic seeding. Bulk-seed progress is exposed at `GET /metrics` under `bulkSeed`.
 
 ## Configuration
 

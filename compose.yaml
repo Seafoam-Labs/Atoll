@@ -15,11 +15,12 @@
       - Atoll__Mongo__MaxRevisions=10
       - Atoll__Mongo__MaxFileBytes=5242880
       - Atoll__Git__RepositoriesPath=/app/data/repos
-      - Atoll__Seed__Direct__SeedDelayMs=1000
-      - Atoll__Seed__Mode=Direct
       - Atoll__Security__Enabled=true
       - Atoll__Security__ScannerConcurrency=16
       - Atoll__Security__PollIntervalMs=100
+      # Set Atoll__Seed__Mode=Off to disable automated package seeding.
+      - Atoll__Seed__Mode=Direct
+      - Atoll__Seed__Direct__SeedDelayMs=1000
       # Bulk mode (GitHub mirror, ~10-30 min full sync): set Atoll__Seed__Mode=Bulk and uncomment.
       # - Atoll__Seed__Bulk__MirrorUrl=https://github.com/archlinux/aur
       # - Atoll__Seed__Bulk__CachePath=/app/data/aur-mirror
