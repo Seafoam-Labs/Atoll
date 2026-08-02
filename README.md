@@ -2,7 +2,8 @@
 
 > Atoll - A ring-shaped coral reef; a community ecosystem for arch packages.
 
-Minimal API that mirrors Arch Linux AUR package metadata, manages package versions and history, and provides fast package search endpoints.
+Minimal API that mirrors Arch Linux AUR package metadata, manages package versions and history, and provides fast
+package search endpoints.
 
 ## Requirements
 
@@ -76,7 +77,8 @@ collection (`Collections:SeedExclusions`).
 
 ### Git Smart HTTP
 
-Package repositories are exposed over the [Git Smart HTTP protocol](https://git-scm.com/docs/http-protocol), so any seeded package can be cloned directly:
+Package repositories are exposed over the [Git Smart HTTP protocol](https://git-scm.com/docs/http-protocol), so any
+seeded package can be cloned directly:
 
 ```bash
 git clone http://localhost:5290/packages/{name}.git
@@ -106,9 +108,9 @@ and waits for the first refresh. The interval is controlled by
 Iterates over the package index and seeds missing packages from the AUR into MongoDB. The
 strategy is selected by `Atoll:Seed:Mode`:
 
-- **`Direct`** (default) — `DirectSeedWorker` runs one `git clone` per package from
-  `aur.archlinux.org`, with a delay between each seed to avoid rate-limiting. `Seed:Direct:SeedDelayMs` accepts values between
-  **1000** and **60000** milliseconds (default: **1000**).
+- **`Direct`** (default) — `DirectSeedWorker` runs one `git clone` per package from `aur.archlinux.org`, with a delay
+  between each seed to avoid rate-limiting. `Seed:Direct:SeedDelayMs` accepts values between **1000** and **60000**
+  milliseconds (default: **1000**).
 
 - **`Bulk`** — batch-fetches pkgbase branches from the read-only GitHub AUR mirror
   (`https://github.com/archlinux/aur`) into a shared local cache, then feeds the extracted
