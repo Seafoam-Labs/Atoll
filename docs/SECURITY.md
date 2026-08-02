@@ -9,13 +9,28 @@ the result. Search and the package list are never gated — they only expose pub
 
 The application-level implementation is in:
 
-- `Atoll.Api/Services/Security/PkgBuildSecurityScanner.cs`
+- `Atoll.Api/Services/Security/PkgBuildSecurityScanner.cs` — thin facade: iterates files, delegates to the
+  components below, and reduces their findings into the final `ScanResult`.
+- `Atoll.Api/Services/Security/Scanning/ShellContentScanner.cs` — owns the rule set and the risky/privilege tool lists,
+  and runs the per-line scan loop (rule matching, tool detection, obfuscation escalation).
+- `Atoll.Api/Services/Security/Scanning/ShellSyntax.cs` — shell-aware primitives shared across rules: comment
+  stripping, de-obfuscation normalization, quoted-region mask, tool-boundary matching, hidden-codepoint detection.
+- `Atoll.Api/Services/Security/Scanning/PkgBuildSourceUrlScanner.cs` — inspects `source=` declarations for suspicious
+  archive/executable URLs (PKGBUILD only).
+- `Atoll.Api/Services/Security/Scanning/PackageBuildFileClassifier.cs` — decides which files are scannable
+  (`PKGBUILD` plus script-like companion extensions).
 - `Atoll.Api/Services/Security/PackageSecurityWorker.cs`
 - `Atoll.Api/Services/Security/MongoPackageSecurityRepository.cs`
 - `Atoll.Api/Services/Security/PackageSecurityAccess.cs`
 - `Atoll.Api/Services/Security/PackageSecurityFilter.cs` (the `IEndpointFilter` that gates content routes)
 - `Atoll.Api/Endpoints.cs` (route registration; the content routes are grouped under
   `AddEndpointFilter<PackageSecurityFilter>()`)
+
+The `Scanning/` types are `internal static` and are covered by focused unit tests under
+`Atoll.Api.Tests/Security/Scanning/` (`ShellSyntaxTests`, `ShellContentScannerTests`, `PkgBuildSourceUrlScannerTests`,
+`PackageBuildFileClassifierTests`). The facade itself is covered end-to-end by
+`Atoll.Api.Tests/Security/PkgBuildSecurityScannerTests`, which doubles as a regression fixture (it pins the behavior
+of a real-world `shelly` PKGBUILD).
 
 ## Scope and threat model
 
@@ -90,9 +105,17 @@ The current rules, with their default severities:
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after), not
 as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
 
-Adding or changing a rule is a one-line change to the `Rules` array (or the `PrivilegeEscalationTools` array). Rule ids
-are persisted verbatim in stored findings and returned by `GET /packages/{name}/security` indirectly via `findingCount`,
-so renaming a rule does not corrupt data but does change the set of ids visible in historical documents.
+The scanner is split into a thin facade (`PkgBuildSecurityScanner`) and a small set of `internal static`
+components under `Atoll.Api/Services/Security/Scanning/` (see the file list at the top of this document). The rule
+set, the risky/privilege tool lists, and the per-line scan loop live in `ShellContentScanner`; the shell-aware
+primitives it depends on (comment stripping, de-obfuscation, quoted-region mask, tool-boundary matching,
+hidden-codepoint detection) live in `ShellSyntax`; `source=` URL inspection lives in `PkgBuildSourceUrlScanner`; and
+file-type classification lives in `PackageBuildFileClassifier`.
+
+Adding or changing a rule is a one-line change to the `Rules` array in `ShellContentScanner` (or the
+`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). Rule ids are persisted verbatim in stored
+findings and returned by `GET /packages/{name}/security` indirectly via `findingCount`, so renaming a rule does not
+corrupt data but does change the set of ids visible in historical documents.
 
 ## Pipeline
 
@@ -251,6 +274,10 @@ the previous section resolving on its own after restart.
   wants to unblock (or block) regardless of scanner output.
 - **No source-host policy.** `suspicious-source-url` is a syntactic check only; there is no allow/deny list for source
   domains.
+- **FTP source URLs are not extracted.** `PkgBuildSourceUrlScanner.SuspiciousSourceUrl` accepts `ftp://` in its
+  pattern, but the `HttpRegex` used to extract URLs from the `source=` line only matches `https?://`, so FTP source
+  URLs are never actually flagged. Either extend `HttpRegex` to cover `ftp://` or drop the `ftp` alternative from
+  `SuspiciousSourceUrl`.
 - **Head-only scan state.** Security state is keyed only by package name, so each new head revision replaces the prior
   result. Historical revisions can be requested but are authorized using the current head's status rather than being
   scanned and gated independently. Store scan state by package and revision, then scan and enforce the requested

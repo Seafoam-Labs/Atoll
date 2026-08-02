@@ -180,10 +180,14 @@ keyed by package name and tied to its current revision. The persisted `Pending` 
 `(id, revisionId, leaseOwner)`. A new seed or rescan re-marks the state `Pending`; expired leases are reclaimable after
 a restart.
 
-`PkgBuildSecurityScanner` matches a rule set against the `PKGBUILD` and script-like companion files, after
-de-obfuscating each line (quote-splitting and backslash escapes) and detecting hidden/invisible characters used for
-homograph spoofing. Rules that match only after de-obfuscation are escalated to `Critical`. `Critical` and `High`
-findings flag a package; `Medium` findings are retained without blocking.
+`PkgBuildSecurityScanner` is a thin facade that iterates files, delegates each scannable file to the `internal static`
+components under `Atoll.Api/Services/Security/Scanning/` (`ShellContentScanner` for shell rules and tool detection,
+`PkgBuildSourceUrlScanner` for `source=` URLs, `ShellSyntax` for shared shell-aware primitives,
+`PackageBuildFileClassifier` for file-type gating), and reduces their findings into one `ScanResult`. The rules match
+against the `PKGBUILD` and script-like companion files, after de-obfuscating each line (quote-splitting and backslash
+escapes) and detecting hidden/invisible characters used for homograph spoofing. Rules that match only after
+de-obfuscation are escalated to `Critical`. `Critical` and `High` findings flag a package; `Medium` findings are
+retained without blocking.
 
 `PackageSecurityAccess.CheckAsync` is enforced by `PackageSecurityFilter` (an `IEndpointFilter` applied to the
 content-serving route group in `Endpoints.cs`) on `GET /packages/{name}`, `GET /packages/{name}/versions/{sha}`, and
