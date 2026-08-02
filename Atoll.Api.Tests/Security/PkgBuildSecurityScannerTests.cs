@@ -210,4 +210,131 @@ public class PkgBuildSecurityScannerTests
         var finding = result.Findings.First(f => f.RuleId == "network-execution");
         Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
     }
+
+    [Test]
+    public void Shelly_pkgbuild_is_verified_with_only_expected_command_substitution_findings()
+    {
+        var result = Scan(("PKGBUILD", ShellyPkgbuild));
+
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+        Assert.That(result.Findings, Has.Count.EqualTo(4));
+        Assert.That(result.Findings, Is.All.Matches<SecurityFinding>(f =>
+            f.RuleId == "command-substitution" && f.Severity == FindingSeverity.Medium));
+    }
+
+    // Regression fixture from the Shelly 3.0.1+1 PKGBUILD. It includes the
+    // real source declaration, build/check functions, and package-script patterns
+    // that are relevant to the scanner.
+    private const string ShellyPkgbuild = """
+        # Maintainer: Zoey Bauer <zoey.erin.bauer@gmail.com>
+        # Maintainer: Caroline Snyder <hirpeng@gmail.com>
+        pkgbase=shelly
+        pkgname=('shelly' 'shelly-flatpak-backend')
+        pkgver=3.0.1+1
+        pkgrel=2
+        arch=('x86_64')
+        url="https://github.com/Seafoam-Labs/Shelly-ALPM"
+        license=('GPL-3.0-only')
+        makedepends=('git' 'pkgconf' 'gtk4' 'zig>=0.16' 'clang' 'gettext' 'vala' 'meson' 'ninja' 'flatpak' 'ripgrep')
+
+        source=("${pkgname}-${pkgver}.tar.gz::https://github.com/Seafoam-Labs/Shelly-ALPM/archive/v${pkgver}.tar.gz")
+        sha256sums=('f7e4b35e7d07bc9cfc95b4a923e22889356f7f98d06d3bdebfc7bc4b8729e80c')
+        _source_dir="Shelly-ALPM-${pkgver//+/-}"
+
+        build() {
+          cd "$srcdir/${_source_dir}"
+
+          (cd Shelly.Flatpak.Backend && zig build --verbose \
+            --prefix "${srcdir}/${_source_dir}/out-flatpak-backend" \
+            --cache-dir "${srcdir}/zig-cache" \
+            --global-cache-dir "${srcdir}/zig-global-cache" \
+            -Dcpu=baseline \
+            -Doptimize=ReleaseSafe)
+
+          (cd Shelly.Ui.Gtk && zig build --verbose \
+            --prefix "${srcdir}/${_source_dir}/out" \
+            --cache-dir "${srcdir}/zig-cache" \
+            --global-cache-dir "${srcdir}/zig-global-cache" \
+            -Dflatpak-backend-package=shelly-flatpak-backend \
+            -Dcpu=baseline \
+            -Doptimize=ReleaseSafe)
+
+          meson setup --prefix=/usr build-notify Shelly.Notifications
+          meson compile -C build-notify
+
+          ./out-cli/bin/shelly utility --completions bash > shelly.bash
+          ./out-cli/bin/shelly utility --completions fish > shelly.fish
+          ./out-cli/bin/shelly utility --completions zsh > _shelly
+
+          for po_file in Shelly.Ui.Gtk/po/*.po; do
+            [ -f "$po_file" ] || continue
+            lang=$(basename "$po_file" .po)
+            msgfmt "$po_file" -o "shelly-ui-${lang}.mo"
+          done
+
+          for po_file in Shelly.Notifications/po/*.po; do
+            [ -f "$po_file" ] || continue
+            lang=$(basename "$po_file" .po)
+            msgfmt "$po_file" -o "shelly-notifications-${lang}.mo"
+          done
+        }
+
+        check() {
+          cd "$srcdir/${_source_dir}"
+          (cd Shelly.Flatpak.Backend && zig build test abi-test integration-test \
+            --cache-dir "${srcdir}/zig-cache" \
+            --global-cache-dir "${srcdir}/zig-global-cache")
+          scripts/check-flatpak-separation.sh \
+            out-cli/bin/shelly \
+            out-flatpak-backend/lib/libshelly-flatpak-backend.so.1
+        }
+
+        package_shelly() {
+          pkgdesc="Shelly: A Modern Arch Package Manager"
+          depends=('pacman' 'gtk4' 'glib2' 'sudo' 'tar' 'bash' 'git' 'dbus' 'glibc')
+          optdepends=('shelly-flatpak-backend: Flatpak package management support')
+
+          cd "$srcdir/${_source_dir}"
+          install -Dm755 out-cli/bin/shelly "$pkgdir/usr/bin/shelly"
+          install -Dm644 shelly.bash "$pkgdir/usr/share/bash-completion/completions/shelly"
+
+          cat <<'EOF' | install -Dm644 /dev/stdin "$pkgdir/usr/share/polkit-1/actions/com.shellyorg.shelly.policy"
+        <policyconfig>
+          <action id="com.shellyorg.shelly.pkexec.cli">
+            <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/shelly</annotate>
+          </action>
+        </policyconfig>
+        EOF
+
+          for mo_file in shelly-ui-*.mo; do
+            if [ -f "$mo_file" ]; then
+              lang=$(echo "$mo_file" | sed 's/shelly-ui-\(.*\)\.mo/\1/')
+              install -Dm644 "$mo_file" "$pkgdir/usr/share/locale/$lang/LC_MESSAGES/shelly-ui.mo"
+            fi
+          done
+
+          cat <<'SCRIPT' | install -Dm755 /dev/stdin "$pkgdir/usr/bin/shelly-flatpak-integrate"
+        #!/bin/bash
+        FLATPAK_DIRS=("/var/lib/flatpak/exports/share/applications" "$HOME/.local/share/flatpak/exports/share/applications")
+        LOCAL_APPS_DIR="$HOME/.local/share/applications"
+        mkdir -p "$LOCAL_APPS_DIR"
+        for dir in "${FLATPAK_DIRS[@]}"; do
+            [ -d "$dir" ] || continue
+            for desktop_file in "$dir"/*.desktop; do
+                [ -f "$desktop_file" ] || continue
+                dest="$LOCAL_APPS_DIR/$(basename "$desktop_file")"
+                [ -f "$dest" ] || cp "$desktop_file" "$dest"
+                grep -q "ShellyManage" "$dest" && continue
+            done
+        done
+        SCRIPT
+        }
+
+        package_shelly-flatpak-backend() {
+          pkgdesc="Optional native Flatpak backend for Shelly"
+          depends=("shelly=${pkgver}" 'flatpak')
+          install -Dm755 out-flatpak-backend/lib/libshelly-flatpak-backend.so.1.0.0 \
+            "$pkgdir/usr/lib/shelly/libshelly-flatpak-backend.so.1.0.0"
+        }
+        """;
 }
