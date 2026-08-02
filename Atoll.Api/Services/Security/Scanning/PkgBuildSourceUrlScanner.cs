@@ -19,11 +19,11 @@ internal static partial class PkgBuildSourceUrlScanner
                 if (!SuspiciousSourceUrl().IsMatch(url))
                     continue;
 
+                var rule = SecurityFindingRules.SuspiciousSourceUrl;
                 yield return new SecurityFinding(
-                    "suspicious-source-url",
-                    FindingSeverity.Medium,
-                    $"Source URL '{url}' points to a binary/archive that cannot be reviewed as text - " +
-                    "it may contain malicious code.",
+                    rule.Id,
+                    rule.Severity,
+                    string.Format(rule.Description, url),
                     line,
                     path);
             }

@@ -9,10 +9,11 @@ internal static class LocalSourceBinaryScanner
             return null;
 
         var (article, kind) = isElf ? ("an", "ELF executable") : ("a", "binary");
+        var rule = SecurityFindingRules.LocalBinary;
         return new SecurityFinding(
-            "local-binary",
-            FindingSeverity.Critical,
-            $"Local source file '{path}' is {article} {kind} that cannot be reviewed as text - it may contain malicious code.",
+            rule.Id,
+            rule.Severity,
+            string.Format(rule.Description, path, $"{article} {kind}"),
             path,
             path);
     }
