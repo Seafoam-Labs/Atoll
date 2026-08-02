@@ -1,3 +1,4 @@
+using System.Text;
 using Atoll.Api.Services.Security;
 using NUnit.Framework;
 
@@ -211,6 +212,46 @@ public class PkgBuildSecurityScannerTests
 
         Assert.That(result.Findings, Is.Empty);
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Local_elf_and_binary_source_files_are_critical_and_flag_package()
+    {
+        // Repository files reach the scanner as UTF-8-decoded strings, so decode
+        // real on-disk bytes instead of relying on string escapes. This mirrors
+        // how MongoPackageService / AurMirror hand content to the scanner.
+        var elf = Encoding.UTF8.GetString([0x7F, 0x45, 0x4C, 0x46, .. Encoding.UTF8.GetBytes("payload")]);
+        var binary = "abc\0def";
+
+        var result = Scan(
+            ("tool", elf),
+            ("data.bin", binary),
+            ("script.sh", "#!/bin/sh\necho ok\n"));
+
+        var findings = result.Findings.Where(f => f.RuleId == "local-binary").ToList();
+        Assert.That(findings, Has.Count.EqualTo(2));
+        Assert.That(findings[0].Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(findings[0].Message, Does.Contain("ELF executable"));
+        Assert.That(findings[0].Snippet, Is.EqualTo("tool"));
+        Assert.That(findings[1].Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(findings[1].Message, Does.Contain("binary"));
+        Assert.That(findings[1].Snippet, Is.EqualTo("data.bin"));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Local_source_file_with_invalid_utf8_is_flagged_as_binary()
+    {
+        // A lone continuation byte (0x80) is not valid UTF-8 and decodes to the
+        // replacement character (U+FFFD), which the scanner treats as binary.
+        var invalid = Encoding.UTF8.GetString([0x41, 0x80, 0x42]);
+
+        var result = Scan(("blob", invalid));
+
+        var finding = result.Findings.Single(f => f.RuleId == "local-binary");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding.Message, Does.Contain("binary"));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
     }
 
     [Test]

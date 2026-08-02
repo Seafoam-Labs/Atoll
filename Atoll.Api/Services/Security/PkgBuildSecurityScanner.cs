@@ -10,6 +10,10 @@ public sealed class PkgBuildSecurityScanner : IPackageSecurityScanner
 
         foreach (var (path, content) in files)
         {
+            var binaryFinding = LocalSourceBinaryScanner.Scan(content, path);
+            if (binaryFinding is not null)
+                findings.Add(binaryFinding);
+
             if (string.IsNullOrWhiteSpace(content) || !PackageBuildFileClassifier.IsScannable(path))
                 continue;
 

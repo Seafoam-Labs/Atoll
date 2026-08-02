@@ -19,6 +19,8 @@ The application-level implementation is in:
   archive/executable URLs (PKGBUILD only).
 - `Atoll.Api/Services/Security/Scanning/PackageBuildFileClassifier.cs` — decides which files are scannable
   (`PKGBUILD` plus script-like companion extensions).
+- `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — flags source files that are ELF executables
+  or contain binary bytes (applies to every file, not just script-like extensions).
 - `Atoll.Api/Services/Security/PackageSecurityWorker.cs`
 - `Atoll.Api/Services/Security/MongoPackageSecurityRepository.cs`
 - `Atoll.Api/Services/Security/PackageSecurityAccess.cs`
@@ -44,10 +46,12 @@ sandbox or a guarantee that a package is safe. Concretely it defends against:
 - Obfuscation intended to hide any of the above (quote-split tool names like `c''u''rl`, backslash-escaped tokens).
 - Homograph spoofing via hidden/invisible characters (zero-width, BOM, bidi overrides, control bytes).
 - Suspicious source URLs pointing at raw executables/archives.
+- Local source files shipped as ELF executables or binary blobs, which cannot be reviewed as text.
 
-It does **not** defend against: malicious shell that avoids the matched patterns, malicious code in compiled artifacts,
-supply-chain compromise of upstream sources, or anything that only becomes dangerous after the package is actually built
-and installed. Treat `Verified` as "no obvious red flags", never as "safe".
+It does **not** defend against: malicious shell that avoids the matched patterns, malicious code hidden inside a binary
+(even though the binary itself is now flagged on presence), supply-chain compromise of upstream sources, or anything
+that only becomes dangerous after the package is actually built and installed. Treat `Verified` as "no obvious red
+flags", never as "safe".
 
 When security is disabled (`Atoll:Security:Enabled=false`) every package is served regardless of status, including
 packages that were previously `Flagged`. Disabling the feature is a bypass, not a relaxed mode.
@@ -76,8 +80,10 @@ only in `package-security-scans`.
 ## Scanner
 
 `PkgBuildSecurityScanner` is deterministic and side-effect free: the same input always yields the same findings, and it
-executes no code. It scans the `PKGBUILD` plus script-like companion files (`.sh`, `.bash`, `.install`, `.hook`, `.py`,
-`.pl`, `.rb`, `.service`, `.csh`, `.zsh`). Non-script files (binaries, patches, etc.) are ignored.
+executes no code. Every file is first checked for binary content — ELF magic, NUL/control bytes, or undecodable UTF-8 —
+because a binary source file cannot be reviewed as text and may hide malicious code. Script-like files (the `PKGBUILD`
+plus companions `.sh`, `.bash`, `.install`, `.hook`, `.py`, `.pl`, `.rb`, `.service`, `.csh`, `.zsh`) are then scanned
+line by line for shell threats. Remaining non-script, non-binary files (patches, etc.) are ignored.
 
 Each script file is processed line by line. Shell comments are stripped first (honoring single- and double-quote state),
 then the line is **de-obfuscated** by collapsing quote-splitting (`c''u''rl` → `curl`) and dropping intra-word backslash
@@ -89,33 +95,40 @@ escapes. Every rule is matched against both the raw line and the de-obfuscated p
 
 The current rules, with their default severities:
 
-| Rule id                    | Severity (default) | What it detects                                                                                                      |
-| -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `network-to-shell`         | Critical           | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell (`sh`, `bash`, …).                                       |
-| `decode-to-shell`          | Critical           | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell.                                       |
-| `eval-indirection`         | Critical           | `eval`/`source`/`.` fed by command substitution, backticks, or an echo/printf/base64 payload.                        |
-| `network-execution`        | High               | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). |
-| `write-outside-build-root` | High               | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …).                                                     |
-| `privilege-escalation`     | High               | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.)      |
-| `hidden-character`         | Critical           | Zero-width chars (U+200B/C/D), BOM (U+FEFF), bidi overrides/isolates (U+202A–E, U+2066–9), C0/C1 control bytes.      |
-| `command-substitution`     | Medium             | `$( … )` or backticks (non-blocking).                                                                                |
-| `variable-indirection`     | Medium             | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime).                         |
-| `suspicious-source-url`    | Medium             | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only.             |
+| Rule id                    | Severity (default) | What it detects                                                                                                       |
+| -------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `network-to-shell`         | Critical           | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell (`sh`, `bash`, …).                                        |
+| `decode-to-shell`          | Critical           | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell.                                        |
+| `eval-indirection`         | Critical           | `eval`/`source`/`.` fed by command substitution, backticks, or an echo/printf/base64 payload.                         |
+| `network-execution`        | High               | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`).  |
+| `write-outside-build-root` | High               | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …).                                                      |
+| `privilege-escalation`     | High               | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.)       |
+| `hidden-character`         | Critical           | Zero-width chars (U+200B/C/D), BOM (U+FEFF), bidi overrides/isolates (U+202A–E, U+2066–9), C0/C1 control bytes.       |
+| `command-substitution`     | Medium             | `$( … )` or backticks (non-blocking).                                                                                 |
+| `variable-indirection`     | Medium             | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime).                          |
+| `suspicious-source-url`    | Medium             | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only.              |
+| `local-binary`             | Critical           | A source file that is an ELF executable or contains binary bytes (NUL, control, undecodable UTF-8). Whole-file check. |
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after), not
 as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
+
+`local-binary` is the one rule that is not a per-line shell check: it runs once per file on the whole content and
+applies to every file in the package regardless of extension. The remaining rules are shell-line rules and only run on
+scannable script files.
 
 The scanner is split into a thin facade (`PkgBuildSecurityScanner`) and a small set of `internal static`
 components under `Atoll.Api/Services/Security/Scanning/` (see the file list at the top of this document). The rule
 set, the risky/privilege tool lists, and the per-line scan loop live in `ShellContentScanner`; the shell-aware
 primitives it depends on (comment stripping, de-obfuscation, quoted-region mask, tool-boundary matching,
-hidden-codepoint detection) live in `ShellSyntax`; `source=` URL inspection lives in `PkgBuildSourceUrlScanner`; and
-file-type classification lives in `PackageBuildFileClassifier`.
+hidden-codepoint detection) live in `ShellSyntax`; `source=` URL inspection lives in `PkgBuildSourceUrlScanner`;
+whole-file ELF/binary detection lives in `LocalSourceBinaryScanner`; and file-type classification lives in
+`PackageBuildFileClassifier`.
 
-Adding or changing a rule is a one-line change to the `Rules` array in `ShellContentScanner` (or the
-`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). Rule ids are persisted verbatim in stored
-findings and returned by `GET /packages/{name}/security` indirectly via `findingCount`, so renaming a rule does not
-corrupt data but does change the set of ids visible in historical documents.
+Adding or changing a shell rule is a one-line change to the `Rules` array in `ShellContentScanner` (or the
+`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). The `local-binary` rule lives in its own component
+(`LocalSourceBinaryScanner`) because it is a whole-file check, not a shell-line rule. Rule ids are persisted verbatim in
+stored findings and returned by `GET /packages/{name}/security` indirectly via `findingCount`, so renaming a rule does
+not corrupt data but does change the set of ids visible in historical documents.
 
 ## Pipeline
 
@@ -268,8 +281,13 @@ the previous section resolving on its own after restart.
 
 ## Limitations and follow-ups
 
-- **Static analysis only.** Creative shell, obfuscation not covered by the normalizer, and malicious compiled artifacts
-  are not detected. Do not treat `Verified` as a guarantee.
+- **Static analysis only.** Creative shell and obfuscation not covered by the normalizer are not detected, and while
+  binary/ELF source files are flagged on presence, their contents cannot be inspected for malicious behavior. Do not
+  treat `Verified` as a guarantee.
+- **Binary detection runs on UTF-8-decoded strings.** Package content reaches the scanner already decoded from UTF-8,
+  so invalid byte sequences collapse to the replacement character (U+FFFD) instead of being inspected as raw bytes. This
+  is enough to catch ELF/NUL/control-byte content, but a legitimate text file containing a literal U+FFFD would also be
+  flagged. Byte-exact detection would require the seed paths (`MongoPackageService`, `AurMirror`) to surface raw bytes.
 - **No manual override.** There is no `ForceVerified` / `ForceBlocked` state for a package a maintainer has reviewed and
   wants to unblock (or block) regardless of scanner output.
 - **No source-host policy.** `suspicious-source-url` is a syntactic check only; there is no allow/deny list for source
