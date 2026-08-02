@@ -17,6 +17,4 @@ public enum FindingSeverity
     Critical
 }
 
-public sealed record SecurityFinding(string RuleId, FindingSeverity Severity);
-
 public sealed record ScanResult(SecurityStatus Status, IReadOnlyList<SecurityFinding> Findings);
