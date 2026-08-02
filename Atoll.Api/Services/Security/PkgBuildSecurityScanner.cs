@@ -160,18 +160,13 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
                     continue;
             }
 
-            if (c is '\'' or '"')
+            // Empty quote pairs can split a command name without changing the
+            // shell token (for example, c''url). Preserve non-empty quoted
+            // values such as the 'sudo' entry in a PKGBUILD dependency array.
+            if ((c is '\'' or '"') && i + 1 < line.Length && line[i + 1] == c)
             {
-                var prevIsWord = sb.Length > 0 && IsWordChar(sb[^1]);
-                var j = i;
-                while (j < line.Length && (line[j] == '\'' || line[j] == '"'))
-                    j++;
-                var nextIsWord = j < line.Length && IsWordChar(line[j]);
-                if (prevIsWord || nextIsWord)
-                {
-                    i = j - 1;
-                    continue;
-                }
+                i++;
+                continue;
             }
 
             sb.Append(c);
