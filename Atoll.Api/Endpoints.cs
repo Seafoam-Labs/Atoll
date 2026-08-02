@@ -57,31 +57,9 @@ public static class Endpoints
                 return TypedResults.Created($"/packages/{name}");
             });
 
-        packages.MapGet("/{name}",
-            async ([FromRoute] string name, [FromServices] IPackageService repo,
-                [FromServices] IPackageSecurityAccess security) =>
-            {
-                var access = await security.CheckAsync(name);
-                if (!access.Allowed)
-                    return SecurityBlocked(access.ReasonCode);
-
-                return TypedResults.Ok(await repo.GetAsync(name));
-            });
-
         packages.MapGet("/{name}/versions",
             async ([FromRoute] string name, [FromServices] IPackageService repo) =>
             TypedResults.Ok(await repo.GetHistoryAsync(name)));
-
-        packages.MapGet("/{name}/versions/{sha}",
-            async ([FromRoute] string name, [FromRoute] string sha, [FromServices] IPackageService repo,
-                [FromServices] IPackageSecurityAccess security) =>
-            {
-                var access = await security.CheckAsync(name);
-                if (!access.Allowed)
-                    return SecurityBlocked(access.ReasonCode);
-
-                return TypedResults.Ok(await repo.GetAsync(name, sha));
-            });
 
         packages.MapDelete("/{name}",
             async ([FromRoute] string name, [FromServices] IPackageService repo) =>
@@ -92,6 +70,18 @@ public static class Endpoints
 
         packages.MapGet("/{name}/security", SecurityStatus);
         packages.MapPost("/{name}/security/rescan", SecurityRescan);
+
+        var secured = packages
+            .MapGroup("")
+            .AddEndpointFilter<PackageSecurityFilter>();
+
+        secured.MapGet("/{name}",
+            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
+            TypedResults.Ok(await repo.GetAsync(name)));
+
+        secured.MapGet("/{name}/versions/{sha}",
+            async ([FromRoute] string name, [FromRoute] string sha, [FromServices] IPackageService repo) =>
+            TypedResults.Ok(await repo.GetAsync(name, sha)));
     }
 
     private static async Task<IResult> SecurityStatus(
@@ -129,15 +119,18 @@ public static class Endpoints
 
     private static void MapGitProtocolRoutes(RouteGroupBuilder packages)
     {
-        packages.MapGet("/{name}.git/info/refs", GitInfoRefs);
-        packages.MapPost("/{name}.git/git-upload-pack", GitUploadPack);
+        var secured = packages
+            .MapGroup("")
+            .AddEndpointFilter<PackageSecurityFilter>();
+
+        secured.MapGet("/{name}.git/info/refs", GitInfoRefs);
+        secured.MapPost("/{name}.git/git-upload-pack", GitUploadPack);
     }
 
     private static async Task<IResult> GitInfoRefs(
         [FromRoute] string name,
         [FromQuery(Name = "service")] string? service,
         [FromServices] IGitTransferService git,
-        [FromServices] IPackageSecurityAccess security,
         HttpResponse response,
         CancellationToken ct)
     {
@@ -145,10 +138,6 @@ public static class Endpoints
 
         if (!string.Equals(service, "git-upload-pack", StringComparison.Ordinal))
             return TypedResults.Problem("Only git-upload-pack is supported.", statusCode: StatusCodes.Status403Forbidden);
-
-        var access = await security.CheckAsync(name, ct);
-        if (!access.Allowed)
-            return SecurityBlocked(access.ReasonCode);
 
         response.ContentType = "application/x-git-upload-pack-advertisement";
 
@@ -163,16 +152,11 @@ public static class Endpoints
     private static async Task<IResult> GitUploadPack(
         [FromRoute] string name,
         [FromServices] IGitTransferService git,
-        [FromServices] IPackageSecurityAccess security,
         HttpRequest request,
         HttpResponse response,
         CancellationToken ct)
     {
         response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
-
-        var access = await security.CheckAsync(name, ct);
-        if (!access.Allowed)
-            return SecurityBlocked(access.ReasonCode);
 
         response.ContentType = "application/x-git-upload-pack-result";
 
@@ -182,13 +166,5 @@ public static class Endpoints
 
         response.ContentType = null;
         return TypedResults.NotFound();
-    }
-
-    private static IResult SecurityBlocked(string? reasonCode)
-    {
-        return TypedResults.Problem(
-            "Package content is not available because it has not passed security verification.",
-            statusCode: StatusCodes.Status403Forbidden,
-            extensions: new Dictionary<string, object?> { ["reason"] = reasonCode });
     }
 }

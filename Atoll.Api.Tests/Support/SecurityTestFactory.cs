@@ -12,10 +12,6 @@ using Microsoft.Extensions.Hosting;
 
 namespace Atoll.Api.Tests.Support;
 
-/// <summary>
-///     Test factory with security gating enabled and an in-memory package
-///     repository so endpoint-level gating can be exercised without Mongo.
-/// </summary>
 internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
 {
     public InMemoryPackageRepository Repository { get; } = new();

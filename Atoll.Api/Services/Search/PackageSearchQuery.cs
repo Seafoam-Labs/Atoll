@@ -1,8 +1,5 @@
 namespace Atoll.Api.Services.Search;
 
-/// <summary>
-///     The type of query to perform for packages.
-/// </summary>
 public enum By
 {
     Name,

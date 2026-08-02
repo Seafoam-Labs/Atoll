@@ -272,15 +272,11 @@ public class PackageBulkSeedWorkerTests
         });
     }
 
-    /// <summary>
-    ///     In-memory mirror: returns a fixed file set for any fetched base, and reports the
-    ///     branches it "knows about" so the worker's pre-filter keeps them fetchable.
-    /// </summary>
     private class FakeMirror : IAurMirror
     {
         public HashSet<string> Branches { get; } = new(StringComparer.Ordinal);
         public HashSet<string> FetchFails { get; } = new(StringComparer.Ordinal);
-        public IReadOnlyDictionary<string, string> Files { get; } = BaseFiles;
+        private static IReadOnlyDictionary<string, string> Files => BaseFiles;
         public List<IReadOnlyList<string>> FetchedBatches { get; } = [];
 
         public Task EnsureInitializedAsync(CancellationToken ct = default)

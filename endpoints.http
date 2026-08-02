@@ -48,10 +48,6 @@ Accept: application/json
 GET {{baseUrl}}/packages/shelly/security
 Accept: application/json
 
-### Get Package Security Scan History
-GET {{baseUrl}}/packages/shelly/security/scans
-Accept: application/json
-
 ### Trigger a Security Re-scan
 POST {{baseUrl}}/packages/shelly/security/rescan
 Accept: application/json

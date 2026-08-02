@@ -55,6 +55,7 @@ builder.Services.AddSingleton<IGitTransferService, GitTransferService>();
 builder.Services.AddSingleton<IPackageSecurityScanner, PkgBuildSecurityScanner>();
 builder.Services.AddSingleton<IPackageSecurityRepository, MongoPackageSecurityRepository>();
 builder.Services.AddSingleton<IPackageSecurityAccess, PackageSecurityAccess>();
+builder.Services.AddSingleton<PackageSecurityFilter>();
 builder.Services.AddHostedService<PackageSecurityWorker>();
 
 var seedMode = builder.Configuration.GetSection("Atoll:Seed").Get<SeedOptions>()?.Mode ?? SeedMode.Direct;
