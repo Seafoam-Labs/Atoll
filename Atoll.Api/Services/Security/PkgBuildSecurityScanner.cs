@@ -15,6 +15,56 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
         "sudo", "sudoedit", "doas", "pkexec", "run0", "su"
     ];
 
+    private static readonly string[] RiskyTools =
+    [
+        // JavaScript / Node
+        "npm", "npx", "yarn", "pnpm", "pnpx", "bun", "node", "deno",
+        // Python
+        "pip", "pip3", "pipx", "uv", "poetry", "pipenv", "rye", "conda",
+        "mamba", "micromamba",
+        // Ruby
+        "gem",
+        // Rust
+        "cargo install", "rustup",
+        // Go
+        "go install",
+        // PHP
+        "php", "composer",
+        // Perl
+        "cpan", "cpanm",
+        // Haskell
+        "cabal install", "stack install",
+        // Lua
+        "luarocks",
+        // Nim
+        "nimble install",
+        // OCaml
+        "opam",
+        // Elixir / Erlang
+        "mix", "rebar3",
+        // C/C++
+        "conan", "vcpkg",
+        // JVM / Scala / Clojure
+        "gradle", "mvn", "sbt", "ant", "lein",
+        // .NET
+        "dotnet",
+        // Swift
+        "swift",
+        // Julia
+        "julia",
+        // R
+        "Rscript",
+        // Downloaders / network tools
+        "curl", "wget", "wget2", "aria2c",
+        "lftp", "rsync", "scp", "sftp", "fetch",
+        // Containers / orchestration / alternative package managers
+        "docker", "podman", "kubectl",
+        "helm", "snap", "flatpak", "appimage",
+        // Version managers
+        "nvm", "rvm", "rbenv", "pyenv",
+        "gvm", "asdf"
+    ];
+
     private static readonly Rule[] Rules =
     [
         new("network-to-shell", FindingSeverity.Critical,
@@ -56,7 +106,7 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
             if (!isScript)
                 continue;
 
-            ScanContent(content, isPkgbuild, findings);
+            ScanContent(content, isPkgbuild, path, findings);
         }
 
         return new ScanResult(DecideStatus(findings), findings);
@@ -86,7 +136,11 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
         return ScriptExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static void ScanContent(string content, bool isPkgbuild, List<SecurityFinding> findings)
+    private static void ScanContent(
+        string content,
+        bool isPkgbuild,
+        string path,
+        List<SecurityFinding> findings)
     {
         var lines = content.Split('\n');
         for (var i = 0; i < lines.Length; i++)
@@ -97,9 +151,17 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
                 continue;
 
             if (TryFindHiddenCharacter(line))
-                findings.Add(new SecurityFinding("hidden-character", FindingSeverity.Critical));
+                findings.Add(new SecurityFinding(
+                    "hidden-character",
+                    FindingSeverity.Critical,
+                    "Hidden or bidirectional control characters detected - " +
+                    "the visible code may not match what the shell actually executes.",
+                    raw.Trim(),
+                    path));
 
             var probe = NormalizeForMatching(line);
+            var quotedProbe = ComputeQuotedMask(probe);
+            var quotedLine = ComputeQuotedMask(line);
 
             foreach (var rule in Rules)
             {
@@ -108,26 +170,84 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
 
                 var obfuscated = !rule.Regex.IsMatch(line);
                 var severity = obfuscated ? FindingSeverity.Critical : rule.Severity;
-                findings.Add(new SecurityFinding(rule.Id, severity));
+                findings.Add(new SecurityFinding(
+                    rule.Id,
+                    severity,
+                    Describe(rule.Id, obfuscated),
+                    raw.Trim(),
+                    path));
             }
 
             foreach (var tool in PrivilegeEscalationTools)
             {
-                if (!MatchesToolBoundary(probe, tool))
+                if (!MatchesToolBoundary(probe, tool, quotedProbe))
                     continue;
 
-                var obfuscated = !MatchesToolBoundary(line, tool);
+                var obfuscated = !MatchesToolBoundary(line, tool, quotedLine);
+                var message = obfuscated
+                    ? $"Privilege escalation tool '{tool}' is invoked via obfuscated shell syntax - " +
+                      "the tool name was deliberately hidden, which is a strong sign of malicious intent."
+                    : $"Privilege escalation tool '{tool}' is invoked - this runs code as root outside " +
+                      "of the package manager's control and can give the package unrestricted access " +
+                      "to the whole system.";
                 findings.Add(new SecurityFinding(
                     "privilege-escalation",
-                    obfuscated ? FindingSeverity.Critical : FindingSeverity.High));
+                    obfuscated ? FindingSeverity.Critical : FindingSeverity.High,
+                    message,
+                    raw.Trim(),
+                    path));
+            }
+
+            foreach (var tool in RiskyTools)
+            {
+                if (!MatchesToolBoundary(probe, tool, quotedProbe))
+                    continue;
+
+                var obfuscated = !MatchesToolBoundary(line, tool, quotedLine);
+                var message = obfuscated
+                    ? $"'{tool}' is invoked via obfuscated shell syntax - the tool name was " +
+                      "deliberately hidden, which is a strong sign of malicious intent."
+                    : $"'{tool}' is invoked - this fetches/executes external code outside pacman's control.";
+                findings.Add(new SecurityFinding(
+                    "risky-tool",
+                    obfuscated ? FindingSeverity.Critical : FindingSeverity.Medium,
+                    message,
+                    raw.Trim(),
+                    path));
             }
         }
 
         if (isPkgbuild)
-            ScanSourceUrls(content, findings);
+            ScanSourceUrls(content, path, findings);
     }
 
-    private static void ScanSourceUrls(string content, List<SecurityFinding> findings)
+    private static string Describe(string ruleId, bool obfuscated)
+    {
+        var description = ruleId switch
+        {
+            "network-to-shell" => "A download is piped directly into a shell - fetched code executes " +
+                                  "without any integrity check.",
+            "decode-to-shell" => "Encoded data is decoded and piped into a shell - the executed code " +
+                                 "cannot be reviewed.",
+            "eval-indirection" => "Dynamic command execution - a command is decoded/evaluated and run, " +
+                                  "so its real behavior cannot be reviewed.",
+            "command-substitution" => "Dynamic command construction - the effective command is computed " +
+                                      "at runtime and cannot be statically resolved.",
+            "variable-indirection" => "Bash indirect variable expansion - the referenced variable is " +
+                                      "resolved at runtime and cannot be statically resolved.",
+            "write-outside-build-root" => "A write targets a path outside the build root - it can modify " +
+                                          "system files at build/install time.",
+            "network-execution" => "A download is executed or redirected into an interpreter - fetched " +
+                                   "code runs outside pacman's control.",
+            _ => "Suspicious shell construct detected."
+        };
+
+        return obfuscated
+            ? description + " The construct was also obfuscated, which is a strong sign of malicious intent."
+            : description;
+    }
+
+    private static void ScanSourceUrls(string content, string path, List<SecurityFinding> findings)
     {
         var sourceLines = content.Split('\n');
         for (var i = 0; i < sourceLines.Length; i++)
@@ -141,7 +261,13 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
             {
                 var url = match.Value.TrimEnd(')', ']', '}', ',', ';');
                 if (SuspiciousSourceUrl().IsMatch(url))
-                    findings.Add(new SecurityFinding("suspicious-source-url", FindingSeverity.Medium));
+                    findings.Add(new SecurityFinding(
+                        "suspicious-source-url",
+                        FindingSeverity.Medium,
+                        $"Source URL '{url}' points to a binary/archive that cannot be reviewed as text - " +
+                        "it may contain malicious code.",
+                        line,
+                        path));
             }
         }
     }
@@ -175,12 +301,7 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
         return sb.ToString();
     }
 
-    private static bool IsWordChar(char c)
-    {
-        return char.IsLetterOrDigit(c) || c == '_';
-    }
-
-    private static bool MatchesToolBoundary(string text, string tool)
+    private static bool MatchesToolBoundary(string text, string tool, bool[]? quotedMask = null)
     {
         var start = 0;
         while (true)
@@ -188,6 +309,12 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
             var idx = text.IndexOf(tool, start, StringComparison.Ordinal);
             if (idx < 0)
                 return false;
+
+            if (quotedMask is not null && IsEntirelyQuoted(idx, tool.Length, quotedMask))
+            {
+                start = idx + tool.Length;
+                continue;
+            }
 
             var prevOk = idx == 0 || IsShellBoundary(text[idx - 1]);
             var after = idx + tool.Length;
@@ -197,6 +324,116 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
 
             start = idx + 1;
         }
+    }
+
+    private static bool[] ComputeQuotedMask(string text)
+    {
+        var mask = new bool[text.Length];
+        var stack = new Stack<QuoteRegion>();
+        var current = QuoteRegion.Normal;
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+
+            switch (current)
+            {
+                case QuoteRegion.Normal:
+                    if (c == '\'')
+                    {
+                        stack.Push(current);
+                        current = QuoteRegion.SingleQuoted;
+                    }
+                    else if (c == '"')
+                    {
+                        stack.Push(current);
+                        current = QuoteRegion.DoubleQuoted;
+                    }
+                    else if (c == '\\' && i + 1 < text.Length)
+                    {
+                        i++;
+                    }
+                    else if (c == '$' && i + 1 < text.Length && text[i + 1] == '(')
+                    {
+                        stack.Push(current);
+                        current = QuoteRegion.CommandSubstitution;
+                        i++;
+                    }
+
+                    break;
+
+                case QuoteRegion.SingleQuoted:
+                    if (c == '\'') current = stack.Count > 0 ? stack.Pop() : QuoteRegion.Normal;
+                    else mask[i] = true;
+                    break;
+
+                case QuoteRegion.DoubleQuoted:
+                    if (c == '"')
+                    {
+                        current = stack.Count > 0 ? stack.Pop() : QuoteRegion.Normal;
+                    }
+                    else if (c == '\\' && i + 1 < text.Length)
+                    {
+                        mask[i + 1] = true;
+                        i++;
+                    }
+                    else if (c == '$' && i + 1 < text.Length && text[i + 1] == '(')
+                    {
+                        stack.Push(current);
+                        current = QuoteRegion.CommandSubstitution;
+                        i++;
+                    }
+                    else
+                    {
+                        mask[i] = true;
+                    }
+
+                    break;
+
+                case QuoteRegion.CommandSubstitution:
+                    if (c == '\'')
+                    {
+                        stack.Push(current);
+                        current = QuoteRegion.SingleQuoted;
+                    }
+                    else if (c == '"')
+                    {
+                        stack.Push(current);
+                        current = QuoteRegion.DoubleQuoted;
+                    }
+                    else if (c == '\\' && i + 1 < text.Length)
+                    {
+                        i++;
+                    }
+                    else if (c == '$' && i + 1 < text.Length && text[i + 1] == '(')
+                    {
+                        stack.Push(current);
+                        current = QuoteRegion.CommandSubstitution;
+                        i++;
+                    }
+                    else if (c == '(')
+                    {
+                        stack.Push(current);
+                    }
+                    else if (c == ')')
+                    {
+                        current = stack.Count > 0 ? stack.Pop() : QuoteRegion.Normal;
+                    }
+
+                    break;
+            }
+        }
+
+        return mask;
+    }
+
+    private static bool IsEntirelyQuoted(int idx, int length, bool[] quotedMask)
+    {
+        for (var i = idx; i < idx + length; i++)
+            if (!quotedMask[i])
+                return false;
+
+        return true;
     }
 
     private static bool IsShellBoundary(char c)
@@ -261,6 +498,14 @@ public sealed partial class PkgBuildSecurityScanner : IPackageSecurityScanner
         }
 
         return line;
+    }
+
+    private enum QuoteRegion
+    {
+        Normal,
+        SingleQuoted,
+        DoubleQuoted,
+        CommandSubstitution
     }
 
     private sealed record Rule(

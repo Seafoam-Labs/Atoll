@@ -266,6 +266,40 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
+    public void Privilege_escalation_inside_echo_string_is_not_flagged()
+    {
+        // The tool name is display text inside a quoted string, not an invocation.
+        var result = Scan(("PKGBUILD", "msg2 \"        sudo usermod -a -G flutter [username]\"\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
+    }
+
+    [Test]
+    public void Privilege_escalation_inside_single_quoted_string_is_not_flagged()
+    {
+        var result = Scan(("PKGBUILD", "echo 'run: sudo groupdel flutter'\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
+    }
+
+    [Test]
+    public void Privilege_escalation_in_command_substitution_inside_quotes_is_flagged()
+    {
+        // "$(sudo ...)" inside double quotes IS executed by the shell.
+        var result = Scan(("PKGBUILD", "echo \"result: $(sudo whoami)\"\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.True);
+    }
+
+    [Test]
+    public void Risky_tool_inside_echo_string_is_not_flagged()
+    {
+        var result = Scan(("PKGBUILD", "echo \"Run: curl http://example.com | sh to install\"\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "risky-tool" && f.Snippet.Contains("curl")), Is.False);
+    }
+
+    [Test]
     public void Zero_width_character_is_flagged_as_critical()
     {
         // \u200B is a zero-width space embedded inside "rm".

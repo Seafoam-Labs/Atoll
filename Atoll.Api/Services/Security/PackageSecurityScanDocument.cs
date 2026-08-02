@@ -27,4 +27,7 @@ public sealed record PackageSecurityScanDocument
 public sealed record SecurityFinding(
     string RuleId,
     [property: BsonRepresentation(BsonType.String)]
-    FindingSeverity Severity);
+    FindingSeverity Severity,
+    string Message,
+    string Snippet,
+    string File);
