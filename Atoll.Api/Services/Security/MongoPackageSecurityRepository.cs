@@ -16,23 +16,49 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         EnsureIndexes();
     }
 
-    public async Task<PackageSecurityScanDocument?> GetAsync(string packageName, CancellationToken ct = default)
+    public async Task<PackageSecurityScanDocument?> GetAsync(
+        string packageName,
+        string revisionId,
+        CancellationToken ct = default)
     {
-        return await _scans.Find(x => x.Id == packageName).FirstOrDefaultAsync(ct);
+        return await _scans
+            .Find(x => x.Id == PackageSecurityScanDocument.ComposeId(packageName, revisionId))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<PackageSecurityScanDocument?> GetHeadAsync(string packageName, CancellationToken ct = default)
+    {
+        return await _scans
+            .Find(x => x.PackageName == packageName && x.IsHead)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<IReadOnlyCollection<PackageSecurityScanDocument>> ListForPackageAsync(
+        string packageName,
+        CancellationToken ct = default)
+    {
+        return await _scans
+            .Find(x => x.PackageName == packageName)
+            .ToListAsync(ct);
     }
 
     public async Task<IReadOnlyCollection<string>> ListPackageNamesAsync(CancellationToken ct = default)
     {
         return await _scans
-            .Find(Builders<PackageSecurityScanDocument>.Filter.Empty)
-            .Project(x => x.Id)
+            .Distinct(x => x.PackageName, Builders<PackageSecurityScanDocument>.Filter.Empty, cancellationToken: ct)
             .ToListAsync(ct);
     }
 
-    public async Task MarkPendingAsync(string packageName, string revisionId, CancellationToken ct = default)
+    public async Task MarkPendingAsync(
+        string packageName,
+        string revisionId,
+        bool isHead,
+        CancellationToken ct = default)
     {
         var update = Builders<PackageSecurityScanDocument>.Update
-            .Set(x => x.RevisionId, revisionId)
+            .SetOnInsert(x => x.PackageName, packageName)
+            .SetOnInsert(x => x.RevisionId, revisionId)
+            .Set(x => x.IsHead, isHead)
             .Set(x => x.Status, SecurityStatus.Pending)
             .Set(x => x.Findings, [])
             .Unset(x => x.ScannedAt)
@@ -40,21 +66,27 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             .Unset(x => x.LeaseOwner);
 
         await _scans.UpdateOneAsync(
-            x => x.Id == packageName,
+            x => x.Id == PackageSecurityScanDocument.ComposeId(packageName, revisionId),
             update,
             new UpdateOptions { IsUpsert = true },
             ct);
     }
 
-    public async Task EnsurePendingAsync(string packageName, string revisionId, CancellationToken ct = default)
+    public async Task EnsurePendingAsync(
+        string packageName,
+        string revisionId,
+        bool isHead,
+        CancellationToken ct = default)
     {
         var update = Builders<PackageSecurityScanDocument>.Update
+            .SetOnInsert(x => x.PackageName, packageName)
             .SetOnInsert(x => x.RevisionId, revisionId)
+            .SetOnInsert(x => x.IsHead, isHead)
             .SetOnInsert(x => x.Status, SecurityStatus.Pending)
             .SetOnInsert(x => x.Findings, []);
 
         await _scans.UpdateOneAsync(
-            x => x.Id == packageName,
+            x => x.Id == PackageSecurityScanDocument.ComposeId(packageName, revisionId),
             update,
             new UpdateOptions { IsUpsert = true },
             ct);
@@ -90,8 +122,8 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         CancellationToken ct = default)
     {
         var filter = Builders<PackageSecurityScanDocument>.Filter.And(
-            Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.Id, packageName),
-            Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.RevisionId, revisionId),
+            Builders<PackageSecurityScanDocument>.Filter.Eq(
+                x => x.Id, PackageSecurityScanDocument.ComposeId(packageName, revisionId)),
             Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.LeaseOwner, owner));
         var update = Builders<PackageSecurityScanDocument>.Update
             .Set(x => x.Status, result.Status)
@@ -110,8 +142,8 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         CancellationToken ct = default)
     {
         var filter = Builders<PackageSecurityScanDocument>.Filter.And(
-            Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.Id, packageName),
-            Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.RevisionId, revisionId),
+            Builders<PackageSecurityScanDocument>.Filter.Eq(
+                x => x.Id, PackageSecurityScanDocument.ComposeId(packageName, revisionId)),
             Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.LeaseOwner, owner));
         var update = Builders<PackageSecurityScanDocument>.Update
             .Set(x => x.Status, SecurityStatus.Error)
@@ -123,23 +155,61 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         await _scans.UpdateOneAsync(filter, update, cancellationToken: ct);
     }
 
-    public async Task ReleaseScanClaimAsync(string packageName, string owner, CancellationToken ct = default)
+    public async Task ReleaseScanClaimAsync(
+        string packageName,
+        string revisionId,
+        string owner,
+        CancellationToken ct = default)
     {
         var update = Builders<PackageSecurityScanDocument>.Update
             .Unset(x => x.LeaseUntil)
             .Unset(x => x.LeaseOwner);
 
         await _scans.UpdateOneAsync(
-            x => x.Id == packageName && x.LeaseOwner == owner,
+            x => x.Id == PackageSecurityScanDocument.ComposeId(packageName, revisionId)
+                 && x.LeaseOwner == owner,
             update,
             cancellationToken: ct);
+    }
+
+    public async Task PromoteHeadAsync(
+        string packageName,
+        string newHeadRevisionId,
+        CancellationToken ct = default)
+    {
+        var demote = Builders<PackageSecurityScanDocument>.Update.Set(x => x.IsHead, false);
+        await _scans.UpdateManyAsync(
+            x => x.PackageName == packageName
+                 && x.IsHead
+                 && x.Id != PackageSecurityScanDocument.ComposeId(packageName, newHeadRevisionId),
+            demote,
+            cancellationToken: ct);
+
+        var promote = Builders<PackageSecurityScanDocument>.Update.Set(x => x.IsHead, true);
+        await _scans.UpdateOneAsync(
+            x => x.Id == PackageSecurityScanDocument.ComposeId(packageName, newHeadRevisionId),
+            promote,
+            cancellationToken: ct);
+    }
+
+    public async Task DeleteAsync(string packageName, string revisionId, CancellationToken ct = default)
+    {
+        await _scans.DeleteOneAsync(
+            x => x.Id == PackageSecurityScanDocument.ComposeId(packageName, revisionId),
+            ct);
     }
 
     private void EnsureIndexes()
     {
         var keys = Builders<PackageSecurityScanDocument>.IndexKeys;
-        _scans.Indexes.CreateOne(
+        _scans.Indexes.CreateMany(
+        [
             new CreateIndexModel<PackageSecurityScanDocument>(
-                keys.Ascending(x => x.Status).Ascending(x => x.LeaseUntil)));
+                keys.Ascending(x => x.Status).Ascending(x => x.LeaseUntil)),
+            new CreateIndexModel<PackageSecurityScanDocument>(
+                keys.Ascending(x => x.PackageName).Ascending(x => x.IsHead)),
+            new CreateIndexModel<PackageSecurityScanDocument>(
+                keys.Ascending(x => x.PackageName))
+        ]);
     }
 }

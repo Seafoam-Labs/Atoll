@@ -38,7 +38,7 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
         await SeedPackageAsync(packages);
-        await security.MarkPendingAsync("pkg", "rev-1");
+        await security.MarkPendingAsync("pkg", "rev-1", true);
         if (status != SecurityStatus.Pending)
         {
             var result = new ScanResult(status, []);
@@ -71,11 +71,58 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         await SeedPackageAsync(packages);
         var security = new InMemoryPackageSecurityRepository();
-        await security.MarkPendingAsync("pkg", "rev-1");
+        await security.MarkPendingAsync("pkg", "rev-1", true);
 
         var result = await Create(packages, security, false).CheckAsync("pkg");
 
         Assert.That(result.Allowed, Is.True);
+    }
+
+    [Test]
+    public async Task Flagged_revision_blocks_only_itself()
+    {
+        var packages = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
+        await SeedPackageAsync(packages);
+        await packages.AppendRevisionAsync(
+            "pkg",
+            new PackageRevisionDocument { RevisionId = "rev-2", CreatedAt = DateTimeOffset.UtcNow },
+            new Dictionary<string, PackageFile>(),
+            10);
+
+        await security.MarkPendingAsync("pkg", "rev-1", false);
+        await security.MarkPendingAsync("pkg", "rev-2", true);
+        _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await security.CompleteScanAsync("pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []));
+        _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await security.CompleteScanAsync("pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []));
+
+        var access = Create(packages, security);
+
+        var flagged = await access.CheckAsync("pkg", "rev-2");
+        var clean = await access.CheckAsync("pkg", "rev-1");
+        var head = await access.CheckAsync("pkg");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(flagged.Allowed, Is.False);
+            Assert.That(flagged.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Flagged));
+            Assert.That(clean.Allowed, Is.True);
+            Assert.That(head.Allowed, Is.False);
+            Assert.That(head.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Flagged));
+        });
+    }
+
+    [Test]
+    public async Task Unknown_revision_is_blocked_as_pending()
+    {
+        var packages = new InMemoryPackageRepository();
+        await SeedPackageAsync(packages);
+
+        var result = await Create(packages, new InMemoryPackageSecurityRepository()).CheckAsync("pkg", "rev-missing");
+
+        Assert.That(result.Allowed, Is.False);
+        Assert.That(result.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Pending));
     }
 
     [Test]

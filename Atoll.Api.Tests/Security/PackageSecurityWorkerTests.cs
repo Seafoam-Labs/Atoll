@@ -50,7 +50,7 @@ public class PackageSecurityWorkerTests
             Files = revision.Files,
             Revisions = [revision]
         });
-        await securityRepo.MarkPendingAsync(name, revision.RevisionId);
+        await securityRepo.MarkPendingAsync(name, revision.RevisionId, true);
     }
 
     [Test]
@@ -112,7 +112,7 @@ public class PackageSecurityWorkerTests
         await Task.Delay(200);
         await worker.StopAsync(CancellationToken.None);
 
-        Assert.That((await securityRepo.GetAsync("clean"))!.Status, Is.EqualTo(SecurityStatus.Pending));
+        Assert.That((await securityRepo.GetAsync("clean", "rev-1"))!.Status, Is.EqualTo(SecurityStatus.Pending));
     }
 
     private static async Task<PackageSecurityScanDocument> WaitForScanAsync(
@@ -123,7 +123,7 @@ public class PackageSecurityWorkerTests
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
-            var scan = await securityRepo.GetAsync(packageName);
+            var scan = await securityRepo.GetAsync(packageName, "rev-1");
             if (scan?.Status is SecurityStatus.Verified or SecurityStatus.Flagged or SecurityStatus.Error)
                 return scan;
             await Task.Delay(20);

@@ -55,7 +55,7 @@ public sealed class PackageSecurityWorker(
             {
                 var package = await packageRepository.GetHeadFilesAsync(packageName, token);
                 if (package is not null)
-                    await securityRepo.EnsurePendingAsync(packageName, package.HeadRevisionId, token);
+                    await securityRepo.EnsurePendingAsync(packageName, package.HeadRevisionId, true, token);
             });
     }
 
@@ -90,57 +90,54 @@ public sealed class PackageSecurityWorker(
 
         try
         {
-            var package = await packageRepository.GetHeadFilesAsync(claim.Id, ct);
-            if (package is null)
+            var revision = await packageRepository.GetRevisionAsync(claim.PackageName, claim.RevisionId, ct);
+            if (revision is null)
             {
-                await securityRepo.ReleaseScanClaimAsync(claim.Id, _owner, ct);
+                logger.LogDebug(
+                    "Dropping security scan claim for {PackageName} revision {RevisionId}: revision no longer retained.",
+                    claim.PackageName, claim.RevisionId);
+                await securityRepo.DeleteAsync(claim.PackageName, claim.RevisionId, ct);
                 return true;
             }
 
-            // A refresh can replace the head after this job was claimed. Keep
-            // the newer revision pending; it must never inherit this result.
-            if (package.HeadRevisionId != claim.RevisionId)
-            {
-                await securityRepo.MarkPendingAsync(claim.Id, package.HeadRevisionId, ct);
-                return true;
-            }
-
-            var files = package.Files.ToDictionary(kv => kv.Key, kv => kv.Value.Content, StringComparer.Ordinal);
+            var files = revision.Files.ToDictionary(kv => kv.Key, kv => kv.Value.Content, StringComparer.Ordinal);
             var result = scanner.Scan(files);
-            await securityRepo.CompleteScanAsync(claim.Id, claim.RevisionId, _owner, result, ct);
+            await securityRepo.CompleteScanAsync(claim.PackageName, claim.RevisionId, _owner, result, ct);
 
             if (result.Status == SecurityStatus.Flagged)
                 logger.LogWarning(
                     "Security scan flagged {PackageName} revision {RevisionId}: {FindingCount} findings.",
-                    claim.Id, claim.RevisionId, result.Findings.Count);
+                    claim.PackageName, claim.RevisionId, result.Findings.Count);
             else
                 logger.LogDebug(
                     "Security scan for {PackageName} revision {RevisionId} -> {Status} ({FindingCount} findings).",
-                    claim.Id, claim.RevisionId, result.Status, result.Findings.Count);
+                    claim.PackageName, claim.RevisionId, result.Status, result.Findings.Count);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            await ReleaseClaimQuietlyAsync(claim.Id);
+            await ReleaseClaimQuietlyAsync(claim);
             throw;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Security scan failed for {PackageName}; marking as Error.", claim.Id);
+            logger.LogWarning(ex, "Security scan failed for {PackageName} revision {RevisionId}; marking as Error.",
+                claim.PackageName, claim.RevisionId);
             await MarkScanErrorQuietlyAsync(claim);
         }
 
         return true;
     }
 
-    private async Task ReleaseClaimQuietlyAsync(string packageName)
+    private async Task ReleaseClaimQuietlyAsync(PackageSecurityScanDocument claim)
     {
         try
         {
-            await securityRepo.ReleaseScanClaimAsync(packageName, _owner, CancellationToken.None);
+            await securityRepo.ReleaseScanClaimAsync(claim.PackageName, claim.RevisionId, _owner, CancellationToken.None);
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Failed to release security scan claim for {PackageName}.", packageName);
+            logger.LogDebug(ex, "Failed to release security scan claim for {PackageName} revision {RevisionId}.",
+                claim.PackageName, claim.RevisionId);
         }
     }
 
@@ -148,11 +145,12 @@ public sealed class PackageSecurityWorker(
     {
         try
         {
-            await securityRepo.MarkScanErrorAsync(claim.Id, claim.RevisionId, _owner, CancellationToken.None);
+            await securityRepo.MarkScanErrorAsync(claim.PackageName, claim.RevisionId, _owner, CancellationToken.None);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to mark {PackageName} as security Error.", claim.Id);
+            logger.LogWarning(ex, "Failed to mark {PackageName} revision {RevisionId} as security Error.",
+                claim.PackageName, claim.RevisionId);
         }
     }
 }

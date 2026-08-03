@@ -10,7 +10,12 @@ public sealed class PackageSecurityFilter(IPackageSecurityAccess security) : IEn
         if (string.IsNullOrEmpty(name))
             return await next(context);
 
-        var access = await security.CheckAsync(name, context.HttpContext.RequestAborted);
+        var sha = context.HttpContext.GetRouteValue("sha")?.ToString();
+
+        var access = await security.CheckAsync(
+            name,
+            string.IsNullOrEmpty(sha) ? null : sha,
+            context.HttpContext.RequestAborted);
         if (!access.Allowed)
             return TypedResults.Problem(
                 "This package is unavailable until it passes security checks.",

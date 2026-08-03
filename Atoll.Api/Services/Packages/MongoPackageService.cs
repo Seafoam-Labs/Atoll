@@ -184,7 +184,7 @@ public sealed class MongoPackageService(
                 MongoMaxDocumentSizeBytes);
 
         await repo.InsertSeedAsync(doc);
-        await securityRepository.MarkPendingAsync(packageName, revisionId);
+        await securityRepository.MarkPendingAsync(packageName, revisionId, true);
     }
 
     internal string ResolvePackageBase(string packageName)

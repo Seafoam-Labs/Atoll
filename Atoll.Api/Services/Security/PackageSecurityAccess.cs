@@ -31,7 +31,10 @@ public sealed class PackageSecurityAccess(
 {
     private readonly SecurityOptions _security = options.Value.Security;
 
-    public async Task<SecurityAccessResult> CheckAsync(string packageName, CancellationToken ct = default)
+    public async Task<SecurityAccessResult> CheckAsync(
+        string packageName,
+        string? revisionId = null,
+        CancellationToken ct = default)
     {
         if (!_security.Enabled)
             return SecurityAccessResult.Allow();
@@ -39,7 +42,12 @@ public sealed class PackageSecurityAccess(
         if (!await packageRepository.ExistsAsync(packageName, ct))
             return SecurityAccessResult.Allow();
 
-        var scan = await securityRepository.GetAsync(packageName, ct);
+        PackageSecurityScanDocument? scan;
+        if (revisionId is null)
+            scan = await securityRepository.GetHeadAsync(packageName, ct);
+        else
+            scan = await securityRepository.GetAsync(packageName, revisionId, ct);
+
         return scan?.Status switch
         {
             SecurityStatus.Verified => SecurityAccessResult.Allow(),

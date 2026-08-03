@@ -59,7 +59,7 @@ public class SecurityGatingEndpointsTests
     private async Task SeedAsync(SecurityStatus status)
     {
         await _factory.Repository.InsertSeedAsync(Doc("pkg"));
-        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1");
+        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", true);
         if (status != SecurityStatus.Pending)
         {
             await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
@@ -162,6 +162,51 @@ public class SecurityGatingEndpointsTests
         var response = await _client.PostAsync("/packages/pkg.git/git-upload-pack", content);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+    }
+
+    [Test]
+    public async Task Flagged_revision_is_blocked_but_other_revisions_are_served()
+    {
+        var rev2 = new PackageRevisionDocument
+        {
+            RevisionId = "rev-2",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Author = "test",
+            Message = "update",
+            Files = new Dictionary<string, PackageFile>
+            {
+                ["PKGBUILD"] = new() { Content = "pkgname=test2\n", Size = 13, Hash = "h2" }
+            }
+        };
+        var doc = new PackageDocument
+        {
+            Id = "pkg",
+            PackageName = "pkg",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            HeadRevisionId = "rev-2",
+            Files = rev2.Files,
+            Revisions = [rev2, Doc("pkg").Revisions[0]]
+        };
+
+        await _factory.Repository.InsertSeedAsync(doc);
+        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false);
+        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true);
+        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await _factory.SecurityRepository.CompleteScanAsync("pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []));
+        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await _factory.SecurityRepository.CompleteScanAsync("pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []));
+
+        var flagged = await _client.GetAsync("/packages/pkg/versions/rev-2");
+        var clean = await _client.GetAsync("/packages/pkg/versions/rev-1");
+        var head = await _client.GetAsync("/packages/pkg");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(flagged.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+            Assert.That(clean.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        });
     }
 
     [Test]

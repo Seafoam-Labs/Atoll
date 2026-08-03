@@ -58,19 +58,21 @@ packages that were previously `Flagged`. Disabling the feature is a bypass, not 
 
 ## Status model
 
-Each package has exactly one security-state document in the `package-security-scans` collection, keyed by package name
-(so a new revision replaces the prior scan rather than accumulating history). This tracks only the current head
-revision; historical revisions have no independent scan state. The status is one of:
+Each retained package revision has its own security-state document in the `package-security-scans` collection, keyed by
+the composite id `{packageName}:{revisionId}` (revision ids are content-addressed SHA-256 hashes, so the same content
+always maps to the same id). A new head revision gets a fresh `Pending` document; previous revisions keep their own
+scan state, so a flagged revision blocks only itself. Each document also carries a denormalized `isHead` flag so the
+gate can resolve the head scan without a second read against the `packages` collection. The status is one of:
 
-| Status     | Meaning                                                                                | Content served? |
-| ---------- | -------------------------------------------------------------------------------------- | --------------- |
-| `Pending`  | No successful scan yet for the current revision (newly seeded, re-scanned, or leased). | **Blocked**     |
-| `Verified` | The scan completed with no Critical/High findings.                                     | Allowed         |
-| `Flagged`  | The scan completed with at least one Critical or High finding.                         | **Blocked**     |
-| `Error`    | The scan threw; the package must not be served until a successful re-scan.             | **Blocked**     |
+| Status     | Meaning                                                                         | Content served? |
+| ---------- | ------------------------------------------------------------------------------- | --------------- |
+| `Pending`  | No successful scan yet for that revision (newly seeded, re-scanned, or leased). | **Blocked**     |
+| `Verified` | The scan completed with no Critical/High findings.                              | Allowed         |
+| `Flagged`  | The scan completed with at least one Critical or High finding.                  | **Blocked**     |
+| `Error`    | The scan threw; the revision must not be served until a successful re-scan.     | **Blocked**     |
 
 Findings are stored alongside the status. Severity ordering is `Info < Low < Medium < High < Critical`. Only `Critical`
-and `High` flip a package to `Flagged`; `Medium` and below are retained for review but do not block serving. The
+and `High` flip a revision to `Flagged`; `Medium` and below are retained for review but do not block serving. The
 status-to-decision mapping lives in `PackageSecurityAccess.CheckAsync` and is the single place that decides whether
 content is served.
 
@@ -135,16 +137,18 @@ not corrupt data but does change the set of ids visible in historical documents.
 The persisted `Pending` state is the durable work queue — there is no in-process queue. The pipeline is:
 
 1. A new revision is seeded (`MongoPackageService.SeedFilesAsync`) or a rescan is requested
-   (`POST /packages/{name}/security/rescan`); both call `MarkPendingAsync`, which upserts the package's state document
-   to `Pending` for the head revision and clears any prior findings/lease.
+   (`POST /packages/{name}/security/rescan`, optionally with `?revision={sha}`); both call `MarkPendingAsync`, which
+   upserts the `(package, revision)` state document to `Pending` and clears any prior findings/lease for that revision.
 2. `PackageSecurityWorker` runs `ScannerConcurrency` poll loops. Each loop calls `TryClaimPendingScanAsync`, which
    atomically (`FindOneAndUpdate`) leases one `Pending` document whose lease has expired or is unset, stamping
    `leaseUntil = now + 5m` and `leaseOwner = {MachineName}:{Guid}`.
-3. The worker re-reads the package head. If the head revision no longer matches the claimed revision (a refresh landed
-   in between) it re-marks the state `Pending` for the new head and discards the in-flight result — a scan result must
-   never be inherited by a revision it did not examine.
-4. Otherwise the head files are scanned and the result is written with `CompleteScanAsync`, which is guarded by
-   `(id, revisionId, leaseOwner)` so only the claim owner can complete it.
+3. The worker re-reads the claimed revision via `GetRevisionAsync`. If the revision is no longer retained in the
+   package's history (it aged out of `MaxRevisions`, or the package was deleted) the claim is deleted — a scan result
+   must never be written for content that can no longer be served.
+4. Otherwise the claimed revision's files are scanned and the result is written with `CompleteScanAsync`, which is
+   guarded by `(id, leaseOwner)` so only the claim owner can complete it. Because the claim is keyed by revision, a
+   refresh that swaps the head in between does not disturb the in-flight scan: the result is tied to the exact
+   revision that was examined.
 5. If the scan throws, the worker records `Error` for that revision. Errors block serving until a successful re-scan.
 
 Leases make the queue crash-safe: if a worker dies mid-scan, the lease expires and another worker (or the same instance
@@ -180,11 +184,16 @@ Decision table:
 | Status `Error`                        | Block — `security_scan_error`.                    |
 
 Blocked requests return `403 Forbidden` with an RFC 9457 `application/problem+json` body and a non-sensitive `reason`
-extension code (one of the three above). No file content or finding detail is leaked in the error response. The status
-applied to `GET /packages/{name}/versions/{sha}` is currently the package's head-revision status, not a scan of the
-requested historical revision. Version history (`GET /packages/{name}/versions`) and the security status endpoint
-(`GET /packages/{name}/security`) are intentionally not gated: they expose metadata and the scan summary, not package
-content.
+extension code (one of the three above). No file content or finding detail is leaked in the error response.
+`GET /packages/{name}/versions/{sha}` is gated on the scan state of the **requested revision**: a `Flagged` revision
+blocks only itself, while earlier and later revisions are served according to their own scan results. The head routes
+(`GET /packages/{name}` and both Git routes) are gated on the head revision's scan state. Version history
+(`GET /packages/{name}/versions`) and the security status endpoint (`GET /packages/{name}/security`) are intentionally
+not gated: they expose metadata and the scan summary, not package content.
+
+> **Git limitation:** the Git Smart HTTP routes serve the whole repository, so they are gated on the head revision
+> only. A `Flagged` historical revision is still reachable via `git clone` followed by `git checkout <sha>` even though
+> the equivalent `GET /packages/{name}/versions/{sha}` request is blocked.
 
 ## Configuration
 
@@ -216,8 +225,9 @@ collection:
 - Each completed scan logs
   `Security scan for {PackageName} revision {RevisionId} -> {Status} ({FindingCount} findings).`
 - Failed scans log a warning and record `Error`.
-- The `package-security-scans` collection is keyed by package name. Useful ad-hoc queries:
-  - Blocked packages: `{ status: { $in: ["Pending", "Flagged", "Error"] } }`
+- The `package-security-scans` collection is keyed by `{packageName}:{revisionId}`. Useful ad-hoc queries:
+  - Blocked revisions: `{ status: { $in: ["Pending", "Flagged", "Error"] } }`
+  - All scan state for one package: `{ packageName: "<name>" }`
   - Stuck leases: `{ status: "Pending", leaseUntil: { $lt: <now> } }` (these are reclaimable; they should clear on the
     next poll).
   - Recently flagged: `{ status: "Flagged" }` with `findings` containing the rule ids above.
@@ -267,8 +277,9 @@ curl -i "$BASE/packages/$NAME"            # 200
 ### 3. Confirm rescan re-queues
 
 ```sh
-curl -i -X POST "$BASE/packages/$NAME/security/rescan"   # 202 Accepted
-curl -s   "$BASE/packages/$NAME/security"                # status returns to Pending, then resolves again
+curl -i -X POST "$BASE/packages/$NAME/security/rescan"                    # 202 Accepted (head revision)
+curl -i -X POST "$BASE/packages/$NAME/security/rescan?revision=<sha>"     # 202 Accepted (specific revision)
+curl -s   "$BASE/packages/$NAME/security"                                 # revision returns to Pending, then resolves again
 ```
 
 ### 4. Confirm the lease recovers from a simulated crash
@@ -296,10 +307,10 @@ the previous section resolving on its own after restart.
   pattern, but the `HttpRegex` used to extract URLs from the `source=` line only matches `https?://`, so FTP source
   URLs are never actually flagged. Either extend `HttpRegex` to cover `ftp://` or drop the `ftp` alternative from
   `SuspiciousSourceUrl`.
-- **Head-only scan state.** Security state is keyed only by package name, so each new head revision replaces the prior
-  result. Historical revisions can be requested but are authorized using the current head's status rather than being
-  scanned and gated independently. Store scan state by package and revision, then scan and enforce the requested
-  revision before treating revision history as securely served content.
+- **Git routes are head-gated only.** The Git Smart HTTP routes serve the whole repository and are gated on the head
+  revision's status, so a `Flagged` historical revision remains reachable via `git clone` + `git checkout <sha>` even
+  though the equivalent `GET /packages/{name}/versions/{sha}` request is blocked. Closing this would require either
+  blocking clones when any retained revision is flagged, or filtering refs/objects during pack transfer.
 - **No metrics.** Scan throughput, backlog depth, and flag rate are not exported to `/metrics`; use logs and MongoDB
   queries.
 - **Single-instance assumption.** The lease scheme supports multiple worker loops within one instance and is safe

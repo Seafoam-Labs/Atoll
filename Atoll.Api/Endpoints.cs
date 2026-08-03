@@ -86,6 +86,7 @@ public static class Endpoints
 
     private static async Task<IResult> SecurityStatus(
         [FromRoute] string name,
+        [FromQuery(Name = "revision")] string? revision,
         [FromServices] IPackageRepository packages,
         [FromServices] IPackageSecurityRepository security)
     {
@@ -93,12 +94,34 @@ public static class Endpoints
         if (package is null)
             return TypedResults.NotFound();
 
-        var scan = await security.GetAsync(name);
+        if (string.IsNullOrEmpty(revision))
+        {
+            var scans = await security.ListForPackageAsync(name);
+            return TypedResults.Ok(new
+            {
+                packageName = name,
+                headRevisionId = package.HeadRevisionId,
+                revisions = scans
+                    .OrderByDescending(s => s.IsHead)
+                    .ThenByDescending(s => s.ScannedAt)
+                    .Select(s => new
+                    {
+                        revisionId = s.RevisionId,
+                        status = s.Status.ToString(),
+                        isHead = s.IsHead,
+                        scannedAt = s.ScannedAt,
+                        findingCount = s.Findings.Count
+                    })
+            });
+        }
+
+        var scan = await security.GetAsync(name, revision);
         return TypedResults.Ok(new
         {
             packageName = name,
+            revisionId = revision,
             status = (scan?.Status ?? Services.Security.SecurityStatus.Pending).ToString(),
-            revisionId = scan?.RevisionId ?? package.HeadRevisionId,
+            isHead = revision == package.HeadRevisionId,
             scannedAt = scan?.ScannedAt,
             findingCount = scan?.Findings.Count ?? 0
         });
@@ -106,6 +129,7 @@ public static class Endpoints
 
     private static async Task<IResult> SecurityRescan(
         [FromRoute] string name,
+        [FromQuery(Name = "revision")] string? revision,
         [FromServices] IPackageRepository packages,
         [FromServices] IPackageSecurityRepository security)
     {
@@ -113,8 +137,12 @@ public static class Endpoints
         if (package is null)
             return TypedResults.NotFound();
 
-        await security.MarkPendingAsync(name, package.HeadRevisionId);
-        return TypedResults.Accepted($"/packages/{name}/security");
+        var revisionId = string.IsNullOrEmpty(revision) ? package.HeadRevisionId : revision;
+        if (package.Revisions.All(r => r.RevisionId != revisionId))
+            return TypedResults.NotFound();
+
+        await security.MarkPendingAsync(name, revisionId, revisionId == package.HeadRevisionId);
+        return TypedResults.Accepted($"/packages/{name}/security?revision={revisionId}");
     }
 
     private static void MapGitProtocolRoutes(RouteGroupBuilder packages)

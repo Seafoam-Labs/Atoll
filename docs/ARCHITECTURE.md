@@ -111,8 +111,9 @@ are documented in [Bulk package seeding](SEED.md).
 
 - **MongoDB (authoritative):** `packages` stores package documents with embedded files and revision history;
   `aur-metadata` stores the full AUR package dump as typed documents; `seed-exclusions` records pkgbases that cannot
-  currently fit in a MongoDB document; `package-security-scans` stores the current security state and latest findings
-  for each package (keyed by package name; compound-indexed on `(status, leaseUntil)` for the scan work queue). The
+  currently fit in a MongoDB document; `package-security-scans` stores the security state and latest findings for each
+  retained package revision (keyed by `{packageName}:{revisionId}`; compound-indexed on `(status, leaseUntil)` for the
+  scan work queue and on `(packageName, isHead)` for head lookups). The
   `packages` collection is indexed on `packageName` at startup so the head/exists/history/revision/delete lookups (which
   filter on `packageName`, not `_id`) are index-served; the index is non-unique to tolerate pre-existing data even
   though `packageName` is effectively unique in production. The security-state schema and lifecycle are documented in
@@ -147,21 +148,21 @@ are documented in [Bulk package seeding](SEED.md).
 
 ### Endpoints
 
-| Method   | Path                                                     | Description                                               |
-| -------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| GET/HEAD | `/health`                                                | Liveness only - does not check MongoDB or index readiness |
-| GET      | `/metrics`                                               | Service metrics (see Operations)                          |
-| GET      | `/search?query=…&by=name\|words\|provides`               | In-memory package search (comma-separated values)         |
-| GET      | `/packages`                                              | List all seeded package names                             |
-| POST     | `/packages/{name}/seed`                                  | Clone from AUR and persist (409 if exists)                |
-| GET      | `/packages/{name}`                                       | Get head revision files                                   |
-| GET      | `/packages/{name}/versions`                              | Get revision history                                      |
-| GET      | `/packages/{name}/versions/{sha}`                        | Get specific revision files                               |
-| DELETE   | `/packages/{name}`                                       | Delete package (MongoDB document only - see note below)   |
-| GET      | `/packages/{name}/security`                              | Get effective security status + latest scan summary       |
-| POST     | `/packages/{name}/security/rescan`                       | Mark the head revision for re-scan                        |
-| GET      | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement                                     |
-| POST     | `/packages/{name}.git/git-upload-pack`                   | Git pack negotiation and transfer                         |
+| Method   | Path                                                     | Description                                                           |
+| -------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
+| GET/HEAD | `/health`                                                | Liveness only - does not check MongoDB or index readiness             |
+| GET      | `/metrics`                                               | Service metrics (see Operations)                                      |
+| GET      | `/search?query=…&by=name\|words\|provides`               | In-memory package search (comma-separated values)                     |
+| GET      | `/packages`                                              | List all seeded package names                                         |
+| POST     | `/packages/{name}/seed`                                  | Clone from AUR and persist (409 if exists)                            |
+| GET      | `/packages/{name}`                                       | Get head revision files                                               |
+| GET      | `/packages/{name}/versions`                              | Get revision history                                                  |
+| GET      | `/packages/{name}/versions/{sha}`                        | Get specific revision files                                           |
+| DELETE   | `/packages/{name}`                                       | Delete package (MongoDB document only - see note below)               |
+| GET      | `/packages/{name}/security`                              | Get per-revision security status (`?revision={sha}` for one revision) |
+| POST     | `/packages/{name}/security/rescan`                       | Mark a revision for re-scan (`?revision={sha}`, defaults to head)     |
+| GET      | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement                                                 |
+| POST     | `/packages/{name}.git/git-upload-pack`                   | Git pack negotiation and transfer                                     |
 
 > **Known issue:** `DELETE` removes the MongoDB document but leaves the bare repo on disk, so `git clone` keeps serving
 > the deleted package's content indefinitely. Fix by either deleting the directory or having `GitTransferService` verify
@@ -173,12 +174,13 @@ Seeded AUR content is user-submitted and may execute arbitrary shell at build/in
 static analysis on stored files and gates read access to package content and Git on a per-package security status.
 Search and the package list remain ungated (they serve public AUR metadata).
 
-Each package has one security-state document in `package-security-scans` (`Pending` / `Verified` / `Flagged` / `Error`),
-keyed by package name and tied to its current revision. The persisted `Pending` state is the durable work queue:
-`PackageSecurityWorker` runs `ScannerConcurrency` poll loops, atomically leases a pending document
-(`leaseUntil`/`leaseOwner`, 5-minute lease), scans the head revision, and writes the result back guarded by
-`(id, revisionId, leaseOwner)`. A new seed or rescan re-marks the state `Pending`; expired leases are reclaimable after
-a restart.
+Each retained package revision has its own security-state document in `package-security-scans` (`Pending` /
+`Verified` / `Flagged` / `Error`), keyed by `{packageName}:{revisionId}` with a denormalized `isHead` flag. The
+persisted `Pending` state is the durable work queue: `PackageSecurityWorker` runs `ScannerConcurrency` poll loops,
+atomically leases a pending document (`leaseUntil`/`leaseOwner`, 5-minute lease), scans the claimed revision (not the
+current head), and writes the result back guarded by `(id, leaseOwner)`. A new seed or rescan re-marks that revision
+`Pending`; expired leases are reclaimable after a restart. Claims for revisions that have aged out of the retained
+history are deleted instead of scanned.
 
 `PkgBuildSecurityScanner` is a thin facade that iterates files, delegates each scannable file to the `internal static`
 components under `Atoll.Api/Services/Security/Scanning/` (`ShellContentScanner` for shell rules and tool detection,
@@ -191,11 +193,12 @@ retained without blocking.
 
 `PackageSecurityAccess.CheckAsync` is enforced by `PackageSecurityFilter` (an `IEndpointFilter` applied to the
 content-serving route group in `Endpoints.cs`) on `GET /packages/{name}`, `GET /packages/{name}/versions/{sha}`, and
-both Git Smart HTTP routes. Blocked requests return `403 Forbidden` with an RFC 9457 problem-details body carrying a
-non-sensitive `reason` code (`security_status_pending` / `security_status_flagged` / `security_scan_error`). Version
-history (`/versions`) and the status endpoint (`/packages/{name}/security`) are not gated — they expose metadata and the
-scan summary, not content. When security is disabled (`Atoll:Security:Enabled=false`) everything is served regardless of
-status.
+both Git Smart HTTP routes. The `versions/{sha}` route is gated on the requested revision's own scan state, so a
+flagged revision blocks only itself; the head and Git routes are gated on the head revision. Blocked requests return
+`403 Forbidden` with an RFC 9457 problem-details body carrying a non-sensitive `reason` code
+(`security_status_pending` / `security_status_flagged` / `security_scan_error`). Version history (`/versions`) and the
+status endpoint (`/packages/{name}/security`) are not gated — they expose metadata and the scan summary, not content.
+When security is disabled (`Atoll:Security:Enabled=false`) everything is served regardless of status.
 
 The threat model, full rule table, pipeline internals, decision table, configuration (`Enabled` / `ScannerConcurrency` /
 `PollIntervalMs`), manual verification steps, and known limitations are documented in
@@ -247,11 +250,11 @@ Open questions that need research before implementation:
 ### 2. Security scanning of PKGBUILD and package scripts
 
 **Implemented** (see [Security scanning](#security-scanning) above and [Package security scanning](SECURITY.md)).
-Security state currently tracks only the head revision: a revision-history content request is authorized using the
-current head's result, and historical revisions are not independently scanned. Extend scan state to be keyed by package
-and revision, scan retained revisions, and enforce the status of the requested revision before treating revision history
-as securely served content. Remaining follow-ups: richer rule coverage, source-host allow/deny lists, manual override
-state (`ForceVerified` / `ForceBlocked`), and security metrics under `/metrics`.
+Security state is keyed by package and revision (`{packageName}:{revisionId}`), so each retained revision is scanned
+and gated independently: a flagged revision blocks only itself, and the `versions/{sha}` route enforces the requested
+revision's own status. Remaining follow-ups: richer rule coverage, source-host allow/deny lists, manual override
+state (`ForceVerified` / `ForceBlocked`), Git-route per-revision enforcement (Git routes are currently head-gated
+only), and security metrics under `/metrics`.
 
 ### 3. Incremental index updates
 
