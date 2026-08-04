@@ -43,6 +43,8 @@ public sealed class BulkSeedOptions
 
     [Range(100, 60_000)] public int BatchDelayMs { get; init; } = 1000;
 
+    [Range(1, 128)] public int Parallelism { get; init; } = 4;
+
     public bool AurFallbackForNotOnMirror { get; init; } = false;
 }
 
@@ -90,6 +92,8 @@ public sealed class RefreshOptions
 
     [Range(100, 60_000)] public int BatchDelayMs { get; init; } = 1000;
 
+    [Range(1, 128)] public int Parallelism { get; init; } = 4;
+
     [Range(1, 500_000)] public int MaxPackagesPerRun { get; init; } = 10_000;
 
     [Range(1, 720)] public int MaxStalenessHours { get; init; } = 24;
@@ -103,7 +107,7 @@ public sealed class SecurityOptions
 {
     public bool Enabled { get; init; } = true;
 
-    [Range(1, 64)] public int ScannerConcurrency { get; init; } = 16;
+    [Range(1, 64)] public int ScannerConcurrency { get; init; } = 4;
 
     [Range(100, 300_000)] public int PollIntervalMs { get; init; } = 100;
 }

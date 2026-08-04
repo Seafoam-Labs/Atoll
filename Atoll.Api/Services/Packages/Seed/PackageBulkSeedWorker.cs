@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Threading.Channels;
 using Atoll.Api.Services.Packages.Mirror;
 using Atoll.Api.Services.Search.Indexing;
 using Microsoft.Extensions.Options;
@@ -21,10 +23,11 @@ public sealed class PackageBulkSeedWorker(
     {
         var batchDelay = TimeSpan.FromMilliseconds(Math.Max(100, _options.BatchDelayMs));
         var batchSize = Math.Clamp(_options.BatchSize, 10, 10_000);
+        var parallelism = Math.Clamp(_options.Parallelism, 1, 128);
 
         logger.LogInformation(
-            "Bulk package seeding started with a batch size of {BatchSize}, a {BatchDelay} batch delay, and direct AUR fallback {AurFallbackEnabled}.",
-            batchSize, batchDelay, _options.AurFallbackForNotOnMirror ? "enabled" : "disabled");
+            "Bulk package seeding started with a batch size of {BatchSize}, a {BatchDelay} batch delay, parallelism {Parallelism}, and direct AUR fallback {AurFallbackEnabled}.",
+            batchSize, batchDelay, parallelism, _options.AurFallbackForNotOnMirror ? "enabled" : "disabled");
 
         while (!stoppingToken.IsCancellationRequested)
             try
@@ -61,6 +64,7 @@ public sealed class PackageBulkSeedWorker(
         }
 
         status.BeginCycle();
+        var cycleWatch = Stopwatch.StartNew();
 
         var packagesSeeded = 0;
         var packagesSkipped = 0;
@@ -124,88 +128,114 @@ public sealed class PackageBulkSeedWorker(
             else
                 packagesSkipped += notOnMirror.Sum(b => targets[b].Count);
 
-            foreach (var batch in BulkSeedPlan.ChunkBy(fetchable, batchSize))
+            var parallelism = Math.Clamp(_options.Parallelism, 1, 128);
+            long fetchTicks = 0;
+            long seedTicks = 0;
+
+            // Fetching is network-bound while archive extraction and seeding are CPU/DB-bound, so
+            // they run as a two-stage pipeline: later batches are fetched while earlier ones seed.
+            var pipeline = Channel.CreateBounded<FetchedBatch>(new BoundedChannelOptions(2)
             {
-                if (stoppingToken.IsCancellationRequested) break;
+                SingleWriter = true,
+                SingleReader = true,
+                FullMode = BoundedChannelFullMode.Wait
+            });
 
-                status.RecordBatchAttempted();
+            using var producerCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            var producer = ProduceAsync(producerCts.Token);
 
-                BulkFetchResult result;
-                try
+            try
+            {
+                await foreach (var envelope in pipeline.Reader.ReadAllAsync(stoppingToken))
                 {
-                    result = await mirror.FetchAsync(batch, stoppingToken);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    status.RecordBatchFailed();
-                    logger.LogWarning(ex, "Batch fetch of {Count} pkgbases failed entirely; skipping batch.", batch.Count);
-                    packagesSkipped += batch.Sum(b => targets[b].Count);
-                    await Task.Delay(batchDelay, stoppingToken);
-                    continue;
-                }
-
-                status.RecordBatchSucceeded();
-                status.AddRefsFailed(result.Failed.Count);
-                packagesSkipped += result.Failed.Sum(b => targets[b].Count);
-
-                foreach (var pkgBase in result.Succeeded)
-                {
-                    if (stoppingToken.IsCancellationRequested) break;
-
-                    IReadOnlyDictionary<string, string> files;
-                    try
+                    if (envelope.Failure is not null)
                     {
-                        files = await mirror.ReadFilesAsync(pkgBase, stoppingToken);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Could not read files for pkgbase {PkgBase}; skipping.", pkgBase);
-                        packagesSkipped += targets[pkgBase].Count;
+                        status.RecordBatchFailed();
+                        Interlocked.Add(ref packagesSkipped, envelope.Batch.Sum(b => targets[b].Count));
                         continue;
                     }
 
-                    foreach (var packageName in targets[pkgBase])
-                        try
-                        {
-                            await packageService.SeedFilesAsync(packageName, files);
-                            packagesSeeded++;
-                        }
-                        catch (PackageConflictException)
-                        {
-                            // Race: seeded between list and seed. Not an error.
-                        }
-                        catch (PackageDocumentTooLargeException ex)
-                        {
-                            await exclusions.RecordDocumentTooLargeAsync(pkgBase, targets[pkgBase], ex.SerializedSizeBytes, stoppingToken);
-                            packagesExcluded += targets[pkgBase].Count;
-                            logger.LogWarning(ex,
-                                "Excluded pkgbase {PkgBase} from future bulk seed cycles because its {SizeBytes}-byte package document exceeds MongoDB's limit.",
-                                pkgBase, ex.SerializedSizeBytes);
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogWarning(ex, "Failed to seed {PackageName}.", packageName);
-                            packagesSkipped++;
-                        }
+                    var result = envelope.Result!;
+                    status.RecordBatchSucceeded();
+                    status.AddRefsFailed(result.Failed.Count);
+                    Interlocked.Add(ref packagesSkipped, result.Failed.Sum(b => targets[b].Count));
+
+                    var seedWatch = Stopwatch.StartNew();
+                    var (batchSeeded, batchSkipped, batchExcluded) =
+                        await SeedFetchedBasesAsync(result.Succeeded, targets, parallelism, stoppingToken);
+                    Interlocked.Add(ref seedTicks, seedWatch.ElapsedTicks);
+
+                    Interlocked.Add(ref packagesSeeded, batchSeeded);
+                    Interlocked.Add(ref packagesSkipped, batchSkipped);
+                    Interlocked.Add(ref packagesExcluded, batchExcluded);
+
+                    logger.LogDebug(
+                        "Bulk seed batch complete: {FetchedPackageBaseCount} pkgbases fetched, {FailedPackageBaseCount} failed, {PackagesSeededSoFar} packages seeded so far.",
+                        result.Succeeded.Count, result.Failed.Count, packagesSeeded);
                 }
-
-                logger.LogDebug(
-                    "Bulk seed batch complete: {FetchedPackageBaseCount} pkgbases fetched, {FailedPackageBaseCount} failed, {PackagesSeededSoFar} packages seeded so far.",
-                    result.Succeeded.Count, result.Failed.Count, packagesSeeded);
-
-                await Task.Delay(batchDelay, stoppingToken);
+            }
+            finally
+            {
+                await producerCts.CancelAsync();
+                try
+                {
+                    await producer;
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    // Normal shutdown raced with an in-flight fetch.
+                }
             }
 
             logger.LogInformation(
-                "Bulk seed cycle complete: {SeededPackageCount} seeded, {SkippedPackageCount} skipped, {ExcludedPackageCount} excluded.",
-                packagesSeeded, packagesSkipped, packagesExcluded);
+                "Bulk seed cycle complete in {ElapsedMs} ms ({FetchMs} ms fetching, {SeedMs} ms seeding; phases overlap): " +
+                "{SeededPackageCount} seeded, {SkippedPackageCount} skipped, {ExcludedPackageCount} excluded.",
+                cycleWatch.ElapsedMilliseconds, TimeSpan.FromTicks(fetchTicks).TotalMilliseconds,
+                TimeSpan.FromTicks(seedTicks).TotalMilliseconds, packagesSeeded, packagesSkipped, packagesExcluded);
 
             return (packagesSeeded, packagesSkipped, backedOff: false);
+
+            async Task ProduceAsync(CancellationToken produceToken)
+            {
+                try
+                {
+                    foreach (var batch in BulkSeedPlan.ChunkBy(fetchable, batchSize))
+                    {
+                        if (produceToken.IsCancellationRequested) break;
+
+                        status.RecordBatchAttempted();
+
+                        var fetchWatch = Stopwatch.StartNew();
+                        FetchedBatch envelope;
+                        try
+                        {
+                            var result = await mirror.FetchAsync(batch, produceToken);
+                            envelope = new FetchedBatch(batch, result, null);
+                        }
+                        catch (OperationCanceledException) when (produceToken.IsCancellationRequested)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            envelope = new FetchedBatch(batch, null, ex);
+                            logger.LogWarning(ex, "Batch fetch of {Count} pkgbases failed entirely; skipping batch.", batch.Count);
+                        }
+
+                        Interlocked.Add(ref fetchTicks, fetchWatch.ElapsedTicks);
+                        await pipeline.Writer.WriteAsync(envelope, produceToken);
+                        await Task.Delay(batchDelay, produceToken);
+                    }
+                }
+                catch (OperationCanceledException) when (produceToken.IsCancellationRequested)
+                {
+                    // Shutdown, or the consumer stopped early; stop producing.
+                }
+                finally
+                {
+                    pipeline.Writer.TryComplete();
+                }
+            }
         }
         finally
         {
@@ -214,6 +244,68 @@ public sealed class PackageBulkSeedWorker(
             status.AddPackagesExcluded(packagesExcluded);
             status.EndCycle();
         }
+    }
+
+    private async Task<(int seeded, int skipped, int excluded)> SeedFetchedBasesAsync(
+        IReadOnlyList<string> pkgBases,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> targets,
+        int parallelism,
+        CancellationToken ct)
+    {
+        var seeded = 0;
+        var skipped = 0;
+        var excluded = 0;
+
+        // Archive extraction is a read-only git operation on the shared bare cache, and seeding
+        // writes distinct package documents, so pkgbases are processed concurrently.
+        await Parallel.ForEachAsync(
+            pkgBases,
+            new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = ct },
+            async (pkgBase, token) =>
+            {
+                IReadOnlyDictionary<string, string> files;
+                try
+                {
+                    files = await mirror.ReadFilesAsync(pkgBase, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Could not read files for pkgbase {PkgBase}; skipping.", pkgBase);
+                    Interlocked.Add(ref skipped, targets[pkgBase].Count);
+                    return;
+                }
+
+                foreach (var packageName in targets[pkgBase])
+                    try
+                    {
+                        await packageService.SeedFilesAsync(packageName, files);
+                        Interlocked.Increment(ref seeded);
+                    }
+                    catch (PackageConflictException)
+                    {
+                        // Race: seeded between list and seed. Not an error.
+                    }
+                    catch (PackageDocumentTooLargeException ex)
+                    {
+                        await exclusions.RecordDocumentTooLargeAsync(pkgBase, targets[pkgBase], ex.SerializedSizeBytes, token);
+                        Interlocked.Add(ref excluded, targets[pkgBase].Count);
+                        logger.LogWarning(ex,
+                            "Excluded pkgbase {PkgBase} from future bulk seed cycles because its {SizeBytes}-byte package document exceeds MongoDB's limit.",
+                            pkgBase, ex.SerializedSizeBytes);
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to seed {PackageName}.", packageName);
+                        Interlocked.Increment(ref skipped);
+                    }
+            });
+
+        return (seeded, skipped, excluded);
     }
 
     private async Task<(int seeded, int skipped, int excluded)> SeedViaDirectCloneAsync(
@@ -264,4 +356,9 @@ public sealed class PackageBulkSeedWorker(
 
         return packageName;
     }
+
+    private sealed record FetchedBatch(
+        IReadOnlyList<string> Batch,
+        BulkFetchResult? Result,
+        Exception? Failure);
 }

@@ -105,7 +105,7 @@ public sealed class PackageSecurityWorker(
             await securityRepo.CompleteScanAsync(claim.PackageName, claim.RevisionId, _owner, result, ct);
 
             if (result.Status == SecurityStatus.Flagged)
-                logger.LogWarning(
+                logger.LogDebug(
                     "Security scan flagged {PackageName} revision {RevisionId}: {FindingCount} findings.",
                     claim.PackageName, claim.RevisionId, result.Findings.Count);
             else

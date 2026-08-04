@@ -93,7 +93,7 @@ Only `git-upload-pack` (fetch/clone) is supported; `git-receive-pack` (push) is 
 
 ## Hosted Services
 
-Two background services run automatically when the application starts.
+Background services run automatically when the application starts.
 
 ### Package Index Worker
 
@@ -125,6 +125,21 @@ The modes are mutually exclusive: `Direct` and `Bulk` each register one worker, 
 registers none. For Docker, set `Atoll__Seed__Mode=Bulk` and uncomment the
 `Atoll__Seed__Bulk__*` lines in `compose.yaml`, or set `Atoll__Seed__Mode=Off` to disable
 automatic seeding. Bulk-seed progress is exposed at `GET /metrics` under `bulkSeed`.
+
+### Package Refresh Worker
+
+Opt-in (`Atoll:Refresh:Enabled=true`). Continuously re-syncs seeded packages
+so the latest upstream versions are available instead of freezing at first seed. It is
+independent of the seed mode and shares the same GitHub mirror cache as bulk seeding.
+Change detection is content-based via upstream HEAD SHA (not metadata timestamps), with a
+staleness sweep so every seeded pkgbase is re-checked within `MaxStalenessHours`. New head
+revisions are blocked from being served until scanned by the security pipeline.
+Configuration, cycle mechanics, metrics (`packageRefresh`), and verification steps are
+documented in [`docs/SYNC.md`](docs/SYNC.md).
+
+For full details on both seeding and refresh — including the shared Git transport contract,
+cache lifecycle, configuration options, and plain-Git verification — see
+[`docs/SYNC.md`](docs/SYNC.md).
 
 ## Configuration
 

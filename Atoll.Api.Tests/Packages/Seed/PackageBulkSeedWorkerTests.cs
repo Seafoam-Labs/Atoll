@@ -252,6 +252,36 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Test]
+    public async Task RunCycleAsync_seeds_all_packages_in_parallel_across_batches()
+    {
+        var metas = Enumerable.Range(0, 40)
+            .Select(i => Meta($"pkg-{i}", $"base-{i}"))
+            .ToArray();
+        var store = IndexWithPackages(metas);
+        var repo = new InMemoryPackageRepository();
+        var mirror = new FakeMirror();
+        foreach (var meta in metas)
+            mirror.Branches.Add(meta.PackageBase);
+        var status = new BulkSeedStatusStore(true);
+        var worker = CreateWorker(store, repo, mirror, status);
+
+        // Batch size 10 forces four fetch batches; default parallelism seeds them concurrently.
+        var (seeded, skipped, backedOff) = await worker.RunCycleAsync(10, TimeSpan.Zero, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(seeded, Is.EqualTo(40));
+            Assert.That(skipped, Is.Zero);
+            Assert.That(backedOff, Is.False);
+            Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(4));
+            Assert.That(status.GetSnapshot().PackagesSeeded, Is.EqualTo(40));
+        });
+
+        foreach (var meta in metas)
+            Assert.That(await repo.ExistsAsync(meta.Name), Is.True, $"package {meta.Name} should be seeded");
+    }
+
+    [Test]
     public async Task RunCycleAsync_handles_read_files_failure_without_killing_cycle()
     {
         var store = IndexWithPackages(Meta("a", "a"), Meta("b", "b"));
@@ -317,12 +347,16 @@ public class PackageBulkSeedWorkerTests
 
     private sealed class InMemorySeedExclusionRepository : ISeedExclusionRepository
     {
+        private readonly Lock _gate = new();
         private readonly HashSet<string> _packageBases = new(StringComparer.Ordinal);
 
         public Task<IReadOnlySet<string>> ListDocumentTooLargePackageBasesAsync(CancellationToken ct = default)
         {
-            IReadOnlySet<string> result = _packageBases;
-            return Task.FromResult(result);
+            lock (_gate)
+            {
+                IReadOnlySet<string> result = new HashSet<string>(_packageBases, StringComparer.Ordinal);
+                return Task.FromResult(result);
+            }
         }
 
         public Task RecordDocumentTooLargeAsync(
@@ -331,8 +365,11 @@ public class PackageBulkSeedWorkerTests
             long serializedSizeBytes,
             CancellationToken ct = default)
         {
-            _packageBases.Add(packageBase);
-            return Task.CompletedTask;
+            lock (_gate)
+            {
+                _packageBases.Add(packageBase);
+                return Task.CompletedTask;
+            }
         }
     }
 

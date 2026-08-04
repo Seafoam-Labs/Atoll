@@ -9,7 +9,7 @@ public sealed class PackageIndexWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Package index refresh worker started with a {RefreshInterval} refresh interval.",
+        logger.LogInformation("Package index worker started with a {RefreshInterval} interval.",
             manager.RefreshInterval);
 
         try
@@ -18,7 +18,7 @@ public sealed class PackageIndexWorker(
 
             if (await repository.ExistsAsync(stoppingToken))
             {
-                logger.LogDebug("Cached metadata is available; waiting until the next scheduled refresh.");
+                logger.LogDebug("Cached metadata is available; waiting until the next scheduled interval.");
                 await Task.Delay(manager.RefreshInterval, stoppingToken);
             }
 
@@ -26,7 +26,7 @@ public sealed class PackageIndexWorker(
             {
                 var refreshed = await manager.DownloadAndReloadAsync(stoppingToken);
                 logger.LogDebug(
-                    "Package index refresh {RefreshResult}; waiting {RefreshInterval} until the next refresh.",
+                    "Package index refresh {RefreshResult}; waiting {RefreshInterval} until the next interval.",
                     refreshed ? "completed" : "failed", manager.RefreshInterval);
                 await Task.Delay(manager.RefreshInterval, stoppingToken);
             }

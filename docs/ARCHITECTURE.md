@@ -72,10 +72,10 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   is empty or fully seeded. This is the default `Seed:Mode=Direct` seeder.
 - **PackageBulkSeedWorker** (`Seed:Mode=Bulk`) is the mutually-exclusive alternative. It batch-fetches pkgbase branches
   from the read-only GitHub AUR mirror and seeds their files through the existing `SeedFilesAsync` path. See
-  [Bulk Seeding](SEED.md).
+  [Bulk Seeding](#bulk-seeding).
 - **No seed worker** (`Seed:Mode=Off`) disables automated package seeding while the metadata index worker and manual
   `POST /packages/{name}/seed` requests remain available.
-- **PackageRefreshWorker** (`Atoll:Refresh:Enabled=true`, off by default) keeps already-seeded packages up to date with
+- **PackageRefreshWorker** (`Atoll:Refresh:Enabled=true`) keeps already-seeded packages up to date with
   upstream AUR changes. It reuses the bulk-fetch mirror to batch-fetch changed pkgbases and appends new revisions
   through `AppendRevisionFromUpstreamAsync` when content changes. See [Periodic refresh](#periodic-refresh).
 - **PackageSearchService** serves all search queries from the immutable in-memory snapshot with no database round-trips.
@@ -104,44 +104,36 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 ## Bulk Seeding
 
 Bulk seeding is the opt-in, mutually exclusive alternative to direct AUR cloning (`Atoll:Seed:Mode=Bulk`). It groups
-missing **pkgnames** by **pkgbase**, fetches each mirror branch once, and fans the extracted files back out through the
-normal `SeedFilesAsync` path. This preserves split-package semantics while reducing network requests.
+missing **pkgnames** by **pkgbase**, fetches each mirror branch once from the GitHub AUR mirror, and fans the extracted
+files back out through the normal `SeedFilesAsync` path, preserving split-package semantics while replacing one network
+clone per pkgname with one batched request per pkgbase group. Fetching runs ahead of seeding as a pipeline, and
+per-pkgbase extraction and seeding execute with bounded parallelism (`Atoll:Seed:Bulk:Parallelism`).
 
-The Git transport contract, plain-Git verification steps, failure recovery, configuration, metrics, and cache lifecycle
-are documented in [Bulk package seeding](SEED.md).
+Cycle mechanics, configuration, metrics, the Git transport contract, plain-Git verification, and cache lifecycle are
+documented in [Package seeding and refresh](SYNC.md).
 
 ## Periodic refresh
 
 The opt-in `PackageRefreshWorker` (`Atoll:Refresh:Enabled=true`, default `false`) continuously re-syncs seeded packages
 so the latest upstream version is available instead of freezing at first seed. It is independent of the seed mode and
 can run alongside either `DirectSeedWorker` or `PackageBulkSeedWorker`; when active it shares the same `IAurMirror`
-(GitHub mirror cache) as bulk seeding.
+(GitHub mirror cache) singleton as bulk seeding.
 
-Change detection is **content-based via upstream HEAD SHA**, not AUR metadata timestamps. Each cycle:
+Change detection is **content-based via upstream HEAD SHA**, not AUR metadata timestamps, with a staleness sweep
+(`MaxStalenessHours`) so every seeded pkgbase is re-checked even when its SHA has not moved. Candidates whose SHA is
+unchanged skip the fetch entirely (watermark-only update); genuine SHA movers are batch-fetched and applied through a
+pipelined, bounded-parallelism cycle capped at `MaxPackagesPerRun` packages (default 10 000, since genuine movers are
+rare).
 
-1. Reads the sync state of all seeded packages (a lean projection of `packages`).
-2. Resolves each package's **pkgbase** from the index, falling back to the stored `upstreamPackageBase`, then the
-   pkgname.
-3. Issues one `git ls-remote --heads` against the mirror to obtain a branch→SHA map.
-4. Selects pkgbases whose members are out of sync: stored `lastSyncedUpstreamHead` differs from the current branch head,
-   the package was never synced, or the last success is older than `MaxStalenessHours` (safety sweep).
-5. Splits candidates by whether the upstream SHA actually moved. Candidates whose SHA is unchanged for **every** member
-   (staleness-only) skip the fetch entirely — the worker just advances their watermarks. Only genuine SHA movers are
-   batch-fetched, capped at `MaxPackagesPerRun` (default 10 000, since these are rare), reusing the bulk-seed
-   batching/bisection, and the extracted files fan out to each member pkgname.
-6. Computes the deterministic revision ID; if it matches the current head the package is recorded unchanged (but the
-   watermark still advances so the pkgbase isn't refetched). Otherwise a new revision is appended via
-   `AppendRevisionFromUpstreamAsync`, which also marks the new head revision `Pending` for security scanning and demotes
-   the previous head's scan (`PromoteHeadAsync`).
-
-New head revisions are therefore conservatively **blocked from being served until scanned** by the existing security
-gating, exactly like a fresh seed. On-disk bare repos are not touched during sync — `EnsureGitRepositoryAsync` observes
-the new `headRevisionId` and re-materializes lazily on the next request, keeping MongoDB authoritative.
+New head revisions appended via `AppendRevisionFromUpstreamAsync` are conservatively **blocked from being served until
+scanned** by the existing security gating, exactly like a fresh seed. On-disk bare repos are not touched during sync —
+`EnsureGitRepositoryAsync` observes the new `headRevisionId` and re-materializes lazily on the next request, keeping
+MongoDB authoritative.
 
 Each `packages` document carries lightweight refresh watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`,
 `lastSyncAttemptAt`, `lastSyncSucceededAt`, `lastSyncError`); these are nullable and omitted when unset, so they do not
-change the public API response contracts. `/metrics` exposes a `packageRefresh` block with per-cycle counts and
-timestamps.
+change the public API response contracts. Cycle steps, configuration, and metrics are documented in
+[Package seeding and refresh](SYNC.md).
 
 ## State & Storage
 
@@ -316,3 +308,4 @@ path atomically enough to avoid serving a revision whose content is absent.
 - AUR RPC interface: `https://aur.archlinux.org/rpc`
 - Git Smart HTTP protocol: `https://git-scm.com/docs/http-protocol`
 - Local setup and quickstart: see `README.md`
+- Package seeding and refresh: see `docs/SYNC.md`

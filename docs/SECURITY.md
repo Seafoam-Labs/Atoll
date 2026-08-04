@@ -202,7 +202,7 @@ not gated: they expose metadata and the scan summary, not package content.
   "Atoll": {
     "Security": {
       "Enabled": true,
-      "ScannerConcurrency": 16,
+      "ScannerConcurrency": 4,
       "PollIntervalMs": 100
     }
   }
@@ -212,7 +212,7 @@ not gated: they expose metadata and the scan summary, not package content.
 | Option               | Default | Range      | Effect                                                                                                    |
 | -------------------- | ------- | ---------- | --------------------------------------------------------------------------------------------------------- |
 | `Enabled`            | `true`  | bool       | Master switch. `false` makes `CheckAsync` allow everything and the worker exits without polling.          |
-| `ScannerConcurrency` | `16`    | 1–64       | Number of parallel poll/scan loops. Also bounds startup backfill parallelism.                             |
+| `ScannerConcurrency` | `4`     | 1–64       | Number of parallel poll/scan loops. Also bounds startup backfill parallelism.                             |
 | `PollIntervalMs`     | `100`   | 100–300000 | Delay between poll attempts when no pending package was claimed. Lowered load is traded for scan latency. |
 
 The lease duration is fixed at 5 minutes in `PackageSecurityWorker` and is not configurable.

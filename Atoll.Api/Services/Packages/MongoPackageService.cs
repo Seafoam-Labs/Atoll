@@ -16,6 +16,13 @@ public sealed class MongoPackageService(
     IPackageSecurityRepository securityRepository) : IPackageService
 {
     private const int MongoMaxDocumentSizeBytes = 16 * 1024 * 1024;
+
+    // Per-file BSON overhead: hash string, size field, element names, and framing.
+    private const int FileEntryOverheadBytes = 160;
+
+    // Document-level overhead: identifiers, timestamps, and revision metadata.
+    private const int DocumentOverheadBytes = 1024;
+
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
     private readonly AtollOptions _options = options.Value;
 
@@ -176,12 +183,15 @@ public sealed class MongoPackageService(
             Revisions = [revision]
         };
 
-        var serializedSizeBytes = doc.ToBson().LongLength;
-        if (serializedSizeBytes > MongoMaxDocumentSizeBytes)
-            throw new PackageDocumentTooLargeException(
-                packageName,
-                serializedSizeBytes,
-                MongoMaxDocumentSizeBytes);
+        if (EstimateSerializedSizeBound(packageFiles) > MongoMaxDocumentSizeBytes)
+        {
+            var serializedSizeBytes = doc.ToBson().LongLength;
+            if (serializedSizeBytes > MongoMaxDocumentSizeBytes)
+                throw new PackageDocumentTooLargeException(
+                    packageName,
+                    serializedSizeBytes,
+                    MongoMaxDocumentSizeBytes);
+        }
 
         await repo.InsertSeedAsync(doc);
         await securityRepository.MarkPendingAsync(packageName, revisionId, true);
@@ -332,6 +342,15 @@ public sealed class MongoPackageService(
         }
 
         return result;
+    }
+
+    private static long EstimateSerializedSizeBound(IReadOnlyDictionary<string, PackageFile> files)
+    {
+        long contentBytes = 0;
+        foreach (var (name, file) in files)
+            contentBytes += file.Size + Encoding.UTF8.GetByteCount(name) + FileEntryOverheadBytes;
+
+        return 2 * contentBytes + DocumentOverheadBytes;
     }
 
     private static string ComputeRevisionId(

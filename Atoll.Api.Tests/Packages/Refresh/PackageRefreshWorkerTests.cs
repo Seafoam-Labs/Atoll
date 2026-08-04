@@ -489,6 +489,47 @@ public class PackageRefreshWorkerTests
     }
 
     [Test]
+    public async Task RunCycleAsync_refreshes_many_changed_pkgbases_across_batches()
+    {
+        var metas = Enumerable.Range(0, 25)
+            .Select(i => Meta($"pkg-{i}", $"base-{i}"))
+            .ToArray();
+        var store = IndexWithPackages(metas);
+        var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        foreach (var meta in metas)
+            await SeedAsync(service, meta.Name, BaseFiles);
+
+        var updatedFiles = new Dictionary<string, string>
+        {
+            ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
+            [".SRCINFO"] = "pkgname = demo\n"
+        };
+        var mirror = new FakeRefreshMirror();
+        foreach (var meta in metas)
+        {
+            mirror.BranchHeads[meta.PackageBase] = $"sha-new-{meta.PackageBase}";
+            mirror.FilesFor[meta.PackageBase] = updatedFiles;
+        }
+
+        var status = new RefreshStatusStore(true);
+        var worker = CreateWorker(store, repo, service, mirror, status);
+
+        // Batch size 10 forces three fetch batches; default parallelism refreshes them concurrently.
+        var outcome = await worker.RunCycleAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(outcome, Is.EqualTo(RefreshCycleOutcome.Completed));
+            Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(3));
+            Assert.That(status.GetSnapshot().PackagesUpdated, Is.EqualTo(25));
+            Assert.That(status.GetSnapshot().PackagesUnchanged, Is.Zero);
+            Assert.That(status.GetSnapshot().PackagesSkipped, Is.Zero);
+        });
+    }
+
+    [Test]
     public void RefreshPlan_ResolvePackageBase_falls_back_to_stored_upstream_base()
     {
         // Package not in the index but has a persisted upstream pkgbase.
