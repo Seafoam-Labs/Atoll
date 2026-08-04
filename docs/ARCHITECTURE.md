@@ -257,8 +257,9 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 - **Logging:** ASP.NET Core structured console logging; workers log seeding progress, refresh status, and errors.
   `Activity.Current?.Id` is captured in error logs for correlation.
 - **Metrics:** `GET /metrics` returns uptime, total search request count, index sizes (ByNames / ByWords / ByProvides),
-  AUR refresh statistics (attempts, successes, failures, last timestamps), bulk-seed statistics, and (when refresh is
-  enabled) package-refresh statistics. Alerting is not configured; intended for the infrastructure layer.
+  AUR refresh statistics (attempts, successes, failures, last timestamps), bulk-seed statistics, security-scan
+  statistics (throughput, outcomes, backlog depth), and (when refresh is enabled) package-refresh statistics. Alerting
+  is not configured; intended for the infrastructure layer.
 - **Health:** `/health` is liveness only. There is no readiness signal - the search index may be empty on first requests
   after a cold start, and `/health` does not verify MongoDB connectivity.
 
@@ -278,8 +279,8 @@ fallback for pkgbases missing from the mirror (currently skipped), and a periodi
 Security state is keyed by package and revision (`{packageName}:{revisionId}`), so each retained revision is scanned
 and gated independently: a flagged revision blocks only itself, and the `versions/{sha}` route enforces the requested
 revision's own status. Remaining follow-ups: richer rule coverage, source-host allow/deny lists, manual override
-state (`ForceVerified` / `ForceBlocked`), Git-route per-revision enforcement (Git routes are currently head-gated
-only), and security metrics under `/metrics`.
+state (`ForceVerified` / `ForceBlocked`), and Git-route per-revision enforcement (Git routes are currently head-gated
+only).
 
 ### 3. Incremental index updates
 

@@ -44,9 +44,13 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
 
     public async Task<IReadOnlyCollection<string>> ListPackageNamesAsync(CancellationToken ct = default)
     {
-        return await _scans
-            .Distinct(x => x.PackageName, Builders<PackageSecurityScanDocument>.Filter.Empty, cancellationToken: ct)
-            .ToListAsync(ct);
+        var cursor = await _scans.DistinctAsync(x => x.PackageName, Builders<PackageSecurityScanDocument>.Filter.Empty, null, ct);
+        return await cursor.ToListAsync(ct);
+    }
+
+    public async Task<long> CountPendingAsync(CancellationToken ct = default)
+    {
+        return await _scans.CountDocumentsAsync(x => x.Status == SecurityStatus.Pending, cancellationToken: ct);
     }
 
     public async Task MarkPendingAsync(

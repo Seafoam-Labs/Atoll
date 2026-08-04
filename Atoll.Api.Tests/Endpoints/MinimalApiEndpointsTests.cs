@@ -93,5 +93,13 @@ public class MinimalApiEndpointsTests
         Assert.That(indexSizes.GetProperty("byNames").GetInt64(), Is.EqualTo(3));
         Assert.That(indexSizes.GetProperty("byProvides").GetInt64(), Is.EqualTo(3));
         Assert.That(indexSizes.GetProperty("byWords").GetInt64(), Is.GreaterThan(0));
+
+        var securityScan = root.GetProperty("securityScan");
+        Assert.Multiple(() =>
+        {
+            Assert.That(securityScan.GetProperty("enabled").GetBoolean(), Is.True);
+            Assert.That(securityScan.GetProperty("scansCompleted").GetInt64(), Is.Zero);
+            Assert.That(securityScan.GetProperty("pendingScans").GetInt64(), Is.Zero);
+        });
     }
 }

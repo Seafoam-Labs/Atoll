@@ -63,9 +63,11 @@ builder.Services.AddHostedService<PackageSecurityWorker>();
 var seedMode = builder.Configuration.GetSection("Atoll:Seed").Get<SeedOptions>()?.Mode ?? SeedMode.Direct;
 var bulkEnabled = seedMode == SeedMode.Bulk;
 var refreshEnabled = builder.Configuration.GetSection("Atoll:Refresh").Get<RefreshOptions>()?.Enabled ?? false;
+var securityEnabled = builder.Configuration.GetSection("Atoll:Security").Get<SecurityOptions>()?.Enabled ?? true;
 // Always added for Metrics. Not needed to be always once Open-telemetry is added.
 builder.Services.AddSingleton(new BulkSeedStatusStore(bulkEnabled));
 builder.Services.AddSingleton(new RefreshStatusStore(refreshEnabled));
+builder.Services.AddSingleton(new SecurityScanStatusStore(securityEnabled));
 
 // The mirror is shared by bulk seeding and refresh; register it when either is active.
 if (bulkEnabled || refreshEnabled)

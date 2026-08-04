@@ -4,6 +4,7 @@ using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Security;
 
 namespace Atoll.Api.Services.Metrics;
 
@@ -13,6 +14,7 @@ public sealed class MetricsService(
     PackageIndexUpdater updater,
     BulkSeedStatusStore bulkSeedStatus,
     RefreshStatusStore packageRefreshStatus,
+    SecurityScanStatusStore securityScanStatus,
     ApplicationRuntimeInfo runtimeInfo)
 {
     public Metrics GetMetrics()
@@ -42,7 +44,8 @@ public sealed class MetricsService(
                 LastFailedUtc = refresh.LastFailedUtc
             },
             BulkSeed = MapBulkSeed(bulkSeedStatus.GetSnapshot()),
-            PackageRefresh = MapPackageRefresh(packageRefreshStatus.GetSnapshot())
+            PackageRefresh = MapPackageRefresh(packageRefreshStatus.GetSnapshot()),
+            SecurityScan = MapSecurityScan(securityScanStatus.GetSnapshot())
         };
     }
 
@@ -81,6 +84,21 @@ public sealed class MetricsService(
             RefsFailed = s.RefsFailed,
             LastStartedUtc = s.LastStartedUtc,
             LastFinishedUtc = s.LastFinishedUtc
+        };
+    }
+
+    private static SecurityScanStatus MapSecurityScan(SecurityScanStatusSnapshot s)
+    {
+        return new SecurityScanStatus
+        {
+            Enabled = s.Enabled,
+            ScansCompleted = s.ScansCompleted,
+            ScansVerified = s.ScansVerified,
+            ScansFlagged = s.ScansFlagged,
+            ScansErrored = s.ScansErrored,
+            ScansDropped = s.ScansDropped,
+            PendingScans = s.PendingScans,
+            LastScanFinishedUtc = s.LastScanFinishedUtc
         };
     }
 }

@@ -8,6 +8,7 @@ public sealed class Metrics
     public RefreshStatus Refresh { get; set; } = new();
     public BulkSeedStatus? BulkSeed { get; set; }
     public PackageRefreshStatus? PackageRefresh { get; set; }
+    public SecurityScanStatus? SecurityScan { get; set; }
 }
 
 public sealed class IndexSizes
@@ -59,4 +60,16 @@ public sealed class PackageRefreshStatus
     public long RefsFailed { get; set; }
     public DateTimeOffset? LastStartedUtc { get; set; }
     public DateTimeOffset? LastFinishedUtc { get; set; }
+}
+
+public sealed class SecurityScanStatus
+{
+    public bool Enabled { get; set; }
+    public long ScansCompleted { get; set; }
+    public long ScansVerified { get; set; }
+    public long ScansFlagged { get; set; }
+    public long ScansErrored { get; set; }
+    public long ScansDropped { get; set; }
+    public long PendingScans { get; set; }
+    public DateTimeOffset? LastScanFinishedUtc { get; set; }
 }

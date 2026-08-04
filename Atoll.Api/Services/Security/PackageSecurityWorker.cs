@@ -7,11 +7,16 @@ public sealed class PackageSecurityWorker(
     IPackageRepository packageRepository,
     IPackageSecurityRepository securityRepo,
     IPackageSecurityScanner scanner,
+    SecurityScanStatusStore status,
     IOptions<AtollOptions> options,
     ILogger<PackageSecurityWorker> logger)
     : BackgroundService
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
+
+    // One gauge query per interval regardless of concurrency keeps the backlog metric cheap;
+    // 30s trades metric freshness against query load.
+    private static readonly TimeSpan PendingScanCountInterval = TimeSpan.FromSeconds(30);
 
     private readonly string _owner = $"{Environment.MachineName}:{Guid.NewGuid():N}";
     private readonly SecurityOptions _security = options.Value.Security;
@@ -32,7 +37,8 @@ public sealed class PackageSecurityWorker(
             _security.PollIntervalMs, _security.ScannerConcurrency);
 
         var workers = Enumerable.Range(0, _security.ScannerConcurrency)
-            .Select(_ => PollLoopAsync(pollInterval, stoppingToken));
+            .Select(_ => PollLoopAsync(pollInterval, stoppingToken))
+            .Append(TrackPendingScansLoopAsync(stoppingToken));
         await Task.WhenAll(workers);
     }
 
@@ -82,6 +88,28 @@ public sealed class PackageSecurityWorker(
         }
     }
 
+    private async Task TrackPendingScansLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                var pending = await securityRepo.CountPendingAsync(ct);
+                status.UpdatePendingScans(pending);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Could not refresh the pending security scan count.");
+            }
+
+            await Task.Delay(PendingScanCountInterval, ct);
+        }
+    }
+
     private async Task<bool> ClaimAndScanOneAsync(CancellationToken ct)
     {
         var claim = await securityRepo.TryClaimPendingScanAsync(_owner, LeaseDuration, ct);
@@ -97,12 +125,14 @@ public sealed class PackageSecurityWorker(
                     "Dropping security scan claim for {PackageName} revision {RevisionId}: revision no longer retained.",
                     claim.PackageName, claim.RevisionId);
                 await securityRepo.DeleteAsync(claim.PackageName, claim.RevisionId, ct);
+                status.RecordScanDropped();
                 return true;
             }
 
             var files = revision.Files.ToDictionary(kv => kv.Key, kv => kv.Value.Content, StringComparer.Ordinal);
             var result = scanner.Scan(files);
             await securityRepo.CompleteScanAsync(claim.PackageName, claim.RevisionId, _owner, result, ct);
+            status.RecordScanCompleted(result.Status);
 
             if (result.Status == SecurityStatus.Flagged)
                 logger.LogDebug(
@@ -123,6 +153,7 @@ public sealed class PackageSecurityWorker(
             logger.LogWarning(ex, "Security scan failed for {PackageName} revision {RevisionId}; marking as Error.",
                 claim.PackageName, claim.RevisionId);
             await MarkScanErrorQuietlyAsync(claim);
+            status.RecordScanErrored();
         }
 
         return true;

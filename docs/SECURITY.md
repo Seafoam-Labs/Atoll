@@ -215,12 +215,29 @@ not gated: they expose metadata and the scan summary, not package content.
 | `ScannerConcurrency` | `4`     | 1–64       | Number of parallel poll/scan loops. Also bounds startup backfill parallelism.                             |
 | `PollIntervalMs`     | `100`   | 100–300000 | Delay between poll attempts when no pending package was claimed. Lowered load is traded for scan latency. |
 
-The lease duration is fixed at 5 minutes in `PackageSecurityWorker` and is not configurable.
+The lease duration is fixed at 5 minutes in `PackageSecurityWorker` and is not configurable. The `pendingScans`
+metrics gauge is refreshed every 30 seconds, independent of `ScannerConcurrency`.
 
 ## Observability
 
-There is no dedicated metrics section for security in `GET /metrics`. Diagnose scans through logs and the MongoDB
-collection:
+`GET /metrics` exposes a `securityScan` section backed by `SecurityScanStatusStore`, updated by
+`PackageSecurityWorker` as scans finish:
+
+| Field                 | Meaning                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
+| `enabled`             | Whether security scanning is enabled.                                                                    |
+| `scansCompleted`      | Scans that reached a terminal status (`scansVerified` + `scansFlagged` + `scansErrored`).                |
+| `scansVerified`       | Scans that completed `Verified`.                                                                         |
+| `scansFlagged`        | Scans that completed `Flagged`.                                                                          |
+| `scansErrored`        | Scans that failed and were marked `Error`.                                                               |
+| `scansDropped`        | Claims dropped because the claimed revision aged out of the retained history before it could be scanned. |
+| `pendingScans`        | Backlog depth: the number of `Pending` scan documents. Refreshed every 30 seconds.                       |
+| `lastScanFinishedUtc` | When the last scan completed or errored.                                                                 |
+
+Content is not served until the head revision is scanned, so compare `pendingScans` against the bulk-seed and
+package-refresh throughput on the same endpoint to see whether the scanner keeps up with ingestion.
+
+Diagnose individual scans through logs and the MongoDB collection:
 
 - Each completed scan logs
   `Security scan for {PackageName} revision {RevisionId} -> {Status} ({FindingCount} findings).`
@@ -311,8 +328,6 @@ the previous section resolving on its own after restart.
   revision's status, so a `Flagged` historical revision remains reachable via `git clone` + `git checkout <sha>` even
   though the equivalent `GET /packages/{name}/versions/{sha}` request is blocked. Closing this would require either
   blocking clones when any retained revision is flagged, or filtering refs/objects during pack transfer.
-- **No metrics.** Scan throughput, backlog depth, and flag rate are not exported to `/metrics`; use logs and MongoDB
-  queries.
 - **Single-instance assumption.** The lease scheme supports multiple worker loops within one instance and is safe
   against crashes, but has not been validated for multiple API replicas. The broader single-instance assumption is noted
   in `ARCHITECTURE.md`.

@@ -48,6 +48,14 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         }
     }
 
+    public Task<long> CountPendingAsync(CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            return Task.FromResult((long)_scans.Values.Count(s => s.Status == SecurityStatus.Pending));
+        }
+    }
+
     public Task MarkPendingAsync(
         string packageName,
         string revisionId,
