@@ -88,10 +88,62 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
             Revisions = new List<PackageRevisionDocument> { revision }
                 .Concat(existing.Revisions)
                 .Take(maxRevisions)
-                .ToList()
+                .ToList(),
+            UpstreamPackageBase = existing.UpstreamPackageBase,
+            LastSyncedUpstreamHead = existing.LastSyncedUpstreamHead,
+            LastSyncAttemptAt = existing.LastSyncAttemptAt,
+            LastSyncSucceededAt = existing.LastSyncSucceededAt,
+            LastSyncError = existing.LastSyncError
         };
 
         _docs[packageName] = updated;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<PackageSyncState> result = _docs.Values
+            .Select(d => new PackageSyncState
+            {
+                PackageName = d.PackageName,
+                UpstreamPackageBase = d.UpstreamPackageBase,
+                LastSyncedUpstreamHead = d.LastSyncedUpstreamHead,
+                LastSyncSucceededAt = d.LastSyncSucceededAt
+            })
+            .ToList();
+
+        return Task.FromResult(result);
+    }
+
+    public Task UpdateSyncStateAsync(
+        IReadOnlyCollection<string> packageNames,
+        string? upstreamHead,
+        bool succeeded,
+        string? error,
+        CancellationToken ct = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var name in packageNames)
+        {
+            if (!_docs.TryGetValue(name, out var existing)) continue;
+
+            _docs[name] = new PackageDocument
+            {
+                Id = existing.Id,
+                PackageName = existing.PackageName,
+                CreatedAt = existing.CreatedAt,
+                UpdatedAt = existing.UpdatedAt,
+                HeadRevisionId = existing.HeadRevisionId,
+                Files = existing.Files,
+                Revisions = existing.Revisions,
+                UpstreamPackageBase = existing.UpstreamPackageBase,
+                LastSyncAttemptAt = now,
+                LastSyncSucceededAt = succeeded ? now : existing.LastSyncSucceededAt,
+                LastSyncedUpstreamHead = succeeded ? upstreamHead : existing.LastSyncedUpstreamHead,
+                LastSyncError = succeeded ? null : error
+            };
+        }
+
         return Task.CompletedTask;
     }
 

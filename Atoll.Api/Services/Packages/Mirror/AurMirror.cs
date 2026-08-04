@@ -3,7 +3,7 @@ using System.Text;
 using CliWrap;
 using CliWrap.Exceptions;
 
-namespace Atoll.Api.Services.Packages.Seed;
+namespace Atoll.Api.Services.Packages.Mirror;
 
 public class AurMirror : IAurMirror
 {
@@ -48,27 +48,20 @@ public class AurMirror : IAurMirror
 
     public async Task<IReadOnlySet<string>> ListBranchesAsync(CancellationToken ct = default)
     {
+        var heads = await ListBranchHeadsAsync(ct);
+        var branches = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pkgBase in heads.Keys)
+            branches.Add(pkgBase);
+        return branches;
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> ListBranchHeadsAsync(CancellationToken ct = default)
+    {
         // protocol v2 keeps the advertisement compact; --heads limits to branch refs.
         var output = await RunGitAsync(["-c", "protocol.version=2", "ls-remote", "--heads", RemoteName],
             _cachePath, ct);
 
-        var branches = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            // Format: "<sha>\trefs/heads/<pkgbase>"
-            var tab = line.IndexOf('\t');
-            if (tab < 0 || tab + 1 >= line.Length) continue;
-
-            var refName = line.AsSpan(tab + 1);
-            const string prefix = "refs/heads/";
-            if (!refName.StartsWith(prefix)) continue;
-
-            var pkgBase = refName[prefix.Length..].ToString();
-            if (!string.IsNullOrEmpty(pkgBase))
-                branches.Add(pkgBase);
-        }
-
-        return branches;
+        return ParseBranchHeads(output);
     }
 
     public async Task<BulkFetchResult> FetchAsync(IReadOnlyList<string> pkgBases, CancellationToken ct = default)
@@ -137,6 +130,28 @@ public class AurMirror : IAurMirror
         }
 
         return files;
+    }
+
+    private static IReadOnlyDictionary<string, string> ParseBranchHeads(string output)
+    {
+        var heads = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            // Format: "<sha>\trefs/heads/<pkgbase>"
+            var tab = line.IndexOf('\t');
+            if (tab < 0 || tab + 1 >= line.Length) continue;
+
+            var sha = line.AsSpan(0, tab).ToString();
+            var refName = line.AsSpan(tab + 1);
+            const string prefix = "refs/heads/";
+            if (!refName.StartsWith(prefix)) continue;
+
+            var pkgBase = refName[prefix.Length..].ToString();
+            if (!string.IsNullOrEmpty(pkgBase) && !string.IsNullOrEmpty(sha))
+                heads[pkgBase] = sha;
+        }
+
+        return heads;
     }
 
     private async Task<BulkFetchResult> BisectAsync(IReadOnlyList<string> pkgBases, CancellationToken ct)

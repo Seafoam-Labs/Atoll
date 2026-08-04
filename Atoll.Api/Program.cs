@@ -3,6 +3,8 @@ using Atoll.Api;
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Packages.Mirror;
+using Atoll.Api.Services.Packages.Refresh;
 using Atoll.Api.Services.Packages.Seed;
 using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
@@ -60,19 +62,27 @@ builder.Services.AddHostedService<PackageSecurityWorker>();
 
 var seedMode = builder.Configuration.GetSection("Atoll:Seed").Get<SeedOptions>()?.Mode ?? SeedMode.Direct;
 var bulkEnabled = seedMode == SeedMode.Bulk;
+var refreshEnabled = builder.Configuration.GetSection("Atoll:Refresh").Get<RefreshOptions>()?.Enabled ?? false;
 // Always added for Metrics. Not needed to be always once Open-telemetry is added.
 builder.Services.AddSingleton(new BulkSeedStatusStore(bulkEnabled));
+builder.Services.AddSingleton(new RefreshStatusStore(refreshEnabled));
+
+// The mirror is shared by bulk seeding and refresh; register it when either is active.
+if (bulkEnabled || refreshEnabled)
+    builder.Services.AddSingleton<IAurMirror>(sp =>
+    {
+        var options = sp.GetRequiredService<IOptions<AtollOptions>>().Value;
+        // Prefer the bulk seeder's mirror config when bulk mode is active so both workers share it.
+        var (mirrorUrl, cachePath) = bulkEnabled
+            ? (options.Seed.Bulk.MirrorUrl, options.Seed.Bulk.CachePath)
+            : (options.Refresh.MirrorUrl, options.Refresh.CachePath);
+        var logger = sp.GetRequiredService<ILogger<AurMirror>>();
+        return new AurMirror(mirrorUrl, cachePath, logger);
+    });
 
 switch (seedMode)
 {
     case SeedMode.Bulk:
-        builder.Services.AddSingleton<IAurMirror>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<AtollOptions>>().Value;
-            var bulk = options.Seed.Bulk;
-            var logger = sp.GetRequiredService<ILogger<AurMirror>>();
-            return new AurMirror(bulk.MirrorUrl, bulk.CachePath, logger);
-        });
         builder.Services.AddHostedService<PackageBulkSeedWorker>();
         break;
     case SeedMode.Direct:
@@ -83,6 +93,9 @@ switch (seedMode)
     default:
         throw new InvalidOperationException($"Unsupported seed mode: {seedMode}.");
 }
+
+if (refreshEnabled)
+    builder.Services.AddHostedService<PackageRefreshWorker>();
 
 builder.Services.AddHostedService<PackageIndexWorker>();
 

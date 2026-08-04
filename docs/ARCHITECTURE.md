@@ -75,6 +75,9 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   [Bulk Seeding](SEED.md).
 - **No seed worker** (`Seed:Mode=Off`) disables automated package seeding while the metadata index worker and manual
   `POST /packages/{name}/seed` requests remain available.
+- **PackageRefreshWorker** (`Atoll:Refresh:Enabled=true`, off by default) keeps already-seeded packages up to date with
+  upstream AUR changes. It reuses the bulk-fetch mirror to batch-fetch changed pkgbases and appends new revisions
+  through `AppendRevisionFromUpstreamAsync` when content changes. See [Periodic refresh](#periodic-refresh).
 - **PackageSearchService** serves all search queries from the immutable in-memory snapshot with no database round-trips.
 - **GitTransferService** shells out to `git upload-pack` to serve clone/fetch requests. Bare repositories under
   `data/repos/` are materialized lazily from MongoDB documents by `MongoPackageService.EnsureGitRepositoryAsync`
@@ -107,16 +110,50 @@ normal `SeedFilesAsync` path. This preserves split-package semantics while reduc
 The Git transport contract, plain-Git verification steps, failure recovery, configuration, metrics, and cache lifecycle
 are documented in [Bulk package seeding](SEED.md).
 
+## Periodic refresh
+
+The opt-in `PackageRefreshWorker` (`Atoll:Refresh:Enabled=true`, default `false`) continuously re-syncs seeded packages
+so the latest upstream version is available instead of freezing at first seed. It is independent of the seed mode and
+can run alongside either `DirectSeedWorker` or `PackageBulkSeedWorker`; when active it shares the same `IAurMirror`
+(GitHub mirror cache) as bulk seeding.
+
+Change detection is **content-based via upstream HEAD SHA**, not AUR metadata timestamps. Each cycle:
+
+1. Reads the sync state of all seeded packages (a lean projection of `packages`).
+2. Resolves each package's **pkgbase** from the index, falling back to the stored `upstreamPackageBase`, then the
+   pkgname.
+3. Issues one `git ls-remote --heads` against the mirror to obtain a branch→SHA map.
+4. Selects pkgbases whose members are out of sync: stored `lastSyncedUpstreamHead` differs from the current branch head,
+   the package was never synced, or the last success is older than `MaxStalenessHours` (safety sweep).
+5. Splits candidates by whether the upstream SHA actually moved. Candidates whose SHA is unchanged for **every** member
+   (staleness-only) skip the fetch entirely — the worker just advances their watermarks. Only genuine SHA movers are
+   batch-fetched, capped at `MaxPackagesPerRun` (default 10 000, since these are rare), reusing the bulk-seed
+   batching/bisection, and the extracted files fan out to each member pkgname.
+6. Computes the deterministic revision ID; if it matches the current head the package is recorded unchanged (but the
+   watermark still advances so the pkgbase isn't refetched). Otherwise a new revision is appended via
+   `AppendRevisionFromUpstreamAsync`, which also marks the new head revision `Pending` for security scanning and demotes
+   the previous head's scan (`PromoteHeadAsync`).
+
+New head revisions are therefore conservatively **blocked from being served until scanned** by the existing security
+gating, exactly like a fresh seed. On-disk bare repos are not touched during sync — `EnsureGitRepositoryAsync` observes
+the new `headRevisionId` and re-materializes lazily on the next request, keeping MongoDB authoritative.
+
+Each `packages` document carries lightweight refresh watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`,
+`lastSyncAttemptAt`, `lastSyncSucceededAt`, `lastSyncError`); these are nullable and omitted when unset, so they do not
+change the public API response contracts. `/metrics` exposes a `packageRefresh` block with per-cycle counts and
+timestamps.
+
 ## State & Storage
 
-- **MongoDB (authoritative):** `packages` stores package documents with embedded files and revision history;
-  `aur-metadata` stores the full AUR package dump as typed documents; `seed-exclusions` records pkgbases that cannot
-  currently fit in a MongoDB document; `package-security-scans` stores the security state and latest findings for each
-  retained package revision (keyed by `{packageName}:{revisionId}`; compound-indexed on `(status, leaseUntil)` for the
-  scan work queue and on `(packageName, isHead)` for head lookups). The
-  `packages` collection is indexed on `packageName` at startup so the head/exists/history/revision/delete lookups (which
-  filter on `packageName`, not `_id`) are index-served; the index is non-unique to tolerate pre-existing data even
-  though `packageName` is effectively unique in production. The security-state schema and lifecycle are documented in
+- **MongoDB (authoritative):** `packages` stores package documents with embedded files, revision history, and refresh
+  sync watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`, `lastSyncAttemptAt`, `lastSyncSucceededAt`,
+  `lastSyncError`); `aur-metadata` stores the full AUR package dump as typed documents; `seed-exclusions` records
+  pkgbases that cannot currently fit in a MongoDB document; `package-security-scans` stores the security state and
+  latest findings for each retained package revision (keyed by `{packageName}:{revisionId}`; compound-indexed on
+  `(status, leaseUntil)` for the scan work queue and on `(packageName, isHead)` for head lookups). The `packages`
+  collection is indexed on `packageName` at startup so the head/exists/history/revision/delete lookups (which filter on
+  `packageName`, not `_id`) are index-served; the index is non-unique to tolerate pre-existing data even though
+  `packageName` is effectively unique in production. The security-state schema and lifecycle are documented in
   [Package security scanning](SECURITY.md).
 - **In-memory index (cache):** `PackageIndexStore` - immutable snapshot of `ByNames`, `ByWords`, `ByProvides`
   dictionaries; rebuilt from MongoDB on startup and after each AUR refresh.
@@ -228,8 +265,8 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 - **Logging:** ASP.NET Core structured console logging; workers log seeding progress, refresh status, and errors.
   `Activity.Current?.Id` is captured in error logs for correlation.
 - **Metrics:** `GET /metrics` returns uptime, total search request count, index sizes (ByNames / ByWords / ByProvides),
-  and AUR refresh statistics (attempts, successes, failures, last timestamps). Alerting is not configured; intended for
-  the infrastructure layer.
+  AUR refresh statistics (attempts, successes, failures, last timestamps), bulk-seed statistics, and (when refresh is
+  enabled) package-refresh statistics. Alerting is not configured; intended for the infrastructure layer.
 - **Health:** `/health` is liveness only. There is no readiness signal - the search index may be empty on first requests
   after a cold start, and `/health` does not verify MongoDB connectivity.
 
@@ -237,15 +274,11 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 
 ### 1. Periodic refresh and sync of packages from AUR upstream
 
-Continuously re-sync seeded packages so the latest version is always available, instead of seeding once and freezing.
-Open questions that need research before implementation:
-
-- **Change detection** - cheap ways to discover updated packages (e.g. `git ls-remote` on the GitHub mirror vs. stored
-  head SHAs, AUR RPC `info` calls, or the `LastModified` field in the metadata dump).
-- **Sync rate** - how often to poll without abusing upstream rate limits; likely tiered (popular/recently-updated
-  packages more frequently).
-- **Update path** - integrate with the bulk-fetch worker so refreshes are also batched; append new revisions to the
-  embedded history respecting `MaxRevisions`, and refresh materialized bare repos when the head changes.
+**Implemented** (see [Periodic refresh](#periodic-refresh) above). `PackageRefreshWorker` keeps seeded packages in sync
+with upstream AUR changes by detecting HEAD-SHA movement on the GitHub mirror and appending new revisions through
+`AppendRevisionFromUpstreamAsync`, gated by the existing security scan pipeline. Remaining follow-ups: tiered cadence
+(popular/recently-updated packages more frequently) instead of the current single-interval loop, optional direct-AUR
+fallback for pkgbases missing from the mirror (currently skipped), and a periodic full-verification pass for healing.
 
 ### 2. Security scanning of PKGBUILD and package scripts
 

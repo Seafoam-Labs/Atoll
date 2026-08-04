@@ -25,13 +25,7 @@ internal sealed class MongoApiTestFactory : WebApplicationFactory<Program>
             })
             .Build());
 
-        builder.ConfigureServices(services =>
-        {
-            services.RemoveAll<IHostedService>();
-
-            // Keep IPackageRepository / IAurMetadataRepository / IMongoClient as registered in
-            // Program.cs so the host exercises real Mongo-backed storage.
-        });
+        builder.ConfigureServices(services => { services.RemoveAll<IHostedService>(); });
     }
 
     public IPackageRepository CreatePackageRepository()

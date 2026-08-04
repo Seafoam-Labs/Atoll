@@ -5,6 +5,7 @@ riderModule.iml
 /_ReSharper.Caches/
 .idea/
 .vscode/
+.zed/
 *.DotSettings.user
 packages-meta-ext-v1.json
 /Atoll.Api/data

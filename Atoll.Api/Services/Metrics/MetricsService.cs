@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Packages.Refresh;
 using Atoll.Api.Services.Packages.Seed;
 using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
@@ -11,6 +12,7 @@ public sealed class MetricsService(
     PackageSearchService searchService,
     PackageIndexUpdater updater,
     BulkSeedStatusStore bulkSeedStatus,
+    RefreshStatusStore packageRefreshStatus,
     ApplicationRuntimeInfo runtimeInfo)
 {
     public Metrics GetMetrics()
@@ -39,7 +41,8 @@ public sealed class MetricsService(
                 LastSucceededUtc = refresh.LastSucceededUtc,
                 LastFailedUtc = refresh.LastFailedUtc
             },
-            BulkSeed = MapBulkSeed(bulkSeedStatus.GetSnapshot())
+            BulkSeed = MapBulkSeed(bulkSeedStatus.GetSnapshot()),
+            PackageRefresh = MapPackageRefresh(packageRefreshStatus.GetSnapshot())
         };
     }
 
@@ -56,6 +59,26 @@ public sealed class MetricsService(
             PackagesSeeded = s.PackagesSeeded,
             PackagesSkipped = s.PackagesSkipped,
             PackagesExcluded = s.PackagesExcluded,
+            LastStartedUtc = s.LastStartedUtc,
+            LastFinishedUtc = s.LastFinishedUtc
+        };
+    }
+
+    private static PackageRefreshStatus MapPackageRefresh(PackageRefreshStatusSnapshot s)
+    {
+        return new PackageRefreshStatus
+        {
+            Enabled = s.Enabled,
+            CyclesAttempted = s.CyclesAttempted,
+            CyclesSucceeded = s.CyclesSucceeded,
+            CyclesFailed = s.CyclesFailed,
+            CandidatePackages = s.CandidatePackages,
+            CandidatePackageBases = s.CandidatePackageBases,
+            PackagesUpdated = s.PackagesUpdated,
+            PackagesUnchanged = s.PackagesUnchanged,
+            PackagesSkipped = s.PackagesSkipped,
+            RefsSkipped = s.RefsSkipped,
+            RefsFailed = s.RefsFailed,
             LastStartedUtc = s.LastStartedUtc,
             LastFinishedUtc = s.LastFinishedUtc
         };

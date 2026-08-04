@@ -187,6 +187,39 @@ public sealed class MongoPackageService(
         await securityRepository.MarkPendingAsync(packageName, revisionId, true);
     }
 
+    public async Task<bool> AppendRevisionFromUpstreamAsync(
+        string packageName,
+        IReadOnlyDictionary<string, string> files,
+        CancellationToken ct = default)
+    {
+        var packageFiles = BuildAndValidatePackageFiles(files);
+        var revisionId = ComputeRevisionId(packageName, packageFiles);
+
+        var current = await repo.GetHeadAsync(packageName, ct);
+        if (current is null)
+            throw new KeyNotFoundException($"Package '{packageName}' not found.");
+
+        if (revisionId == current.HeadRevisionId)
+            return false;
+
+        var now = DateTimeOffset.UtcNow;
+        var revision = new PackageRevisionDocument
+        {
+            RevisionId = revisionId,
+            CreatedAt = now,
+            Author = "aur",
+            Message = "refresh from AUR",
+            Files = packageFiles
+        };
+
+        await repo.AppendRevisionAsync(packageName, revision, packageFiles, _options.Mongo.MaxRevisions, ct);
+
+        await securityRepository.MarkPendingAsync(packageName, revisionId, true, ct);
+        await securityRepository.PromoteHeadAsync(packageName, revisionId, ct);
+
+        return true;
+    }
+
     internal string ResolvePackageBase(string packageName)
     {
         if (indexStore.Current.ByNames.TryGetValue(packageName, out var metadata)

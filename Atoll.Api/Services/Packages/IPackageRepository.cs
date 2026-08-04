@@ -16,11 +16,12 @@ public interface IPackageRepository
 
     Task InsertSeedAsync(PackageDocument doc, CancellationToken ct = default);
 
-    Task AppendRevisionAsync(
-        string packageName,
-        PackageRevisionDocument revision,
-        Dictionary<string, PackageFile> headFiles,
-        int maxRevisions,
+    Task AppendRevisionAsync(string packageName, PackageRevisionDocument revision, Dictionary<string, PackageFile> headFiles,
+        int maxRevisions, CancellationToken ct = default);
+
+    Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default);
+
+    Task UpdateSyncStateAsync(IReadOnlyCollection<string> packageNames, string? upstreamHead, bool succeeded, string? error,
         CancellationToken ct = default);
 
     Task DeleteAsync(string packageName, CancellationToken ct = default);

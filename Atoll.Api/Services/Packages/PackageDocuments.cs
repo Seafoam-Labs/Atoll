@@ -20,6 +20,26 @@ public sealed class PackageDocument
     [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
 
     [BsonElement("revisions")] public List<PackageRevisionDocument> Revisions { get; init; } = [];
+
+    [BsonElement("upstreamPackageBase")]
+    [BsonIgnoreIfNull]
+    public string? UpstreamPackageBase { get; init; }
+
+    [BsonElement("lastSyncedUpstreamHead")]
+    [BsonIgnoreIfNull]
+    public string? LastSyncedUpstreamHead { get; init; }
+
+    [BsonElement("lastSyncAttemptAt")]
+    [BsonIgnoreIfNull]
+    public DateTimeOffset? LastSyncAttemptAt { get; init; }
+
+    [BsonElement("lastSyncSucceededAt")]
+    [BsonIgnoreIfNull]
+    public DateTimeOffset? LastSyncSucceededAt { get; init; }
+
+    [BsonElement("lastSyncError")]
+    [BsonIgnoreIfNull]
+    public string? LastSyncError { get; init; }
 }
 
 public sealed class PackageFile
@@ -49,4 +69,21 @@ public sealed class PackageHeadFiles
     [BsonElement("headRevisionId")] public string HeadRevisionId { get; init; } = string.Empty;
 
     [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
+}
+
+public sealed class PackageSyncState
+{
+    [BsonElement("packageName")] public string PackageName { get; init; } = string.Empty;
+
+    [BsonElement("upstreamPackageBase")]
+    [BsonIgnoreIfNull]
+    public string? UpstreamPackageBase { get; init; }
+
+    [BsonElement("lastSyncedUpstreamHead")]
+    [BsonIgnoreIfNull]
+    public string? LastSyncedUpstreamHead { get; init; }
+
+    [BsonElement("lastSyncSucceededAt")]
+    [BsonIgnoreIfNull]
+    public DateTimeOffset? LastSyncSucceededAt { get; init; }
 }

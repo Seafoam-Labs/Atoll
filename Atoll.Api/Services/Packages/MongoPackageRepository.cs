@@ -115,6 +115,55 @@ public sealed class MongoPackageRepository : IPackageRepository
             throw new KeyNotFoundException($"Package '{packageName}' not found.");
     }
 
+    public async Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)
+    {
+        return await _packages
+            .Find(Builders<PackageDocument>.Filter.Empty)
+            .Project(p => new PackageSyncState
+            {
+                PackageName = p.PackageName,
+                UpstreamPackageBase = p.UpstreamPackageBase,
+                LastSyncedUpstreamHead = p.LastSyncedUpstreamHead,
+                LastSyncSucceededAt = p.LastSyncSucceededAt
+            })
+            .ToListAsync(ct);
+    }
+
+    public Task UpdateSyncStateAsync(
+        IReadOnlyCollection<string> packageNames,
+        string? upstreamHead,
+        bool succeeded,
+        string? error,
+        CancellationToken ct = default)
+    {
+        if (packageNames.Count == 0) return Task.CompletedTask;
+
+        var now = DateTimeOffset.UtcNow;
+        const int maxErrorLength = 500;
+        string? truncatedError;
+        if (succeeded)
+            truncatedError = null;
+        else
+            truncatedError = string.IsNullOrEmpty(error)
+                ? null
+                : error[..Math.Min(error.Length, maxErrorLength)];
+
+        var update = succeeded
+            ? Builders<PackageDocument>.Update
+                .Set(p => p.LastSyncedUpstreamHead, upstreamHead)
+                .Set(p => p.LastSyncSucceededAt, now)
+                .Set(p => p.LastSyncAttemptAt, now)
+                .Set(p => p.LastSyncError, null)
+            : Builders<PackageDocument>.Update
+                .Set(p => p.LastSyncAttemptAt, now)
+                .Set(p => p.LastSyncError, truncatedError);
+
+        return _packages.UpdateManyAsync(
+            Builders<PackageDocument>.Filter.In(p => p.PackageName, packageNames.ToList()),
+            update,
+            cancellationToken: ct);
+    }
+
     public async Task DeleteAsync(string packageName, CancellationToken ct = default)
     {
         await _packages.DeleteOneAsync(

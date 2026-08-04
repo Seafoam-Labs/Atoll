@@ -7,6 +7,7 @@ public sealed class Metrics
     public IndexSizes IndexSizes { get; set; } = new();
     public RefreshStatus Refresh { get; set; } = new();
     public BulkSeedStatus? BulkSeed { get; set; }
+    public PackageRefreshStatus? PackageRefresh { get; set; }
 }
 
 public sealed class IndexSizes
@@ -39,6 +40,23 @@ public sealed class BulkSeedStatus
     public long PackagesSeeded { get; set; }
     public long PackagesSkipped { get; set; }
     public long PackagesExcluded { get; set; }
+    public DateTimeOffset? LastStartedUtc { get; set; }
+    public DateTimeOffset? LastFinishedUtc { get; set; }
+}
+
+public sealed class PackageRefreshStatus
+{
+    public bool Enabled { get; set; }
+    public long CyclesAttempted { get; set; }
+    public long CyclesSucceeded { get; set; }
+    public long CyclesFailed { get; set; }
+    public long CandidatePackages { get; set; }
+    public long CandidatePackageBases { get; set; }
+    public long PackagesUpdated { get; set; }
+    public long PackagesUnchanged { get; set; }
+    public long PackagesSkipped { get; set; }
+    public long RefsSkipped { get; set; }
+    public long RefsFailed { get; set; }
     public DateTimeOffset? LastStartedUtc { get; set; }
     public DateTimeOffset? LastFinishedUtc { get; set; }
 }

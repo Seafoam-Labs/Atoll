@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Text;
-using Atoll.Api.Services.Packages.Seed;
+using Atoll.Api.Services.Packages.Mirror;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Packages.Seed;
+namespace Atoll.Api.Tests.Packages.Mirror;
 
 public class AurMirrorGitIntegrationTests
 {
@@ -76,7 +76,6 @@ public class AurMirrorGitIntegrationTests
         var mirror = new AurMirror(_upstream, _cache, NullLogger<AurMirror>.Instance);
         await mirror.EnsureInitializedAsync(CancellationToken.None);
 
-        // "ghost" branch does not exist upstream; fetch must not throw - it should isolate it.
         var result = await mirror.FetchAsync(["real", "ghost"], CancellationToken.None);
 
         Assert.Multiple(() =>

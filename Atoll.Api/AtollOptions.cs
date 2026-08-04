@@ -8,6 +8,7 @@ public sealed class AtollOptions
     public MongoOptions Mongo { get; init; } = new();
     public GitOptions Git { get; init; } = new();
     public SeedOptions Seed { get; init; } = new();
+    public RefreshOptions Refresh { get; init; } = new();
     public SecurityOptions Security { get; init; } = new();
 }
 
@@ -79,6 +80,23 @@ public sealed class DataSourceOptions
     [Required] [Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
 
     [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 10;
+}
+
+public sealed class RefreshOptions
+{
+    public bool Enabled { get; init; } = false;
+
+    [Range(10, 10_000)] public int BatchSize { get; init; } = 1000;
+
+    [Range(100, 60_000)] public int BatchDelayMs { get; init; } = 1000;
+
+    [Range(1, 500_000)] public int MaxPackagesPerRun { get; init; } = 10_000;
+
+    [Range(1, 720)] public int MaxStalenessHours { get; init; } = 24;
+
+    [Required] [Url] public string MirrorUrl { get; init; } = "https://github.com/archlinux/aur";
+
+    [Required] public string CachePath { get; init; } = "./data/aur-mirror";
 }
 
 public sealed class SecurityOptions

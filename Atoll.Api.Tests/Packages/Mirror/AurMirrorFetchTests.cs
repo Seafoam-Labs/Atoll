@@ -1,8 +1,8 @@
-using Atoll.Api.Services.Packages.Seed;
+using Atoll.Api.Services.Packages.Mirror;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Packages.Seed;
+namespace Atoll.Api.Tests.Packages.Mirror;
 
 public class AurMirrorFetchTests
 {
@@ -45,7 +45,6 @@ public class AurMirrorFetchTests
     [Test]
     public async Task FetchAsync_isolates_single_missing_ref_via_bisection()
     {
-        // One ref out of five is unreachable: the whole batch fails, bisection narrows it down.
         var mirror = CreateMirror("charlie");
 
         var result = await mirror.FetchAsync(

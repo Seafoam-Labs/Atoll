@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Packages.Mirror;
 using Atoll.Api.Services.Packages.Seed;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
@@ -287,6 +288,15 @@ public class PackageBulkSeedWorkerTests
         public Task<IReadOnlySet<string>> ListBranchesAsync(CancellationToken ct = default)
         {
             IReadOnlySet<string> result = Branches;
+            return Task.FromResult(result);
+        }
+
+        public Task<IReadOnlyDictionary<string, string>> ListBranchHeadsAsync(CancellationToken ct = default)
+        {
+            IReadOnlyDictionary<string, string> result = Branches.ToDictionary(
+                b => b,
+                _ => "sha-placeholder",
+                StringComparer.Ordinal);
             return Task.FromResult(result);
         }
 
