@@ -235,13 +235,13 @@ The threat model, full rule table, pipeline internals, decision table, configura
 
 ## Key Decisions (ADRs)
 
-| Decision                                  | Rationale                                                    | Trade-offs                                                                                                             | Status                                                |
-| ----------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| In-memory search index (no Elasticsearch) | Fast reads; AUR metadata fits comfortably in RAM             | Index must be rebuilt on restart; no ranked full-text scoring                                                          | Active                                                |
-| MongoDB for package storage               | Flexible schema; embedded revisions avoid joins              | 16 MB document cap requires conservative revision and file-size limits (currently unenforced per-document - see above) | Active                                                |
-| Shell out to `git upload-pack`            | Reuses the complete and reliable Git transfer implementation | Requires `git` installed in the container; subprocess overhead per request                                             | Active                                                |
-| Atomic `PackageIndexStore` snapshot swap  | Lock-free reads; consistent view per request                 | Full index rebuild on each refresh; 2× peak memory while both snapshots are live                                       | Active - full-rebuild trade-off superseded by TODO #3 |
-| No authentication                         | Keeps the API simple for trusted private deployments         | Unauthenticated callers can seed **and delete** packages; must sit behind a reverse proxy / firewall if exposed        | Active                                                |
+| Decision                                  | Rationale                                                    | Trade-offs                                                                                                                                                                                      | Status |
+| ----------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| In-memory search index (no Elasticsearch) | Fast reads; AUR metadata fits comfortably in RAM             | Index must be rebuilt on restart; no ranked full-text scoring                                                                                                                                   | Active |
+| MongoDB for package storage               | Flexible schema; embedded revisions avoid joins              | 16 MB document cap requires conservative revision and file-size limits (currently unenforced per-document - see above)                                                                          | Active |
+| Shell out to `git upload-pack`            | Reuses the complete and reliable Git transfer implementation | Requires `git` installed in the container; subprocess overhead per request                                                                                                                      | Active |
+| Atomic `PackageIndexStore` snapshot swap  | Lock-free reads; consistent view per request                 | Full index rebuild on each refresh; 2× peak memory while both snapshots are live. Incremental updates evaluated and rejected: rebuild cost is negligible at ~116k packages per 10-minute cycle. | Active |
+| No authentication                         | Keeps the API simple for trusted private deployments         | Unauthenticated callers can seed **and delete** packages; must sit behind a reverse proxy / firewall if exposed                                                                                 | Active |
 
 Security notes not covered by the ADRs: options are validated on startup via Data Annotations (`[Required]`, `[Range]`,
 `[Url]`); raw stack traces are never returned to clients; `git-receive-pack` (push) is explicitly rejected with
@@ -282,16 +282,7 @@ revision's own status. Remaining follow-ups: richer rule coverage, source-host a
 state (`ForceVerified` / `ForceBlocked`), and Git-route per-revision enforcement (Git routes are currently head-gated
 only).
 
-### 3. Incremental index updates
-
-Full-rebuild-on-refresh costs redundant CPU and doubles peak memory while both snapshots are live. Replace it with a
-diff-based update that touches only changed entries - e.g. `ImmutableDictionary.Builder` plus one atomic swap, which
-preserves the per-request consistent view from the snapshot ADR. (A `ConcurrentDictionary` is an alternative -
-`ImmutableDictionary` already provides lock-free concurrent reads, so the real gain would be incremental mutation - but
-it gives up cross-map snapshot consistency and needs its own concurrency story for the `ByWords` collection values.)
-Pairs with TODO #1.
-
-### 4. Normalize package revision content
+### 3. Normalize package revision content
 
 `PackageDocument` currently embeds identical file content in both the head and its initial revision, and embeds every
 retained revision in the same MongoDB document. MongoDB's 16 MiB BSON limit therefore remains a structural storage
