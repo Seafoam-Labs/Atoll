@@ -44,12 +44,20 @@ Accept: application/json
 DELETE {{baseUrl}}/packages/shelly
 Accept: application/json
 
-### Get Package Security Status
+### Get Package Security Status (head revision)
 GET {{baseUrl}}/packages/shelly/security
 Accept: application/json
 
-### Trigger a Security Re-scan
+### Get Package Security Status (specific revision)
+GET {{baseUrl}}/packages/shelly/security?revision=bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
+Accept: application/json
+
+### Trigger a Security Re-scan (head revision)
 POST {{baseUrl}}/packages/shelly/security/rescan
+Accept: application/json
+
+### Trigger a Security Re-scan (specific revision)
+POST {{baseUrl}}/packages/shelly/security/rescan?revision=bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
 Accept: application/json
 
 ### Git Smart HTTP - Ref Advertisement
