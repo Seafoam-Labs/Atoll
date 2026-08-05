@@ -1,4 +1,3 @@
-using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search;
@@ -13,7 +12,6 @@ public static class Endpoints
     public static void MapEndpoints(this WebApplication app)
     {
         app.MapMethods("/health", ["GET", "HEAD"], TypedResults.Ok);
-        app.MapGet("/metrics", Metrics);
         app.MapGet("/search", Search);
 
         var packages = app.MapGroup("/packages");
@@ -21,11 +19,6 @@ public static class Endpoints
         MapGitProtocolRoutes(packages);
 
         app.MapFallback("/{**path}", ([FromRoute] string? path) => TypedResults.NotFound());
-    }
-
-    private static Ok<Metrics> Metrics([FromServices] MetricsService metricsService)
-    {
-        return TypedResults.Ok(metricsService.GetMetrics());
     }
 
     private static Ok<AurPackageMetadata[]> Search(

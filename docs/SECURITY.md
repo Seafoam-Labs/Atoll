@@ -198,27 +198,27 @@ status endpoint remain ungated because they expose only metadata and scan summar
 | `ScannerConcurrency` | `4`     | 1–64       | Number of parallel poll/scan loops. Also bounds startup backfill parallelism.                             |
 | `PollIntervalMs`     | `100`   | 100–300000 | Delay between poll attempts when no pending package was claimed. Lowered load is traded for scan latency. |
 
-The lease duration is fixed at 5 minutes in `PackageSecurityWorker` and is not configurable. The `pendingScans`
-metrics gauge is refreshed every 30 seconds, independent of `ScannerConcurrency`.
+The lease duration is fixed at 5 minutes in `PackageSecurityWorker` and is not configurable. The
+`atoll_securityscan_pending` gauge is refreshed every 30 seconds, independent of `ScannerConcurrency`.
 
 ## Observability
 
-`GET /metrics` exposes a `securityScan` section backed by `SecurityScanStatusStore`, updated by
-`PackageSecurityWorker` as scans finish:
+`GET /metrics` serves Prometheus-format OpenTelemetry metrics. The `atoll_securityscan_*` instruments are backed by
+`SecurityScanStatusStore`, updated by `PackageSecurityWorker` as scans finish:
 
-| Field                 | Meaning                                                                                                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------- |
-| `enabled`             | Whether security scanning is enabled.                                                                    |
-| `scansCompleted`      | Scans that reached a terminal status (`scansVerified` + `scansFlagged` + `scansErrored`).                |
-| `scansVerified`       | Scans that completed `Verified`.                                                                         |
-| `scansFlagged`        | Scans that completed `Flagged`.                                                                          |
-| `scansErrored`        | Scans that failed and were marked `Error`.                                                               |
-| `scansDropped`        | Claims dropped because the claimed revision aged out of the retained history before it could be scanned. |
-| `pendingScans`        | Backlog depth: the number of `Pending` scan documents. Refreshed every 30 seconds.                       |
-| `lastScanFinishedUtc` | When the last scan completed or errored.                                                                 |
+| Metric                                       | Meaning                                                                                                  |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `atoll_securityscan_completed_total`         | Scans that reached a terminal status (verified + flagged + errored).                                     |
+| `atoll_securityscan_verified_total`          | Scans that completed `Verified`.                                                                         |
+| `atoll_securityscan_flagged_total`           | Scans that completed `Flagged`.                                                                          |
+| `atoll_securityscan_errored_total`           | Scans that failed and were marked `Error`.                                                               |
+| `atoll_securityscan_dropped_total`           | Claims dropped because the claimed revision aged out of the retained history before it could be scanned. |
+| `atoll_securityscan_pending`                 | Backlog depth: the number of `Pending` scan documents. Refreshed every 30 seconds.                       |
+| `atoll_securityscan_last_finished_timestamp` | Unix time of when the last scan completed or errored.                                                    |
 
-Content is not served until the head revision is scanned, so compare `pendingScans` against the bulk-seed and
-package-refresh throughput on the same endpoint to see whether the scanner keeps up with ingestion.
+Content is not served until the head revision is scanned, so compare `atoll_securityscan_pending` against the
+bulk-seed and package-refresh throughput counters on the same endpoint to see whether the scanner keeps up with
+ingestion.
 
 Diagnose individual scans through logs and the MongoDB collection:
 

@@ -6,7 +6,6 @@ using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Packages.Mirror;
 using Atoll.Api.Services.Packages.Refresh;
 using Atoll.Api.Services.Packages.Seed;
-using Atoll.Api.Services.Runtime;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Search.Refresh;
@@ -14,6 +13,9 @@ using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,8 +42,27 @@ builder.Services.AddSingleton<PackageIndexStore>();
 builder.Services.AddSingleton<PackageSearchService>();
 builder.Services.AddSingleton<IAurMetadataRepository, AurMetadataRepository>();
 builder.Services.AddSingleton<PackageIndexUpdater>();
-builder.Services.AddSingleton<MetricsService>();
-builder.Services.AddSingleton(new ApplicationRuntimeInfo(DateTimeOffset.UtcNow));
+builder.Services.AddSingleton<AtollMetrics>();
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("Atoll.Api", serviceVersion: "1.0.0"))
+    // Exports every configured signal (metrics, logs) over OTLP. Endpoint and
+    // protocol come from OTEL_EXPORTER_OTLP_* environment variables (see
+    // compose.yaml); without them it falls back to localhost:4317.
+    .UseOtlpExporter()
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        // Resolving the singleton here guarantees the atoll.* instruments are
+        // registered when the meter provider starts (DI singletons are lazy).
+        .AddInstrumentation(sp => sp.GetRequiredService<AtollMetrics>())
+        .AddMeter(AtollMetrics.MeterName)
+        .AddPrometheusExporter());
+
+// Route application logs through OpenTelemetry so the OTLP exporter ships them
+// alongside metrics (e.g. to Loki in the docker-otel-lgtm stack).
+builder.Logging.AddOpenTelemetry();
 
 builder.Services.AddSingleton<IMongoClient>(sp =>
 {
@@ -64,7 +85,7 @@ var seedMode = builder.Configuration.GetSection("Atoll:Seed").Get<SeedOptions>()
 var bulkEnabled = seedMode == SeedMode.Bulk;
 var refreshEnabled = builder.Configuration.GetSection("Atoll:Refresh").Get<RefreshOptions>()?.Enabled ?? false;
 var securityEnabled = builder.Configuration.GetSection("Atoll:Security").Get<SecurityOptions>()?.Enabled ?? true;
-// Always added for Metrics. Not needed to be always once Open-telemetry is added.
+// Always registered so the atoll.* instruments have a source to read; counts stay 0 when the feature is disabled.
 builder.Services.AddSingleton(new BulkSeedStatusStore(bulkEnabled));
 builder.Services.AddSingleton(new RefreshStatusStore(refreshEnabled));
 builder.Services.AddSingleton(new SecurityScanStatusStore(securityEnabled));
@@ -108,5 +129,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseExceptionHandler();
 app.MapEndpoints();
+// Endpoint-routed scrape endpoint; the literal /metrics route wins over the fallback catch-all.
+app.MapPrometheusScrapingEndpoint();
 
 await app.RunAsync();

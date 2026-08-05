@@ -75,7 +75,7 @@ public class MinimalApiEndpointsTests
     }
 
     [Test]
-    public async Task MetricsReturnsExpectedShapeAndCounts()
+    public async Task MetricsReturnsPrometheusText()
     {
         _ = await _client.GetAsync("/search?query=portable-kit");
 
@@ -83,23 +83,19 @@ public class MinimalApiEndpointsTests
         var body = await response.Content.ReadAsStringAsync();
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/plain"));
 
-        using var doc = JsonDocument.Parse(body);
-        var root = doc.RootElement;
-
-        Assert.That(root.GetProperty("requestCount").GetInt64(), Is.GreaterThanOrEqualTo(1));
-
-        var indexSizes = root.GetProperty("indexSizes");
-        Assert.That(indexSizes.GetProperty("byNames").GetInt64(), Is.EqualTo(3));
-        Assert.That(indexSizes.GetProperty("byProvides").GetInt64(), Is.EqualTo(3));
-        Assert.That(indexSizes.GetProperty("byWords").GetInt64(), Is.GreaterThan(0));
-
-        var securityScan = root.GetProperty("securityScan");
         Assert.Multiple(() =>
         {
-            Assert.That(securityScan.GetProperty("enabled").GetBoolean(), Is.True);
-            Assert.That(securityScan.GetProperty("scansCompleted").GetInt64(), Is.Zero);
-            Assert.That(securityScan.GetProperty("pendingScans").GetInt64(), Is.Zero);
+            // The search request above is counted, and the sample index has 3 names / 3 provides.
+            Assert.That(body, Does.Match(@"atoll_search_requests_total\{[^}]*\} [1-9]"));
+            Assert.That(body, Does.Match(@"atoll_index_size\{[^}]*index=""names""[^}]*\} 3"));
+            Assert.That(body, Does.Match(@"atoll_index_size\{[^}]*index=""provides""[^}]*\} 3"));
+            Assert.That(body, Does.Match(@"atoll_index_size\{[^}]*index=""words""[^}]*\} [1-9]"));
+
+            // Uptime gauge plus ASP.NET Core request metrics from instrumentation.
+            Assert.That(body, Does.Contain("process_uptime_seconds"));
+            Assert.That(body, Does.Contain("http_server_request_duration_seconds"));
         });
     }
 }

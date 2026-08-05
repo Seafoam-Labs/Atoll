@@ -37,6 +37,9 @@
       - Atoll__Refresh__MaxStalenessHours=24
       - Atoll__Refresh__MirrorUrl=https://github.com/archlinux/aur
       - Atoll__Refresh__CachePath=/app/data/aur-mirror
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://lgtm:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_METRIC_EXPORT_INTERVAL=10000
     volumes:
       - atoll-data:/app/data
     depends_on:
@@ -62,6 +65,22 @@
       retries: 5
       start_period: 15s
       timeout: 5s
+
+  # OpenTelemetry backend for development: OTel Collector, Prometheus, Loki, Tempo, Pyroscope, and Grafana in one image.
+  # Grafana: http://localhost:3000 (admin/admin); the "Atoll" dashboard is provisioned and set as home.
+  lgtm:
+    image: grafana/otel-lgtm:0.30.0@sha256:46ca028e294bd728e8e930a28e887f640a8f2a9533cc283f79bcc6ab73d2ffd8
+    restart: unless-stopped
+    ports:
+      - "3000:3000" # Grafana
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "9090:9090" # Prometheus
+    environment:
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /otel-lgtm/grafana/conf/provisioning/dashboards/custom/atoll.json
+    volumes:
+      - ./observability/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/atoll.yaml:ro
+      - ./observability/grafana/atoll.json:/otel-lgtm/grafana/conf/provisioning/dashboards/custom/atoll.json:ro
 
 volumes:
   atoll-data:

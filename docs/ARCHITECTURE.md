@@ -71,7 +71,6 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   mutually exclusive; manual seeding remains available when automated seeding is off.
 - **PackageRefreshWorker:** the opt-in refresh worker updates already-seeded packages from upstream and appends a
   revision only when its content changes. It shares bulk seeding's mirror cache when both are enabled.
-
   Seeding and refresh mechanics, configuration, cache lifecycle, metrics, and operational verification are documented
   in [Package seeding and refresh](SYNC.md).
 - **PackageSearchService** serves all search queries from the immutable in-memory snapshot with no database round-trips.
@@ -148,7 +147,7 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | Method   | Path                                                     | Description                                                           |
 | -------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
 | GET/HEAD | `/health`                                                | Liveness only - does not check MongoDB or index readiness             |
-| GET      | `/metrics`                                               | Service metrics (see Operations)                                      |
+| GET      | `/metrics`                                               | OpenTelemetry metrics in Prometheus format (see Operations)           |
 | GET      | `/search?query=…&by=name\|words\|provides`               | In-memory package search (comma-separated values)                     |
 | GET      | `/packages`                                              | List all seeded package names                                         |
 | POST     | `/packages/{name}/seed`                                  | Clone from AUR and persist (409 if exists)                            |
@@ -195,10 +194,16 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
   containers (see `compose.yaml` for an example).
 - **Logging:** ASP.NET Core structured console logging; workers log seeding progress, refresh status, and errors.
   `Activity.Current?.Id` is captured in error logs for correlation.
-- **Metrics:** `GET /metrics` returns uptime, total search request count, index sizes (ByNames / ByWords / ByProvides),
-  AUR refresh statistics (attempts, successes, failures, last timestamps), bulk-seed statistics, security-scan
-  statistics (throughput, outcomes, backlog depth), and (when refresh is enabled) package-refresh statistics. Alerting
-  is not configured; intended for the infrastructure layer.
+- **Metrics:** `GET /metrics` serves OpenTelemetry metrics in Prometheus exposition format. Custom `atoll_*`
+  instruments cover process uptime, search request count, index sizes (by names / provides / words), AUR refresh
+  statistics (attempts, successes, failures, last timestamps), bulk-seed statistics, security-scan statistics
+  (throughput, outcomes, backlog depth), and package-refresh statistics; ASP.NET Core request metrics, outbound
+  HTTP client metrics (AUR / mirror fetches via `OpenTelemetry.Instrumentation.Http`), and built-in .NET runtime
+  metrics are included. Alerting is not configured; intended for the infrastructure layer.
+- **Telemetry export:** Metrics and application logs are also exported over OTLP via `UseOtlpExporter()`,
+  configured through `OTEL_EXPORTER_OTLP_*` environment variables. `compose.yaml` bundles the
+  `grafana/otel-lgtm` development stack (OTel Collector, Prometheus, Loki, Tempo, Grafana) with a provisioned
+  Atoll dashboard (`observability/grafana/`).
 - **Health:** `/health` is liveness only. There is no readiness signal - the search index may be empty on first requests
   after a cold start, and `/health` does not verify MongoDB connectivity.
 

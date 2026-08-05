@@ -26,6 +26,12 @@ dotnet run --project Atoll.Api
 docker compose up --build
 ```
 
+Besides the API and MongoDB, the compose file starts an observability stack
+([`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm): OpenTelemetry Collector,
+Prometheus, Loki, Tempo, and Grafana in one image). Atoll pushes metrics and logs to it over
+OTLP, and a provisioned `Atoll` dashboard (see `observability/grafana/`) is set as the Grafana
+home dashboard at `http://localhost:3000` (login: `admin`/`admin`).
+
 ## Storage
 
 MongoDB is Atoll's authoritative store for AUR metadata, package metadata, revision snapshots,
@@ -43,7 +49,11 @@ For the storage layout, retention limits, BSON-size handling, and cache consider
 
 ### Metrics
 
-- `GET /metrics` - service metrics
+- `GET /metrics` - OpenTelemetry metrics in Prometheus exposition format: custom `atoll_*` instruments (search,
+  index sizes, refresh, bulk seed, package refresh, security scan), plus ASP.NET Core, outbound HTTP client, and
+  .NET runtime metrics
+- Metrics and application logs are also exported over OTLP; the destination comes from the
+  `OTEL_EXPORTER_OTLP_*` environment variables (see `compose.yaml` for the bundled LGTM stack)
 
 ### Search
 

@@ -147,18 +147,18 @@ trade-offs are documented in [Mirror transport](#shared-fetch-controls).
 mapped pkgname is seeded through the existing direct-AUR path instead. It does not replace bisection for fetch failures
 among branches that were advertised by the mirror.
 
-`GET /metrics` exposes `bulkSeed` status, including batch attempts/successes/failures, skipped and failed refs,
-seeded/skipped/excluded packages, and cycle timestamps. Each cycle-complete log line also reports the total cycle time
-with the fetch and seed phase durations, which overlap because of pipelining. Use logs and metrics together to
-distinguish these outcomes:
+`GET /metrics` exposes `atoll_bulkseed_*` Prometheus metrics, including batch attempts/successes/failures, skipped and
+failed refs, seeded/skipped/excluded packages, and cycle timestamps. Each cycle-complete log line also reports the
+total cycle time with the fetch and seed phase durations, which overlap because of pipelining. Use logs and metrics
+together to distinguish these outcomes:
 
-| Symptom                              | Expected evidence                                                                                                            |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Target absent from mirror            | `refsSkipped` increases; direct fallback is used only if enabled.                                                            |
-| Ref changed after discovery          | `refsFailed` increases after bisection; other refs in the original batch continue.                                           |
-| Tree cannot be read                  | A `git archive`-related warning; mapped pkgnames are skipped for that cycle.                                                 |
-| Revision snapshot exceeds BSON limit | `packagesExcluded` increases and the pkgbase is persisted in `seed-exclusions`, preventing repeated fetches in later cycles. |
-| Nothing to seed                      | The worker waits five minutes before the next check.                                                                         |
+| Symptom                              | Expected evidence                                                                                                                                  |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Target absent from mirror            | `atoll_bulkseed_refs_skipped_total` increases; direct fallback is used only if enabled.                                                            |
+| Ref changed after discovery          | `atoll_bulkseed_refs_failed_total` increases after bisection; other refs in the original batch continue.                                           |
+| Tree cannot be read                  | A `git archive`-related warning; mapped pkgnames are skipped for that cycle.                                                                       |
+| Revision snapshot exceeds BSON limit | `atoll_bulkseed_packages_excluded_total` increases and the pkgbase is persisted in `seed-exclusions`, preventing repeated fetches in later cycles. |
+| Nothing to seed                      | The worker waits five minutes before the next check.                                                                                               |
 
 ## Periodic refresh
 
@@ -280,19 +280,20 @@ db.getCollection("package-revisions").aggregate([
 
 ### Observability
 
-`GET /metrics` exposes a `packageRefresh` block with cycle counters (`cyclesAttempted`/`cyclesSucceeded`/
-`cyclesFailed`), candidate counts (`candidatePackages`/`candidatePackageBases`), outcomes (`packagesUpdated`/
-`packagesUnchanged`/`packagesSkipped`), ref counts (`refsSkipped`/`refsFailed`), and cycle start/finish timestamps.
-Each cycle-complete log line also reports the total cycle time with the fetch and apply phase durations, which overlap
-because of pipelining. Use logs and metrics together to distinguish these outcomes:
+`GET /metrics` exposes `atoll_packagerefresh_*` Prometheus metrics with cycle counters (`cycles.attempted.total` /
+`cycles.succeeded.total` / `cycles.failed.total`), candidate gauges (`candidate_packages` / `candidate_package_bases`),
+outcomes (`packages.updated.total` / `packages.unchanged.total` / `packages.skipped.total`), ref counts
+(`refs.skipped.total` / `refs.failed.total`), and cycle start/finish timestamps. Each cycle-complete log line also
+reports the total cycle time with the fetch and apply phase durations, which overlap because of pipelining. Use logs
+and metrics together to distinguish these outcomes:
 
-| Symptom                                        | Expected evidence                                                                |
-| ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| pkgbase no longer on the mirror                | `refsSkipped` increases; member watermarks stay untouched.                       |
-| Branch disappeared between discovery and fetch | `refsFailed` increases after bisection; affected members record `lastSyncError`. |
-| Cycle capped by `MaxPackagesPerRun`            | Log line about deferral; remaining candidates are picked up in later cycles.     |
-| Staleness sweep found no SHA movement          | `packagesUnchanged` increases without any fetch batches.                         |
-| Tree cannot be read                            | A `git archive`-related warning; affected members record `lastSyncError`.        |
+| Symptom                                        | Expected evidence                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| pkgbase no longer on the mirror                | `atoll_packagerefresh_refs_skipped_total` increases; member watermarks stay untouched.                       |
+| Branch disappeared between discovery and fetch | `atoll_packagerefresh_refs_failed_total` increases after bisection; affected members record `lastSyncError`. |
+| Cycle capped by `MaxPackagesPerRun`            | Log line about deferral; remaining candidates are picked up in later cycles.                                 |
+| Staleness sweep found no SHA movement          | `atoll_packagerefresh_packages_unchanged_total` increases without any fetch batches.                         |
+| Tree cannot be read                            | A `git archive`-related warning; affected members record `lastSyncError`.                                    |
 
 ## Mirror transport
 

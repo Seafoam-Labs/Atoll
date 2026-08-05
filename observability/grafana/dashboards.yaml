@@ -1,0 +1,11 @@
+# Grafana dashboard provisioning for the docker-otel-lgtm stack.
+# Mounted at /otel-lgtm/grafana/conf/provisioning/dashboards/atoll.yaml; it picks
+# up every JSON file mounted into the custom dashboards folder.
+apiVersion: 1
+
+providers:
+  - name: "Atoll"
+    type: file
+    options:
+      path: /otel-lgtm/grafana/conf/provisioning/dashboards/custom
+      foldersFromFilesStructure: false
