@@ -3,6 +3,7 @@ using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
@@ -30,7 +31,8 @@ public class MongoPackageServiceTests
             repo,
             indexStore ?? new PackageIndexStore(),
             options,
-            securityRepository ?? new InMemoryPackageSecurityRepository());
+            securityRepository ?? new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
     }
 
     [Test]
@@ -112,7 +114,8 @@ public class MongoPackageServiceTests
             repo,
             new PackageIndexStore(),
             options,
-            new InMemoryPackageSecurityRepository());
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
 
         var big = new Dictionary<string, string>
         {
@@ -137,8 +140,13 @@ public class MongoPackageServiceTests
             repo,
             new PackageIndexStore(),
             options,
-            new InMemoryPackageSecurityRepository());
-        var files = new Dictionary<string, string> { ["large.txt"] = new('x', 9_000_000) };
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
+        var files = new Dictionary<string, string>
+        {
+            ["large-1.txt"] = new('x', 9_000_000),
+            ["large-2.txt"] = new('x', 9_000_000)
+        };
 
         var ex = Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () => await service.SeedFilesAsync("too-large", files))!;
         var packageExists = await repo.ExistsAsync("too-large");
@@ -148,6 +156,42 @@ public class MongoPackageServiceTests
             Assert.That(ex.PackageName, Is.EqualTo("too-large"));
             Assert.That(ex.SerializedSizeBytes, Is.GreaterThan(ex.MaxDocumentSizeBytes));
             Assert.That(packageExists, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task AppendRevisionFromUpstreamAsync_oversized_snapshot_throws_before_write()
+    {
+        var repo = new InMemoryPackageRepository();
+        var options = Options.Create(new AtollOptions
+        {
+            Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
+        });
+        var service = new MongoPackageService(
+            repo,
+            new PackageIndexStore(),
+            options,
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
+        await service.SeedFilesAsync("pkg", SampleFiles);
+        var history = await service.GetHistoryAsync("pkg");
+        var originalHead = history[0].Sha;
+        var oversizedFiles = new Dictionary<string, string>
+        {
+            ["large-1.txt"] = new('x', 9_000_000),
+            ["large-2.txt"] = new('x', 9_000_000)
+        };
+
+        Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () =>
+            await service.AppendRevisionFromUpstreamAsync("pkg", oversizedFiles));
+        var afterHistory = await service.GetHistoryAsync("pkg");
+        var packageExists = await repo.ExistsAsync("pkg");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterHistory, Has.Count.EqualTo(1));
+            Assert.That(afterHistory[0].Sha, Is.EqualTo(originalHead));
+            Assert.That(packageExists, Is.True);
         });
     }
 

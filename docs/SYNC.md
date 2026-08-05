@@ -140,13 +140,8 @@ do not race to seed the same missing package. Set `Atoll:Seed:Mode` to `Off` to 
 }
 ```
 
-`BatchSize` (default `1000`, validated to **10–10,000**) sets how many pkgbases are requested per `git fetch`
-invocation; `BatchDelayMs` (default `1000`, validated to **100–60,000**) spaces the batches, with runtime values below
-100 clamped to 100.
-
-`Parallelism` defaults to `4` and is validated in configuration to **1–128**. It bounds how many pkgbases of a
-fetched batch are archived and seeded concurrently. Higher values trade CPU and MongoDB write pressure for shorter
-seed times; fetch and seed phases overlap regardless, so raising it does not increase AUR or mirror request pressure.
+`BatchSize`, `BatchDelayMs`, and `Parallelism` are shared fetch controls; their defaults, limits, and resource
+trade-offs are documented in [Mirror transport](#shared-fetch-controls).
 
 `AurFallbackForNotOnMirror` applies only when a target pkgbase is absent from the mirror branch list. When enabled, each
 mapped pkgname is seeded through the existing direct-AUR path instead. It does not replace bisection for fetch failures
@@ -157,13 +152,13 @@ seeded/skipped/excluded packages, and cycle timestamps. Each cycle-complete log 
 with the fetch and seed phase durations, which overlap because of pipelining. Use logs and metrics together to
 distinguish these outcomes:
 
-| Symptom                             | Expected evidence                                                                                                            |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Target absent from mirror           | `refsSkipped` increases; direct fallback is used only if enabled.                                                            |
-| Ref changed after discovery         | `refsFailed` increases after bisection; other refs in the original batch continue.                                           |
-| Tree cannot be read                 | A `git archive`-related warning; mapped pkgnames are skipped for that cycle.                                                 |
-| Package document exceeds BSON limit | `packagesExcluded` increases and the pkgbase is persisted in `seed-exclusions`, preventing repeated fetches in later cycles. |
-| Nothing to seed                     | The worker waits five minutes before the next check.                                                                         |
+| Symptom                              | Expected evidence                                                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Target absent from mirror            | `refsSkipped` increases; direct fallback is used only if enabled.                                                            |
+| Ref changed after discovery          | `refsFailed` increases after bisection; other refs in the original batch continue.                                           |
+| Tree cannot be read                  | A `git archive`-related warning; mapped pkgnames are skipped for that cycle.                                                 |
+| Revision snapshot exceeds BSON limit | `packagesExcluded` increases and the pkgbase is persisted in `seed-exclusions`, preventing repeated fetches in later cycles. |
+| Nothing to seed                      | The worker waits five minutes before the next check.                                                                         |
 
 ## Periodic refresh
 
@@ -193,7 +188,9 @@ Cycles run every minute; a failed cycle backs off one minute before retrying. Ea
 6. For each fetched pkgbase, archives the tree once and applies it to each member pkgname with bounded parallelism
    (`Parallelism`). If the deterministic revision ID matches the current head, the package is recorded unchanged (but
    the watermark still advances so the pkgbase is not refetched); otherwise a new revision is appended via
-   `AppendRevisionFromUpstreamAsync`.
+   `AppendRevisionFromUpstreamAsync`, which writes the snapshot as its own document in `package-revisions` before
+   updating the package document's head/metadata (write ordering keeps readers from ever observing a head without
+   content) and deletes revision documents evicted by the `MaxRevisions` cap.
 7. Advances the watermarks of all members of successful pkgbases; fetch or application failures record the error on the
    affected members.
 
@@ -206,6 +203,49 @@ fresh seed. On-disk bare repos are not touched during sync — `EnsureGitReposit
 Each `packages` document carries lightweight refresh watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`,
 `lastSyncAttemptAt`, `lastSyncSucceededAt`, `lastSyncError`); these are nullable and omitted when unset, so they do not
 change the public API response contracts.
+
+If a revision snapshot exceeds MongoDB's 16 MiB document limit (checked before insert), the append fails
+deterministically; the worker records the pkgbase in `seed-exclusions` (reason `mongo-document-too-large`) and skips
+it — together with all other excluded pkgbases — in every subsequent cycle instead of re-fetching it forever. Clearing
+the exclusion re-enables refresh for that pkgbase.
+
+### Measuring document sizes (ops)
+
+To size the storage profile of a deployment, rank packages by BSON size and count documents approaching the 16 MiB
+cap:
+
+```javascript
+// Top 20 largest package documents.
+db.packages.aggregate([
+  { $project: { packageName: 1, sizeBytes: { $bsonSize: "$$ROOT" } } },
+  { $sort: { sizeBytes: -1 } },
+  { $limit: 20 },
+]);
+
+// Counts within 25% / 10% of the 16 MiB cap.
+db.packages.aggregate([
+  { $project: { sizeBytes: { $bsonSize: "$$ROOT" } } },
+  {
+    $facet: {
+      within25pct: [
+        { $match: { sizeBytes: { $gte: 0.75 * 16777216 } } },
+        { $count: "n" },
+      ],
+      within10pct: [
+        { $match: { sizeBytes: { $gte: 0.9 * 16777216 } } },
+        { $count: "n" },
+      ],
+    },
+  },
+]);
+
+// Same for per-revision snapshot documents.
+db.getCollection("package-revisions").aggregate([
+  { $project: { _id: 1, sizeBytes: { $bsonSize: "$$ROOT" } } },
+  { $sort: { sizeBytes: -1 } },
+  { $limit: 20 },
+]);
+```
 
 ### Configuration
 
@@ -226,13 +266,9 @@ change the public API response contracts.
 }
 ```
 
-- `Enabled` (default `false`) — registers the refresh worker.
-- `BatchSize` (default `1000`, validated to **10–10,000**) — pkgbases per `git fetch` invocation.
-- `BatchDelayMs` (default `1000`, validated to **100–60,000**) — spacing between fetch batches; runtime values below
-  100 are clamped to 100.
-- `Parallelism` (default `4`, validated to **1–128**) — bounds how many pkgbases of a fetched batch are archived and
-  applied concurrently. As in bulk seeding, it trades CPU and MongoDB write pressure for shorter cycles and does not
-  increase mirror request pressure.
+- `Enabled` (default `true`) — registers the refresh worker.
+- `BatchSize`, `BatchDelayMs`, and `Parallelism` — shared fetch controls; see
+  [Mirror transport](#shared-fetch-controls).
 - `MaxPackagesPerRun` (default `10000`, validated to **1–500,000**) — caps packages fetched per cycle. Genuine SHA
   movers are rare, so this mainly bounds bursts after large seeds or long outages; deferred pkgbases are picked up by
   later cycles.
@@ -262,6 +298,19 @@ because of pipelining. Use logs and metrics together to distinguish these outcom
 
 Bulk seeding and refresh share the `AurMirror` Git transport: one persistent bare cache, protocol v2 with explicit
 refspecs, depth-one fetches, and `git archive` extraction.
+
+### Shared fetch controls
+
+Both workers use the same controls with the same defaults and validation:
+
+| Option         | Default and range     | Effect                                                                                                                                                                                                                               |
+| -------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `BatchSize`    | `1000`; 10–10,000     | Pkgbases requested by each `git fetch` invocation.                                                                                                                                                                                   |
+| `BatchDelayMs` | `1000` ms; 100–60,000 | Delay between fetch batches. Runtime values below 100 ms are clamped to 100 ms.                                                                                                                                                      |
+| `Parallelism`  | `4`; 1–128            | Pkgbases from a fetched batch archived and applied concurrently. Higher values trade CPU and MongoDB write pressure for shorter cycles; fetching and application already overlap, so this does not increase mirror request pressure. |
+
+The controls live under `Atoll:Seed:Bulk` for bulk seeding and `Atoll:Refresh` for refresh. When bulk seeding is active,
+its mirror settings configure the shared transport; see [Cache lifecycle](#cache-lifecycle).
 
 ### Git transport contract
 
@@ -365,9 +414,8 @@ git -C "$CACHE" -c protocol.version=2 fetch --depth=1 --no-tags --quiet origin \
   "+refs/heads/<pkgbase-b>:refs/atoll/<pkgbase-b>"
 ```
 
-This is equivalent to one worker batch. Batch size is `Atoll:Seed:Bulk:BatchSize` or `Atoll:Refresh:BatchSize`
-(default `1000`, constrained to 10–10,000), and batches are spaced by the corresponding `BatchDelayMs` (default
-`1000`, constrained to 100–60,000; values below 100 are clamped to 100 at runtime).
+This is equivalent to one worker batch. See [Shared fetch controls](#shared-fetch-controls) for the corresponding
+configuration and limits.
 
 #### 3. Verify archive extraction
 

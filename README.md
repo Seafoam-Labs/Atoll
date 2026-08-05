@@ -26,25 +26,14 @@ dotnet run --project Atoll.Api
 docker compose up --build
 ```
 
-## MongoDB Storage (Packages)
+## Storage
 
-Package data (current files and revision history) is stored in MongoDB.
+MongoDB is Atoll's authoritative store for AUR metadata, package metadata, revision snapshots,
+and operational state. The in-memory search index and on-disk Git repositories are rebuildable
+caches. Configure collections under `Atoll:Mongo` in `appsettings.json`.
 
-Configure MongoDB under `Atoll:Mongo` in `appsettings.json`.
-
-`MaxRevisions` caps embedded revision history per package. `MaxFileBytes` rejects
-oversized files at seed time. Keep both conservative to stay under MongoDB's
-16 MB document size limit.
-
-## MongoDB Storage (AUR Metadata)
-
-The AUR package dump (`packages-meta-ext-v1.json.gz`) is downloaded,
-decompressed in memory, and stored as typed documents in MongoDB. The search
-index is rebuilt from MongoDB on startup and on each refresh.
-
-The AUR metadata collection is configured under `Atoll:Mongo:Collections:AurMetadata`,
-alongside the user-package collection (`Collections:Packages`) and the bulk-seed exclusion
-collection (`Collections:SeedExclusions`).
+For the storage layout, retention limits, BSON-size handling, and cache considerations, see
+[Architecture](docs/ARCHITECTURE.md#state--storage).
 
 ## Endpoints
 
@@ -97,55 +86,25 @@ Background services run automatically when the application starts.
 
 ### Package Index Worker
 
-Periodically downloads the AUR package dump, persists the parsed packages to
-MongoDB, and rebuilds the in-memory search index. On startup the index is
-hydrated from MongoDB; if MongoDB is empty, the API starts with empty indexes
-and waits for the first refresh. The interval is controlled by
-`Atoll:DataSource:RefreshIntervalMinutes`.
+Downloads the AUR metadata dump, persists it to MongoDB, and rebuilds the in-memory search
+index. On startup it hydrates from MongoDB; an empty database produces an empty index until the
+first refresh. Configure the interval with `Atoll:DataSource:RefreshIntervalMinutes`.
 
-### Package Seed Worker
+### Package Seed and Refresh Workers
 
-Iterates over the package index and seeds missing packages from the AUR into MongoDB. The
-strategy is selected by `Atoll:Seed:Mode`:
+`Atoll:Seed:Mode` selects exactly one automated seed strategy: `Direct` (the default), `Bulk`,
+or `Off`. The optional refresh worker (`Atoll:Refresh:Enabled=true`) independently updates
+already-seeded packages. New revisions remain unavailable until security scanning completes.
 
-- **`Direct`** (default) — `DirectSeedWorker` runs one `git clone` per package from `aur.archlinux.org`, with a delay
-  between each seed to avoid rate-limiting. `Seed:Direct:SeedDelayMs` accepts values between **1000** and **60000**
-  milliseconds (default: **1000**).
-
-- **`Bulk`** — batch-fetches pkgbase branches from the read-only GitHub AUR mirror
-  (`https://github.com/archlinux/aur`) into a shared local cache, then feeds the extracted
-  files into the existing seed path. Much faster for a full sync (~10 min vs. ~hours/days),
-  at the cost of a ~3 GB local cache and relying on an upstream-experimental mirror. Its settings are
-  under `Atoll:Seed:Bulk`.
-
-- **`Off`** — disables automated package seeding. The metadata index worker continues to
-  run, and packages can still be seeded explicitly with `POST /packages/{name}/seed`.
-
-The modes are mutually exclusive: `Direct` and `Bulk` each register one worker, while `Off`
-registers none. For Docker, set `Atoll__Seed__Mode=Bulk` and uncomment the
-`Atoll__Seed__Bulk__*` lines in `compose.yaml`, or set `Atoll__Seed__Mode=Off` to disable
-automatic seeding. Bulk-seed progress is exposed at `GET /metrics` under `bulkSeed`.
-
-### Package Refresh Worker
-
-Opt-in (`Atoll:Refresh:Enabled=true`). Continuously re-syncs seeded packages
-so the latest upstream versions are available instead of freezing at first seed. It is
-independent of the seed mode and shares the same GitHub mirror cache as bulk seeding.
-Change detection is content-based via upstream HEAD SHA (not metadata timestamps), with a
-staleness sweep so every seeded pkgbase is re-checked within `MaxStalenessHours`. New head
-revisions are blocked from being served until scanned by the security pipeline.
-Configuration, cycle mechanics, metrics (`packageRefresh`), and verification steps are
-documented in [`docs/SYNC.md`](docs/SYNC.md).
-
-For full details on both seeding and refresh — including the shared Git transport contract,
-cache lifecycle, configuration options, and plain-Git verification — see
-[`docs/SYNC.md`](docs/SYNC.md).
+See [Package seeding and refresh](docs/SYNC.md) for mode selection, configuration, mirror-cache
+requirements, metrics, and verification. For Docker, set `Atoll__Seed__Mode` and use the
+corresponding example settings in `compose.yaml`.
 
 ## Configuration
 
-Main settings in `Atoll.Api/appsettings.json` and in `Atoll.Api/AtollOptions.cs`.
-
-Also, `compose.yaml` contains example for using environment variables.
+Main settings are defined in `Atoll.Api/appsettings.json` and `Atoll.Api/AtollOptions.cs`.
+`compose.yaml` shows their environment-variable form. Detailed worker and security settings are
+in [SYNC.md](docs/SYNC.md) and [SECURITY.md](docs/SECURITY.md), respectively.
 
 ## Tests
 

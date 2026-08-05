@@ -6,12 +6,14 @@ namespace Atoll.Api.Services.Packages;
 public sealed class MongoPackageRepository : IPackageRepository
 {
     private readonly IMongoCollection<PackageDocument> _packages;
+    private readonly IMongoCollection<PackageRevisionContentDocument> _revisions;
 
     public MongoPackageRepository(IMongoClient client, IOptions<AtollOptions> options)
     {
         var o = options.Value.Mongo;
         var db = client.GetDatabase(o.Database);
         _packages = db.GetCollection<PackageDocument>(o.Collections.Packages);
+        _revisions = db.GetCollection<PackageRevisionContentDocument>(o.Collections.PackageRevisions);
 
         EnsureIndexes();
     }
@@ -40,28 +42,23 @@ public sealed class MongoPackageRepository : IPackageRepository
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<PackageHeadFiles?> GetHeadFilesAsync(string packageName, CancellationToken ct = default)
+    public async Task<string?> GetHeadRevisionIdAsync(string packageName, CancellationToken ct = default)
     {
         return await _packages
             .Find(Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName))
-            .Project(p => new PackageHeadFiles
-            {
-                HeadRevisionId = p.HeadRevisionId,
-                Files = p.Files
-            })
+            .Project(p => p.HeadRevisionId)
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<PackageRevisionDocument?> GetRevisionAsync(
+    public async Task<PackageRevisionContentDocument?> GetRevisionAsync(
         string packageName,
         string revisionId,
         CancellationToken ct = default)
     {
-        var doc = await _packages
-            .Find(Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName))
+        var id = PackageSchema.RevisionDocumentId(packageName, revisionId);
+        return await _revisions
+            .Find(Builders<PackageRevisionContentDocument>.Filter.Eq(r => r.Id, id))
             .FirstOrDefaultAsync(ct);
-
-        return doc?.Revisions.FirstOrDefault(r => r.RevisionId == revisionId);
     }
 
     public async Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(
@@ -80,31 +77,63 @@ public sealed class MongoPackageRepository : IPackageRepository
             .ToList();
     }
 
-    public async Task InsertSeedAsync(PackageDocument doc, CancellationToken ct = default)
+    public async Task InsertSeedAsync(PackageDocument doc, PackageRevisionContentDocument revision, CancellationToken ct = default)
     {
+        try
+        {
+            await _revisions.InsertOneAsync(revision, cancellationToken: ct);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            throw new PackageConflictException(doc.PackageName);
+        }
+
         try
         {
             await _packages.InsertOneAsync(doc, cancellationToken: ct);
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
+            await _revisions.DeleteOneAsync(
+                Builders<PackageRevisionContentDocument>.Filter.Eq(r => r.Id, revision.Id), ct);
             throw new PackageConflictException(doc.PackageName);
         }
     }
 
     public async Task AppendRevisionAsync(
         string packageName,
-        PackageRevisionDocument revision,
-        Dictionary<string, PackageFile> headFiles,
+        PackageRevisionContentDocument revision,
         int maxRevisions,
         CancellationToken ct = default)
     {
+        var doc = await _packages
+            .Find(Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName))
+            .FirstOrDefaultAsync(ct);
+
+        if (doc is null)
+            throw new KeyNotFoundException($"Package '{packageName}' not found.");
+
+        // Upsert: revision ids are content hashes, so identical content can legitimately
+        // reappear and its document may already exist.
+        await _revisions.ReplaceOneAsync(
+            Builders<PackageRevisionContentDocument>.Filter.Eq(r => r.Id, revision.Id),
+            revision,
+            new ReplaceOptions { IsUpsert = true },
+            ct);
+
+        var metadata = new PackageRevisionDocument
+        {
+            RevisionId = revision.RevisionId,
+            CreatedAt = revision.CreatedAt,
+            Author = revision.Author,
+            Message = revision.Message
+        };
+
         // Push at position 0 (newest first) and slice to keep the last maxRevisions.
         var update = Builders<PackageDocument>.Update
-            .Set(p => p.Files, headFiles)
             .Set(p => p.HeadRevisionId, revision.RevisionId)
             .Set(p => p.UpdatedAt, DateTimeOffset.UtcNow)
-            .PushEach(p => p.Revisions, [revision], position: 0, slice: maxRevisions);
+            .PushEach(p => p.Revisions, [metadata], position: 0, slice: maxRevisions);
 
         var result = await _packages.UpdateOneAsync(
             Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName),
@@ -113,6 +142,8 @@ public sealed class MongoPackageRepository : IPackageRepository
 
         if (result.MatchedCount == 0)
             throw new KeyNotFoundException($"Package '{packageName}' not found.");
+
+        await DeleteEvictedRevisionDocsAsync(packageName, doc.Revisions, revision.RevisionId, maxRevisions, ct);
     }
 
     public async Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)
@@ -169,6 +200,35 @@ public sealed class MongoPackageRepository : IPackageRepository
         await _packages.DeleteOneAsync(
             Builders<PackageDocument>.Filter.Eq(p => p.PackageName, packageName),
             ct);
+
+        await _revisions.DeleteManyAsync(
+            Builders<PackageRevisionContentDocument>.Filter.Eq(r => r.PackageName, packageName),
+            ct);
+    }
+
+    private async Task DeleteEvictedRevisionDocsAsync(
+        string packageName,
+        IReadOnlyList<PackageRevisionDocument> previousRevisions,
+        string appendedRevisionId,
+        int maxRevisions,
+        CancellationToken ct)
+    {
+        var retained = new HashSet<string>(StringComparer.Ordinal) { appendedRevisionId };
+        foreach (var revision in previousRevisions.Take(Math.Max(0, maxRevisions - 1)))
+            retained.Add(revision.RevisionId);
+
+        var evictedDocIds = previousRevisions
+            .Select(r => r.RevisionId)
+            .Where(revisionId => !retained.Contains(revisionId))
+            .Distinct()
+            .Select(revisionId => PackageSchema.RevisionDocumentId(packageName, revisionId))
+            .ToList();
+
+        if (evictedDocIds.Count == 0) return;
+
+        await _revisions.DeleteManyAsync(
+            Builders<PackageRevisionContentDocument>.Filter.In(r => r.Id, evictedDocIds),
+            ct);
     }
 
     private void EnsureIndexes()
@@ -176,5 +236,9 @@ public sealed class MongoPackageRepository : IPackageRepository
         _packages.Indexes.CreateOne(
             new CreateIndexModel<PackageDocument>(
                 Builders<PackageDocument>.IndexKeys.Ascending(p => p.PackageName)));
+
+        _revisions.Indexes.CreateOne(
+            new CreateIndexModel<PackageRevisionContentDocument>(
+                Builders<PackageRevisionContentDocument>.IndexKeys.Ascending(r => r.PackageName)));
     }
 }

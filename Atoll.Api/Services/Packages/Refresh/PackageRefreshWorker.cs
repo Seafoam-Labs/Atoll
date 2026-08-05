@@ -12,6 +12,7 @@ public sealed class PackageRefreshWorker(
     IPackageRepository repo,
     IPackageService packageService,
     IAurMirror mirror,
+    ISeedExclusionRepository exclusions,
     RefreshStatusStore status,
     IOptions<AtollOptions> options,
     ILogger<PackageRefreshWorker> logger) : BackgroundService
@@ -85,6 +86,22 @@ public sealed class PackageRefreshWorker(
             }
 
             var grouped = RefreshPlan.GroupByPackageBase(states, index);
+
+            var excludedBases = await exclusions.ListDocumentTooLargePackageBasesAsync(stoppingToken);
+            if (excludedBases.Count > 0)
+            {
+                var excludedCount = grouped.Count(kv => excludedBases.Contains(kv.Key));
+                if (excludedCount > 0)
+                {
+                    logger.LogInformation(
+                        "Refresh skipping {Count} pkgbases excluded because their revision snapshot exceeds MongoDB's document limit.",
+                        excludedCount);
+                    grouped = grouped
+                        .Where(kv => !excludedBases.Contains(kv.Key))
+                        .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+                }
+            }
+
             var branchHeads = await mirror.ListBranchHeadsAsync(stoppingToken);
 
             var refsMissing = grouped.Keys.Count(pkgBase => !branchHeads.ContainsKey(pkgBase));
@@ -133,7 +150,7 @@ public sealed class PackageRefreshWorker(
             status.AddCandidatePackages(fetchSelected.Sum(c => c.Members.Count));
             status.AddCandidatePackageBases(fetchSelected.Count);
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "Refresh cycle: {SeededPackageCount} seeded packages across {PkgBaseCount} pkgbases; {CandidatePkgBaseCount} candidate pkgbases, {SelectedPkgBaseCount} selected for fetch, {NoFetchCount} already up-to-date.",
                 states.Count, grouped.Count, candidates.Count, fetchSelected.Count, noFetch.Count);
 
@@ -206,7 +223,7 @@ public sealed class PackageRefreshWorker(
                 }
             }
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "Refresh cycle complete in {ElapsedMs} ms ({FetchMs} ms fetching, {SeedMs} ms applying; phases overlap): " +
                 "{Updated} updated, {Unchanged} unchanged, {Skipped} skipped.",
                 cycleWatch.ElapsedMilliseconds, TimeSpan.FromTicks(fetchTicks).TotalMilliseconds,
@@ -318,6 +335,17 @@ public sealed class PackageRefreshWorker(
                     catch (OperationCanceledException)
                     {
                         throw;
+                    }
+                    catch (PackageDocumentTooLargeException ex)
+                    {
+                        logger.LogWarning(ex,
+                            "Excluding pkgbase {PkgBase} from future refresh cycles because its {SizeBytes}-byte revision snapshot exceeds MongoDB's limit.",
+                            candidate.PackageBase, ex.SerializedSizeBytes);
+                        var memberNames = candidate.Members.Select(m => m.PackageName).ToList();
+                        Interlocked.Add(ref skipped, memberNames.Count - succeededMembers.Count);
+                        await exclusions.RecordDocumentTooLargeAsync(candidate.PackageBase, memberNames, ex.SerializedSizeBytes, token);
+                        await repo.UpdateSyncStateAsync(memberNames, null, false, ex.Message, token);
+                        break;
                     }
                     catch (Exception ex)
                     {

@@ -35,10 +35,6 @@ public class SecurityGatingEndpointsTests
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             HeadRevisionId = "rev-1",
-            Files = new Dictionary<string, PackageFile>
-            {
-                ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
-            },
             Revisions =
             [
                 new PackageRevisionDocument
@@ -46,19 +42,32 @@ public class SecurityGatingEndpointsTests
                     RevisionId = "rev-1",
                     CreatedAt = DateTimeOffset.UtcNow,
                     Author = "test",
-                    Message = "seed",
-                    Files = new Dictionary<string, PackageFile>
-                    {
-                        ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
-                    }
+                    Message = "seed"
                 }
             ]
         };
     }
 
+    private static PackageRevisionContentDocument SeedRevision(string name)
+    {
+        return new PackageRevisionContentDocument
+        {
+            Id = PackageSchema.RevisionDocumentId(name, "rev-1"),
+            PackageName = name,
+            RevisionId = "rev-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Author = "test",
+            Message = "seed",
+            Files = new Dictionary<string, PackageFile>
+            {
+                ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
+            }
+        };
+    }
+
     private async Task SeedAsync(SecurityStatus status)
     {
-        await _factory.Repository.InsertSeedAsync(Doc("pkg"));
+        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", true);
         if (status != SecurityStatus.Pending)
         {
@@ -167,8 +176,10 @@ public class SecurityGatingEndpointsTests
     [Test]
     public async Task Flagged_revision_is_blocked_but_other_revisions_are_served()
     {
-        var rev2 = new PackageRevisionDocument
+        var rev2 = new PackageRevisionContentDocument
         {
+            Id = PackageSchema.RevisionDocumentId("pkg", "rev-2"),
+            PackageName = "pkg",
             RevisionId = "rev-2",
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
@@ -178,18 +189,11 @@ public class SecurityGatingEndpointsTests
                 ["PKGBUILD"] = new() { Content = "pkgname=test2\n", Size = 13, Hash = "h2" }
             }
         };
-        var doc = new PackageDocument
-        {
-            Id = "pkg",
-            PackageName = "pkg",
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
-            HeadRevisionId = "rev-2",
-            Files = rev2.Files,
-            Revisions = [rev2, Doc("pkg").Revisions[0]]
-        };
 
-        await _factory.Repository.InsertSeedAsync(doc);
+        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
+        await _factory.Repository.AppendRevisionAsync("pkg", rev2, 10);
+        Assert.That(await _factory.Repository.GetHeadRevisionIdAsync("pkg"), Is.EqualTo("rev-2"));
+
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false);
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true);
         await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));

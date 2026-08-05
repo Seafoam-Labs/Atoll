@@ -59,6 +59,7 @@ public class PackageRefreshWorkerTests
         InMemoryPackageRepository repo,
         IPackageService service,
         FakeRefreshMirror mirror,
+        InMemorySeedExclusionRepository exclusions,
         RefreshStatusStore status)
     {
         return new PackageRefreshWorker(
@@ -66,6 +67,7 @@ public class PackageRefreshWorkerTests
             repo,
             service,
             mirror,
+            exclusions,
             status,
             Options.Create(EnabledOptions()),
             NullLogger<PackageRefreshWorker>.Instance);
@@ -77,7 +79,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
@@ -96,7 +99,7 @@ public class PackageRefreshWorkerTests
             }
         };
         var status = new RefreshStatusStore(true);
-        var worker = CreateWorker(store, repo, service, mirror, status);
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         var outcome = await worker.RunCycleAsync(CancellationToken.None);
         var newHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
@@ -117,7 +120,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
@@ -139,7 +143,7 @@ public class PackageRefreshWorkerTests
                 }
             }
         };
-        var worker = CreateWorker(store, repo, service, mirror, new RefreshStatusStore(true));
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), new RefreshStatusStore(true));
 
         await worker.RunCycleAsync(CancellationToken.None);
 
@@ -163,7 +167,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "shelly", BaseFiles);
 
         // Pre-seed the sync watermark so the package looks already synced.
@@ -171,7 +176,7 @@ public class PackageRefreshWorkerTests
 
         var mirror = new FakeRefreshMirror { BranchHeads = { ["shelly"] = "sha-stable" } };
         var status = new RefreshStatusStore(true);
-        var worker = CreateWorker(store, repo, service, mirror, status);
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         await worker.RunCycleAsync(CancellationToken.None);
 
@@ -188,7 +193,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "libfoo", BaseFiles);
         await SeedAsync(service, "libfoo-devel", BaseFiles);
 
@@ -208,7 +214,7 @@ public class PackageRefreshWorkerTests
             }
         };
         var status = new RefreshStatusStore(true);
-        var worker = CreateWorker(store, repo, service, mirror, status);
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         await worker.RunCycleAsync(CancellationToken.None);
 
@@ -232,7 +238,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "libfoo", BaseFiles);
         await SeedAsync(service, "libfoo-devel", BaseFiles);
 
@@ -254,7 +261,7 @@ public class PackageRefreshWorkerTests
             }
         };
         var status = new RefreshStatusStore(true);
-        var worker = CreateWorker(store, repo, service, mirror, status);
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         await worker.RunCycleAsync(CancellationToken.None);
 
@@ -278,7 +285,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
@@ -293,7 +301,7 @@ public class PackageRefreshWorkerTests
             }
         };
         var status = new RefreshStatusStore(true);
-        var worker = CreateWorker(store, repo, service, mirror, status);
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         await worker.RunCycleAsync(CancellationToken.None);
 
@@ -316,7 +324,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("ghost", "ghost"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "shelly", BaseFiles);
         await SeedAsync(service, "ghost", BaseFiles);
 
@@ -333,7 +342,7 @@ public class PackageRefreshWorkerTests
             }
         };
         var status = new RefreshStatusStore(true);
-        var worker = CreateWorker(store, repo, service, mirror, status);
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         await worker.RunCycleAsync(CancellationToken.None);
 
@@ -351,7 +360,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("good", "good"), Meta("broken", "broken"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "good", BaseFiles);
         await SeedAsync(service, "broken", BaseFiles);
 
@@ -371,7 +381,7 @@ public class PackageRefreshWorkerTests
             }
         };
         var status = new RefreshStatusStore(true);
-        var worker = CreateWorker(store, repo, service, mirror, status);
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         await worker.RunCycleAsync(CancellationToken.None);
 
@@ -391,7 +401,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "shelly", BaseFiles);
 
         // Mark synced with the current head but a long-since past success timestamp.
@@ -406,7 +417,7 @@ public class PackageRefreshWorkerTests
             }
         };
         var status = new RefreshStatusStore(true);
-        _ = CreateWorker(store, repo, service, mirror, status);
+        _ = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         var states = await repo.ListSyncStatesAsync();
         var grouped = RefreshPlan.GroupByPackageBase(states.ToList(), store.Current);
@@ -425,7 +436,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "shelly", BaseFiles);
         // Synced against the current head; only staleness will make it a candidate.
         await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null);
@@ -464,7 +476,7 @@ public class PackageRefreshWorkerTests
             },
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         };
-        var service = new MongoPackageService(repo, store, Options.Create(opts), security);
+        var service = new MongoPackageService(repo, store, Options.Create(opts), security, NullLogger<MongoPackageService>.Instance);
         await SeedAsync(service, "a", BaseFiles);
         await SeedAsync(service, "b", BaseFiles);
         await SeedAsync(service, "c", BaseFiles);
@@ -475,7 +487,7 @@ public class PackageRefreshWorkerTests
         };
         var status = new RefreshStatusStore(true);
         var worker = new PackageRefreshWorker(
-            store, repo, service, mirror, status,
+            store, repo, service, mirror, new InMemorySeedExclusionRepository(), status,
             Options.Create(opts), NullLogger<PackageRefreshWorker>.Instance);
 
         await worker.RunCycleAsync(CancellationToken.None);
@@ -497,7 +509,8 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(metas);
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security);
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
         foreach (var meta in metas)
             await SeedAsync(service, meta.Name, BaseFiles);
 
@@ -514,7 +527,7 @@ public class PackageRefreshWorkerTests
         }
 
         var status = new RefreshStatusStore(true);
-        var worker = CreateWorker(store, repo, service, mirror, status);
+        var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         // Batch size 10 forces three fetch batches; default parallelism refreshes them concurrently.
         var outcome = await worker.RunCycleAsync(CancellationToken.None);
@@ -543,6 +556,113 @@ public class PackageRefreshWorkerTests
         var grouped = RefreshPlan.GroupByPackageBase([state], index);
 
         Assert.That(grouped.Keys.Single(), Is.EqualTo("orphan-base"));
+    }
+
+    [Test]
+    public async Task RunCycleAsync_records_exclusion_when_revision_snapshot_too_large()
+    {
+        var store = IndexWithPackages(Meta("shelly", "shelly"));
+        var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
+        // EnabledOptions with a raised MaxFileBytes so individual files pass validation while
+        // their combined revision snapshot still exceeds MongoDB's 16 MiB document limit.
+        var opts = new AtollOptions
+        {
+            Refresh = new RefreshOptions
+            {
+                Enabled = true,
+                BatchSize = 10,
+                BatchDelayMs = 100,
+                MaxPackagesPerRun = 100,
+                MaxStalenessHours = 24
+            },
+            Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
+        };
+        var service = new MongoPackageService(repo, store, Options.Create(opts), security, NullLogger<MongoPackageService>.Instance);
+        await SeedAsync(service, "shelly", BaseFiles);
+
+        var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+
+        var mirror = new FakeRefreshMirror
+        {
+            BranchHeads = { ["shelly"] = "sha-new" },
+            FilesFor =
+            {
+                // Each file fits within MaxFileBytes, but together they push the revision
+                // snapshot past MongoDB's 16 MiB document limit.
+                ["shelly"] = new Dictionary<string, string>
+                {
+                    ["big-1.txt"] = new('x', 9_000_000),
+                    ["big-2.txt"] = new('x', 9_000_000)
+                }
+            }
+        };
+        var status = new RefreshStatusStore(true);
+        var exclusions = new InMemorySeedExclusionRepository();
+        var worker = new PackageRefreshWorker(
+            store, repo, service, mirror, exclusions, status,
+            Options.Create(opts), NullLogger<PackageRefreshWorker>.Instance);
+
+        await worker.RunCycleAsync(CancellationToken.None);
+
+        var docAfterFirstCycle = await repo.GetHeadAsync("shelly");
+        var excludedBases = await exclusions.ListDocumentTooLargePackageBasesAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(docAfterFirstCycle!.HeadRevisionId, Is.EqualTo(originalHead));
+            Assert.That(excludedBases, Does.Contain("shelly"));
+            Assert.That(docAfterFirstCycle.LastSyncError, Is.Not.Null);
+            Assert.That(docAfterFirstCycle.LastSyncError, Does.Contain("exceeds"));
+            Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(1));
+        });
+
+        // The excluded pkgbase is removed from the candidate set before any fetch,
+        // so a second cycle must not fetch it again.
+        await worker.RunCycleAsync(CancellationToken.None);
+
+        Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task RunCycleAsync_skips_pkgbases_with_document_too_large_exclusion_without_fetching()
+    {
+        var store = IndexWithPackages(Meta("shelly", "shelly"));
+        var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
+        var service = new MongoPackageService(repo, store, Options.Create(EnabledOptions()), security,
+            NullLogger<MongoPackageService>.Instance);
+        await SeedAsync(service, "shelly", BaseFiles);
+
+        var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+
+        var exclusions = new InMemorySeedExclusionRepository();
+        await exclusions.RecordDocumentTooLargeAsync("shelly", ["shelly"], 17_000_000);
+
+        var mirror = new FakeRefreshMirror
+        {
+            BranchHeads = { ["shelly"] = "sha-new" },
+            FilesFor =
+            {
+                ["shelly"] = new Dictionary<string, string>
+                {
+                    ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
+                    [".SRCINFO"] = "pkgname = demo\n"
+                }
+            }
+        };
+        var status = new RefreshStatusStore(true);
+        var worker = CreateWorker(store, repo, service, mirror, exclusions, status);
+
+        await worker.RunCycleAsync(CancellationToken.None);
+
+        var newHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mirror.FetchedBatches, Is.Empty);
+            Assert.That(newHead, Is.EqualTo(originalHead));
+        });
     }
 
     private sealed class FakeRefreshMirror : IAurMirror

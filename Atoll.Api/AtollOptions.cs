@@ -70,6 +70,8 @@ public sealed class MongoCollections
 {
     [Required] public string Packages { get; init; } = "packages";
 
+    [Required] public string PackageRevisions { get; init; } = "package-revisions";
+
     [Required] public string AurMetadata { get; init; } = "aur-metadata";
 
     [Required] public string SeedExclusions { get; init; } = "seed-exclusions";
@@ -86,7 +88,7 @@ public sealed class DataSourceOptions
 
 public sealed class RefreshOptions
 {
-    public bool Enabled { get; init; } = false;
+    public bool Enabled { get; init; } = true;
 
     [Range(10, 10_000)] public int BatchSize { get; init; } = 1000;
 

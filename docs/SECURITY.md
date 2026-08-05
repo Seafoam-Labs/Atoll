@@ -118,19 +118,11 @@ as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
 applies to every file in the package regardless of extension. The remaining rules are shell-line rules and only run on
 scannable script files.
 
-The scanner is split into a thin facade (`PkgBuildSecurityScanner`) and a small set of `internal static`
-components under `Atoll.Api/Services/Security/Scanning/` (see the file list at the top of this document). The rule
-set, the risky/privilege tool lists, and the per-line scan loop live in `ShellContentScanner`; the shell-aware
-primitives it depends on (comment stripping, de-obfuscation, quoted-region mask, tool-boundary matching,
-hidden-codepoint detection) live in `ShellSyntax`; `source=` URL inspection lives in `PkgBuildSourceUrlScanner`;
-whole-file ELF/binary detection lives in `LocalSourceBinaryScanner`; and file-type classification lives in
-`PackageBuildFileClassifier`.
-
 Adding or changing a shell rule is a one-line change to the `Rules` array in `ShellContentScanner` (or the
-`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). The `local-binary` rule lives in its own component
-(`LocalSourceBinaryScanner`) because it is a whole-file check, not a shell-line rule. Rule ids are persisted verbatim in
-stored findings and returned by `GET /packages/{name}/security` indirectly via `findingCount`, so renaming a rule does
-not corrupt data but does change the set of ids visible in historical documents.
+`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). The `local-binary` rule remains separate because it
+is a whole-file check, not a shell-line rule. Rule ids are persisted verbatim in stored findings and exposed indirectly
+by `GET /packages/{name}/security` through `findingCount`, so renaming a rule does not corrupt data but changes the ids
+visible in historical documents.
 
 ## Pipeline
 
@@ -164,15 +156,9 @@ hosted service registered in `Program.cs`; it starts with the API and stops on s
 
 ## Gating
 
-`PackageSecurityAccess.CheckAsync` is the single decision point. It is enforced by `PackageSecurityFilter`, an
-`IEndpointFilter` applied to the content-serving route group in `Endpoints.cs`. The filter covers exactly four routes:
-
-- `GET /packages/{name}` (head revision files)
-- `GET /packages/{name}/versions/{sha}` (specific revision files)
-- `GET /packages/{name}.git/info/refs?service=git-upload-pack` (Git ref advertisement)
-- `POST /packages/{name}.git/git-upload-pack` (Git pack transfer)
-
-Decision table:
+`PackageSecurityAccess.CheckAsync` is the single decision point. `PackageSecurityFilter`, applied to the
+content-serving route group in `Endpoints.cs`, enforces it for head content, a requested revision, and both Git Smart
+HTTP routes. Decision table:
 
 | Condition                             | Result                                            |
 | ------------------------------------- | ------------------------------------------------- |
@@ -184,12 +170,9 @@ Decision table:
 | Status `Error`                        | Block — `security_scan_error`.                    |
 
 Blocked requests return `403 Forbidden` with an RFC 9457 `application/problem+json` body and a non-sensitive `reason`
-extension code (one of the three above). No file content or finding detail is leaked in the error response.
-`GET /packages/{name}/versions/{sha}` is gated on the scan state of the **requested revision**: a `Flagged` revision
-blocks only itself, while earlier and later revisions are served according to their own scan results. The head routes
-(`GET /packages/{name}` and both Git routes) are gated on the head revision's scan state. Version history
-(`GET /packages/{name}/versions`) and the security status endpoint (`GET /packages/{name}/security`) are intentionally
-not gated: they expose metadata and the scan summary, not package content.
+extension code (one of the three above). No file content or finding detail is leaked. The requested-version route is
+gated on that revision's status; the head-content and Git routes use the head status. Version history and the security
+status endpoint remain ungated because they expose only metadata and scan summaries.
 
 > **Git limitation:** the Git Smart HTTP routes serve the whole repository, so they are gated on the head revision
 > only. A `Flagged` historical revision is still reachable via `git clone` followed by `git checkout <sha>` even though

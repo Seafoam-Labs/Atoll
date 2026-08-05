@@ -30,8 +30,10 @@ public class PackageSecurityWorkerTests
         string content)
     {
         var now = DateTimeOffset.UtcNow;
-        var revision = new PackageRevisionDocument
+        var revision = new PackageRevisionContentDocument
         {
+            Id = PackageSchema.RevisionDocumentId(name, "rev-1"),
+            PackageName = name,
             RevisionId = "rev-1",
             CreatedAt = now,
             Author = "test",
@@ -48,9 +50,17 @@ public class PackageSecurityWorkerTests
             CreatedAt = now,
             UpdatedAt = now,
             HeadRevisionId = revision.RevisionId,
-            Files = revision.Files,
-            Revisions = [revision]
-        });
+            Revisions =
+            [
+                new PackageRevisionDocument
+                {
+                    RevisionId = revision.RevisionId,
+                    CreatedAt = revision.CreatedAt,
+                    Author = revision.Author,
+                    Message = revision.Message
+                }
+            ]
+        }, revision);
         await securityRepo.MarkPendingAsync(name, revision.RevisionId, true);
     }
 

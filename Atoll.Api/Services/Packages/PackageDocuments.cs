@@ -3,6 +3,16 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace Atoll.Api.Services.Packages;
 
+public static class PackageSchema
+{
+    public const int CurrentVersion = 2;
+
+    public static string RevisionDocumentId(string packageName, string revisionId)
+    {
+        return $"{packageName}:{revisionId}";
+    }
+}
+
 public sealed class PackageDocument
 {
     [BsonId]
@@ -17,7 +27,7 @@ public sealed class PackageDocument
 
     [BsonElement("headRevisionId")] public string HeadRevisionId { get; init; } = string.Empty;
 
-    [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
+    [BsonElement("schemaVersion")] public int SchemaVersion { get; init; } = PackageSchema.CurrentVersion;
 
     [BsonElement("revisions")] public List<PackageRevisionDocument> Revisions { get; init; } = [];
 
@@ -60,13 +70,25 @@ public sealed class PackageRevisionDocument
     [BsonElement("author")] public string Author { get; init; } = string.Empty;
 
     [BsonElement("message")] public string Message { get; init; } = string.Empty;
-
-    [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
 }
 
-public sealed class PackageHeadFiles
+public sealed class PackageRevisionContentDocument
 {
-    [BsonElement("headRevisionId")] public string HeadRevisionId { get; init; } = string.Empty;
+    [BsonId]
+    [BsonRepresentation(BsonType.String)]
+    public string Id { get; init; } = string.Empty;
+
+    [BsonElement("packageName")] public string PackageName { get; init; } = string.Empty;
+
+    [BsonElement("revisionId")] public string RevisionId { get; init; } = string.Empty;
+
+    [BsonElement("createdAt")] public DateTimeOffset CreatedAt { get; init; }
+
+    [BsonElement("author")] public string Author { get; init; } = string.Empty;
+
+    [BsonElement("message")] public string Message { get; init; } = string.Empty;
+
+    [BsonElement("schemaVersion")] public int SchemaVersion { get; init; } = PackageSchema.CurrentVersion;
 
     [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
 }

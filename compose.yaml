@@ -11,6 +11,7 @@
       - Atoll__Mongo__ConnectionString=mongodb://admin:change_me@mongo:27017/atoll?authSource=admin
       - Atoll__Mongo__Database=atoll
       - Atoll__Mongo__Collections__Packages=packages
+      - Atoll__Mongo__Collections__PackageRevisions=package-revisions
       - Atoll__Mongo__Collections__AurMetadata=aur-metadata
       - Atoll__Mongo__MaxRevisions=10
       - Atoll__Mongo__MaxFileBytes=5242880

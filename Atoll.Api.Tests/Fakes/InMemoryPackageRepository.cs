@@ -8,6 +8,7 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
 
     // Bulk seeding and refresh process pkgbases concurrently, so every access is guarded.
     private readonly Lock _gate = new();
+    private readonly Dictionary<string, PackageRevisionContentDocument> _revisions = new(StringComparer.Ordinal);
 
     public Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
     {
@@ -34,33 +35,23 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
         }
     }
 
-    public Task<PackageHeadFiles?> GetHeadFilesAsync(string packageName, CancellationToken ct = default)
+    public Task<string?> GetHeadRevisionIdAsync(string packageName, CancellationToken ct = default)
     {
         lock (_gate)
         {
-            if (!_docs.TryGetValue(packageName, out var doc))
-                return Task.FromResult<PackageHeadFiles?>(null);
-
-            return Task.FromResult<PackageHeadFiles?>(new PackageHeadFiles
-            {
-                HeadRevisionId = doc.HeadRevisionId,
-                Files = doc.Files
-            });
+            return Task.FromResult(_docs.TryGetValue(packageName, out var doc) ? doc.HeadRevisionId : null);
         }
     }
 
-    public Task<PackageRevisionDocument?> GetRevisionAsync(
+    public Task<PackageRevisionContentDocument?> GetRevisionAsync(
         string packageName,
         string revisionId,
         CancellationToken ct = default)
     {
         lock (_gate)
         {
-            if (!_docs.TryGetValue(packageName, out var doc))
-                return Task.FromResult<PackageRevisionDocument?>(null);
-
-            var rev = doc.Revisions.FirstOrDefault(r => r.RevisionId == revisionId);
-            return Task.FromResult(rev);
+            var id = PackageSchema.RevisionDocumentId(packageName, revisionId);
+            return Task.FromResult(_revisions.TryGetValue(id, out var revision) ? revision : null);
         }
     }
 
@@ -81,20 +72,21 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
         }
     }
 
-    public Task InsertSeedAsync(PackageDocument doc, CancellationToken ct = default)
+    public Task InsertSeedAsync(PackageDocument doc, PackageRevisionContentDocument revision, CancellationToken ct = default)
     {
         lock (_gate)
         {
-            return _docs.TryAdd(doc.PackageName, doc)
-                ? Task.CompletedTask
-                : throw new PackageConflictException(doc.PackageName);
+            if (!_docs.TryAdd(doc.PackageName, doc))
+                throw new PackageConflictException(doc.PackageName);
+
+            _revisions[revision.Id] = revision;
+            return Task.CompletedTask;
         }
     }
 
     public Task AppendRevisionAsync(
         string packageName,
-        PackageRevisionDocument revision,
-        Dictionary<string, PackageFile> headFiles,
+        PackageRevisionContentDocument revision,
         int maxRevisions,
         CancellationToken ct = default)
     {
@@ -103,18 +95,37 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
             if (!_docs.TryGetValue(packageName, out var existing))
                 throw new KeyNotFoundException($"Package '{packageName}' not found.");
 
-            var updated = new PackageDocument
+            // Upsert: revision ids are content hashes, so identical content can legitimately
+            // reappear and its document may already exist.
+            _revisions[revision.Id] = revision;
+
+            var revisions = new List<PackageRevisionDocument>
+            {
+                new()
+                {
+                    RevisionId = revision.RevisionId,
+                    CreatedAt = revision.CreatedAt,
+                    Author = revision.Author,
+                    Message = revision.Message
+                }
+            };
+            revisions.AddRange(existing.Revisions);
+            var retained = revisions.Take(maxRevisions).ToList();
+
+            // Mirrors MongoPackageRepository: delete revision documents that no longer appear
+            // anywhere in the retained list. The freshly appended id is always retained.
+            var retainedIds = retained.Select(r => r.RevisionId).ToHashSet(StringComparer.Ordinal);
+            foreach (var old in existing.Revisions.Where(old => !retainedIds.Contains(old.RevisionId)))
+                _revisions.Remove(PackageSchema.RevisionDocumentId(packageName, old.RevisionId));
+
+            _docs[packageName] = new PackageDocument
             {
                 Id = existing.Id,
                 PackageName = existing.PackageName,
                 CreatedAt = existing.CreatedAt,
                 UpdatedAt = DateTimeOffset.UtcNow,
                 HeadRevisionId = revision.RevisionId,
-                Files = headFiles,
-                Revisions = new List<PackageRevisionDocument> { revision }
-                    .Concat(existing.Revisions)
-                    .Take(maxRevisions)
-                    .ToList(),
+                Revisions = retained,
                 UpstreamPackageBase = existing.UpstreamPackageBase,
                 LastSyncedUpstreamHead = existing.LastSyncedUpstreamHead,
                 LastSyncAttemptAt = existing.LastSyncAttemptAt,
@@ -122,7 +133,6 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                 LastSyncError = existing.LastSyncError
             };
 
-            _docs[packageName] = updated;
             return Task.CompletedTask;
         }
     }
@@ -166,7 +176,6 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                     CreatedAt = existing.CreatedAt,
                     UpdatedAt = existing.UpdatedAt,
                     HeadRevisionId = existing.HeadRevisionId,
-                    Files = existing.Files,
                     Revisions = existing.Revisions,
                     UpstreamPackageBase = existing.UpstreamPackageBase,
                     LastSyncAttemptAt = now,
@@ -185,6 +194,12 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
         lock (_gate)
         {
             _docs.Remove(packageName);
+
+            // Cascade: mirrors MongoPackageRepository.DeleteAsync.
+            var prefix = packageName + ":";
+            foreach (var id in _revisions.Keys.Where(id => id.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+                _revisions.Remove(id);
+
             return Task.CompletedTask;
         }
     }

@@ -2,6 +2,7 @@ using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Tests.Fakes;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
@@ -43,7 +44,8 @@ public class GitRepositoryMaterializationTests
             repo,
             new PackageIndexStore(),
             options,
-            new InMemoryPackageSecurityRepository()), reposRoot);
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance), reposRoot);
     }
 
     [SetUp]
@@ -162,7 +164,8 @@ public class GitRepositoryMaterializationTests
             repo,
             new PackageIndexStore(),
             options,
-            new InMemoryPackageSecurityRepository());
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 

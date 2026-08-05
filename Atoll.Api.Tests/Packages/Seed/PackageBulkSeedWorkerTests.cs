@@ -61,7 +61,8 @@ public class PackageBulkSeedWorkerTests
             repo,
             store,
             Options.Create(BulkOptions()),
-            new InMemoryPackageSecurityRepository());
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
         exclusions ??= new InMemorySeedExclusionRepository();
         return new PackageBulkSeedWorker(
             store,
@@ -203,7 +204,8 @@ public class PackageBulkSeedWorkerTests
             repo,
             store,
             Options.Create(BulkOptions()),
-            new InMemoryPackageSecurityRepository());
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
         await service.SeedFilesAsync("shelly", BaseFiles); // pre-seeded
 
         var mirror = new FakeMirror { Branches = { "shelly", "other" } };

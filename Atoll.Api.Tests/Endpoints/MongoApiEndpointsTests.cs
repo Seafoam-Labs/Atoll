@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Tests.Support;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 
@@ -40,8 +41,10 @@ public class MongoApiEndpointsTests
     {
         var repo = _factory.CreatePackageRepository();
         var now = DateTimeOffset.UtcNow;
-        var revision = new PackageRevisionDocument
+        var revisionContent = new PackageRevisionContentDocument
         {
+            Id = PackageSchema.RevisionDocumentId("atoll-test", "rev-1"),
+            PackageName = "atoll-test",
             RevisionId = "rev-1",
             CreatedAt = now,
             Author = "test",
@@ -58,9 +61,11 @@ public class MongoApiEndpointsTests
             CreatedAt = now,
             UpdatedAt = now,
             HeadRevisionId = "rev-1",
-            Files = revision.Files,
-            Revisions = [revision]
-        });
+            Revisions =
+            [
+                new PackageRevisionDocument { RevisionId = "rev-1", CreatedAt = now, Author = "test", Message = "seed" }
+            ]
+        }, revisionContent);
 
         var list = await _client.GetAsync("/packages");
         var head = await _client.GetAsync("/packages/atoll-test");
@@ -81,6 +86,19 @@ public class MongoApiEndpointsTests
     {
         var repo = _factory.CreatePackageRepository();
         var now = DateTimeOffset.UtcNow;
+        var revisionContent = new PackageRevisionContentDocument
+        {
+            Id = PackageSchema.RevisionDocumentId("to-delete", "rev-1"),
+            PackageName = "to-delete",
+            RevisionId = "rev-1",
+            CreatedAt = now,
+            Author = "test",
+            Message = "seed",
+            Files = new Dictionary<string, PackageFile>
+            {
+                ["PKGBUILD"] = new() { Content = "pkgname=to-delete\n", Size = 18, Hash = "h" }
+            }
+        };
         await repo.InsertSeedAsync(new PackageDocument
         {
             Id = "to-delete",
@@ -88,13 +106,21 @@ public class MongoApiEndpointsTests
             CreatedAt = now,
             UpdatedAt = now,
             HeadRevisionId = "rev-1",
-            Files = new Dictionary<string, PackageFile>(),
-            Revisions = []
-        });
+            Revisions =
+            [
+                new PackageRevisionDocument { RevisionId = "rev-1", CreatedAt = now, Author = "test", Message = "seed" }
+            ]
+        }, revisionContent);
 
         var del = await _client.DeleteAsync("/packages/to-delete");
         Assert.That(del.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
         Assert.That(await repo.ExistsAsync("to-delete"), Is.False);
+
+        // Cascade: the deleted package's revision content documents are also gone.
+        var revisionDocs = _mongo.GetDatabase(_factory.Database).GetCollection<BsonDocument>("package-revisions");
+        Assert.That(
+            await revisionDocs.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")),
+            Is.EqualTo(0));
     }
 }

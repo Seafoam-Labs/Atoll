@@ -13,14 +13,15 @@ public sealed class MongoPackageService(
     IPackageRepository repo,
     PackageIndexStore indexStore,
     IOptions<AtollOptions> options,
-    IPackageSecurityRepository securityRepository) : IPackageService
+    IPackageSecurityRepository securityRepository,
+    ILogger<MongoPackageService> logger) : IPackageService
 {
     private const int MongoMaxDocumentSizeBytes = 16 * 1024 * 1024;
 
     // Per-file BSON overhead: hash string, size field, element names, and framing.
     private const int FileEntryOverheadBytes = 160;
 
-    // Document-level overhead: identifiers, timestamps, and revision metadata.
+    // Revision-document-level overhead: identifiers, timestamps, and revision metadata.
     private const int DocumentOverheadBytes = 1024;
 
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
@@ -38,17 +39,21 @@ public sealed class MongoPackageService(
 
     public async Task<PackageFiles> GetAsync(string packageName, string? commitSha = null)
     {
+        string revisionId;
         if (string.IsNullOrEmpty(commitSha))
         {
-            var doc = await repo.GetHeadAsync(packageName)
-                      ?? throw new KeyNotFoundException($"Package '{packageName}' not found.");
-            return ToPackageFiles(doc.Files);
+            var doc = await repo.GetHeadAsync(packageName) ?? throw new KeyNotFoundException($"Package '{packageName}' not found.");
+            revisionId = doc.HeadRevisionId;
+        }
+        else
+        {
+            revisionId = commitSha;
         }
 
-        var rev = await repo.GetRevisionAsync(packageName, commitSha)
-                  ?? throw new KeyNotFoundException($"Revision '{commitSha}' not found for package '{packageName}'.");
+        var revision = await repo.GetRevisionAsync(packageName, revisionId) ??
+                       throw new KeyNotFoundException($"Revision '{revisionId}' not found for package '{packageName}'.");
 
-        return ToPackageFiles(rev.Files);
+        return ToPackageFiles(revision.Files);
     }
 
     public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName)
@@ -135,9 +140,20 @@ public sealed class MongoPackageService(
             }
 
             var parent = string.Empty;
+            var complete = true;
             foreach (var revision in doc.Revisions.OrderBy(r => r.CreatedAt))
             {
-                var tree = await WriteTreeAsync(path, revision.Files, ct);
+                var content = await repo.GetRevisionAsync(packageName, revision.RevisionId, ct);
+                if (content is null)
+                {
+                    logger.LogError(
+                        "Revision content for {PackageName} revision {RevisionId} is missing; materializing the remaining history.",
+                        packageName, revision.RevisionId);
+                    complete = false;
+                    continue;
+                }
+
+                var tree = await WriteTreeAsync(path, content.Files, ct);
                 parent = await WriteCommitAsync(path, tree, parent, revision, ct);
             }
 
@@ -149,7 +165,9 @@ public sealed class MongoPackageService(
 
             string[] arguments1 = ["symbolic-ref", "HEAD", "refs/heads/main"];
             await GitClient.ExecuteAsync(path, arguments1, null, null, ct);
-            await File.WriteAllTextAsync(marker, headMarker, ct);
+
+            if (complete)
+                await File.WriteAllTextAsync(marker, headMarker, ct);
         }
         finally
         {
@@ -163,14 +181,18 @@ public sealed class MongoPackageService(
         var revisionId = ComputeRevisionId(packageName, packageFiles);
         var now = DateTimeOffset.UtcNow;
 
-        var revision = new PackageRevisionDocument
+        var revision = new PackageRevisionContentDocument
         {
+            Id = PackageSchema.RevisionDocumentId(packageName, revisionId),
+            PackageName = packageName,
             RevisionId = revisionId,
             CreatedAt = now,
             Author = "aur",
             Message = "seed from AUR",
             Files = packageFiles
         };
+
+        ThrowIfRevisionDocumentTooLarge(packageName, revision);
 
         var doc = new PackageDocument
         {
@@ -179,21 +201,19 @@ public sealed class MongoPackageService(
             CreatedAt = now,
             UpdatedAt = now,
             HeadRevisionId = revisionId,
-            Files = packageFiles,
-            Revisions = [revision]
+            Revisions =
+            [
+                new PackageRevisionDocument
+                {
+                    RevisionId = revisionId,
+                    CreatedAt = now,
+                    Author = "aur",
+                    Message = "seed from AUR"
+                }
+            ]
         };
 
-        if (EstimateSerializedSizeBound(packageFiles) > MongoMaxDocumentSizeBytes)
-        {
-            var serializedSizeBytes = doc.ToBson().LongLength;
-            if (serializedSizeBytes > MongoMaxDocumentSizeBytes)
-                throw new PackageDocumentTooLargeException(
-                    packageName,
-                    serializedSizeBytes,
-                    MongoMaxDocumentSizeBytes);
-        }
-
-        await repo.InsertSeedAsync(doc);
+        await repo.InsertSeedAsync(doc, revision);
         await securityRepository.MarkPendingAsync(packageName, revisionId, true);
     }
 
@@ -213,8 +233,10 @@ public sealed class MongoPackageService(
             return false;
 
         var now = DateTimeOffset.UtcNow;
-        var revision = new PackageRevisionDocument
+        var revision = new PackageRevisionContentDocument
         {
+            Id = PackageSchema.RevisionDocumentId(packageName, revisionId),
+            PackageName = packageName,
             RevisionId = revisionId,
             CreatedAt = now,
             Author = "aur",
@@ -222,7 +244,9 @@ public sealed class MongoPackageService(
             Files = packageFiles
         };
 
-        await repo.AppendRevisionAsync(packageName, revision, packageFiles, _options.Mongo.MaxRevisions, ct);
+        ThrowIfRevisionDocumentTooLarge(packageName, revision);
+
+        await repo.AppendRevisionAsync(packageName, revision, _options.Mongo.MaxRevisions, ct);
 
         await securityRepository.MarkPendingAsync(packageName, revisionId, true, ct);
         await securityRepository.PromoteHeadAsync(packageName, revisionId, ct);
@@ -261,7 +285,6 @@ public sealed class MongoPackageService(
         {
             var blob = (await GitClient.ExecuteAsync(repoPath, ["hash-object", "--stdin", "-w"], file.Content, env, ct)).Trim();
 
-            // Mark shell scripts as executable to match typical AUR expectations.
             var mode = IsExecutable(name, file.Content) ? "100755" : "100644";
 
             await GitClient.ExecuteAsync(repoPath, ["update-index", "--add", "--cacheinfo", mode, blob, name], null, env, ct);
@@ -344,13 +367,23 @@ public sealed class MongoPackageService(
         return result;
     }
 
+    private static void ThrowIfRevisionDocumentTooLarge(string packageName, PackageRevisionContentDocument revision)
+    {
+        if (EstimateSerializedSizeBound(revision.Files) <= MongoMaxDocumentSizeBytes)
+            return;
+
+        var serializedSizeBytes = revision.ToBson().LongLength;
+        if (serializedSizeBytes > MongoMaxDocumentSizeBytes)
+            throw new PackageDocumentTooLargeException(packageName, serializedSizeBytes, MongoMaxDocumentSizeBytes);
+    }
+
     private static long EstimateSerializedSizeBound(IReadOnlyDictionary<string, PackageFile> files)
     {
         long contentBytes = 0;
         foreach (var (name, file) in files)
             contentBytes += file.Size + Encoding.UTF8.GetByteCount(name) + FileEntryOverheadBytes;
 
-        return 2 * contentBytes + DocumentOverheadBytes;
+        return contentBytes + DocumentOverheadBytes;
     }
 
     private static string ComputeRevisionId(

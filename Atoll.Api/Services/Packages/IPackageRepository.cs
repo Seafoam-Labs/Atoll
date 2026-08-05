@@ -8,16 +8,16 @@ public interface IPackageRepository
 
     Task<PackageDocument?> GetHeadAsync(string packageName, CancellationToken ct = default);
 
-    Task<PackageHeadFiles?> GetHeadFilesAsync(string packageName, CancellationToken ct = default);
+    Task<string?> GetHeadRevisionIdAsync(string packageName, CancellationToken ct = default);
 
-    Task<PackageRevisionDocument?> GetRevisionAsync(string packageName, string revisionId, CancellationToken ct = default);
+    Task<PackageRevisionContentDocument?> GetRevisionAsync(string packageName, string revisionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName, CancellationToken ct = default);
 
-    Task InsertSeedAsync(PackageDocument doc, CancellationToken ct = default);
+    Task InsertSeedAsync(PackageDocument doc, PackageRevisionContentDocument revision, CancellationToken ct = default);
 
-    Task AppendRevisionAsync(string packageName, PackageRevisionDocument revision, Dictionary<string, PackageFile> headFiles,
-        int maxRevisions, CancellationToken ct = default);
+    Task AppendRevisionAsync(string packageName, PackageRevisionContentDocument revision, int maxRevisions,
+        CancellationToken ct = default);
 
     Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default);
 

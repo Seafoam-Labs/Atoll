@@ -59,9 +59,9 @@ public sealed class PackageSecurityWorker(
             new ParallelOptions { MaxDegreeOfParallelism = _security.ScannerConcurrency, CancellationToken = ct },
             async (packageName, token) =>
             {
-                var package = await packageRepository.GetHeadFilesAsync(packageName, token);
-                if (package is not null)
-                    await securityRepo.EnsurePendingAsync(packageName, package.HeadRevisionId, true, token);
+                var headRevisionId = await packageRepository.GetHeadRevisionIdAsync(packageName, token);
+                if (!string.IsNullOrEmpty(headRevisionId))
+                    await securityRepo.EnsurePendingAsync(packageName, headRevisionId, true, token);
             });
     }
 
@@ -122,7 +122,7 @@ public sealed class PackageSecurityWorker(
             if (revision is null)
             {
                 logger.LogDebug(
-                    "Dropping security scan claim for {PackageName} revision {RevisionId}: revision no longer retained.",
+                    "Dropping security scan claim for {PackageName} revision {RevisionId}: revision content no longer retained.",
                     claim.PackageName, claim.RevisionId);
                 await securityRepo.DeleteAsync(claim.PackageName, claim.RevisionId, ct);
                 status.RecordScanDropped();

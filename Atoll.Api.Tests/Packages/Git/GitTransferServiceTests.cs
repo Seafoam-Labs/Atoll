@@ -3,6 +3,7 @@ using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Tests.Fakes;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
@@ -38,7 +39,8 @@ public class GitTransferServiceTests
             repo,
             new PackageIndexStore(),
             options,
-            new InMemoryPackageSecurityRepository());
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
         var git = new GitTransferService(packages);
         return (git, packages, reposRoot);
     }

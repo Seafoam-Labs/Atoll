@@ -10,14 +10,24 @@ public class PackageSecurityAccessTests
 {
     private static async Task SeedPackageAsync(InMemoryPackageRepository packages)
     {
-        await packages.InsertSeedAsync(new PackageDocument
-        {
-            Id = "pkg",
-            PackageName = "pkg",
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
-            HeadRevisionId = "rev-1"
-        });
+        var now = DateTimeOffset.UtcNow;
+        await packages.InsertSeedAsync(
+            new PackageDocument
+            {
+                Id = "pkg",
+                PackageName = "pkg",
+                CreatedAt = now,
+                UpdatedAt = now,
+                HeadRevisionId = "rev-1",
+                Revisions = [new PackageRevisionDocument { RevisionId = "rev-1", CreatedAt = now }]
+            },
+            new PackageRevisionContentDocument
+            {
+                Id = PackageSchema.RevisionDocumentId("pkg", "rev-1"),
+                PackageName = "pkg",
+                RevisionId = "rev-1",
+                CreatedAt = now
+            });
     }
 
     private static PackageSecurityAccess Create(
@@ -86,8 +96,14 @@ public class PackageSecurityAccessTests
         await SeedPackageAsync(packages);
         await packages.AppendRevisionAsync(
             "pkg",
-            new PackageRevisionDocument { RevisionId = "rev-2", CreatedAt = DateTimeOffset.UtcNow },
-            new Dictionary<string, PackageFile>(),
+            new PackageRevisionContentDocument
+            {
+                Id = PackageSchema.RevisionDocumentId("pkg", "rev-2"),
+                PackageName = "pkg",
+                RevisionId = "rev-2",
+                CreatedAt = DateTimeOffset.UtcNow,
+                Files = new Dictionary<string, PackageFile>()
+            },
             10);
 
         await security.MarkPendingAsync("pkg", "rev-1", false);
