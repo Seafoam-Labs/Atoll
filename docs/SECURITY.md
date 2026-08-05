@@ -320,10 +320,7 @@ the previous section resolving on its own after restart.
   wants to unblock (or block) regardless of scanner output.
 - **No source-host policy.** `suspicious-source-url` is a syntactic check only; there is no allow/deny list for source
   domains.
-- **FTP source URLs are not extracted.** `PkgBuildSourceUrlScanner.SuspiciousSourceUrl` accepts `ftp://` in its
-  pattern, but the `HttpRegex` used to extract URLs from the `source=` line only matches `https?://`, so FTP source
-  URLs are never actually flagged. Either extend `HttpRegex` to cover `ftp://` or drop the `ftp` alternative from
-  `SuspiciousSourceUrl`.
+
 - **Git routes are head-gated only.** The Git Smart HTTP routes serve the whole repository and are gated on the head
   revision's status, so a `Flagged` historical revision remains reachable via `git clone` + `git checkout <sha>` even
   though the equivalent `GET /packages/{name}/versions/{sha}` request is blocked. Closing this would require either

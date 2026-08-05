@@ -30,7 +30,7 @@ internal static partial class PkgBuildSourceUrlScanner
         }
     }
 
-    [GeneratedRegex(@"^(https?|ftp)://[^\s/]+\.(zip|rar|7z|tar\.gz|tar\.bz2|tgz|exe|msi|bin)$",
+    [GeneratedRegex(@"^https?://[^\s/]+\.(zip|rar|7z|tar\.gz|tar\.bz2|tgz|exe|msi|bin)$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
     private static partial Regex SuspiciousSourceUrl();
 

@@ -269,9 +269,9 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 
 **Implemented** (see [Periodic refresh](#periodic-refresh) above). `PackageRefreshWorker` keeps seeded packages in sync
 with upstream AUR changes by detecting HEAD-SHA movement on the GitHub mirror and appending new revisions through
-`AppendRevisionFromUpstreamAsync`, gated by the existing security scan pipeline. Remaining follow-ups: tiered cadence
-(popular/recently-updated packages more frequently) instead of the current single-interval loop, optional direct-AUR
-fallback for pkgbases missing from the mirror (currently skipped), and a periodic full-verification pass for healing.
+`AppendRevisionFromUpstreamAsync`, gated by the existing security scan pipeline. Remaining follow-ups: optional
+direct-AUR fallback for pkgbases missing from the mirror (currently skipped), and a periodic full-verification pass for
+healing.
 
 ### 2. Security scanning of PKGBUILD and package scripts
 
