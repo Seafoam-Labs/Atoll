@@ -46,22 +46,15 @@ builder.Services.AddSingleton<AtollMetrics>();
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("Atoll.Api", serviceVersion: "1.0.0"))
-    // Exports every configured signal (metrics, logs) over OTLP. Endpoint and
-    // protocol come from OTEL_EXPORTER_OTLP_* environment variables (see
-    // compose.yaml); without them it falls back to localhost:4317.
     .UseOtlpExporter()
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
-        // Resolving the singleton here guarantees the atoll.* instruments are
-        // registered when the meter provider starts (DI singletons are lazy).
         .AddInstrumentation(sp => sp.GetRequiredService<AtollMetrics>())
         .AddMeter(AtollMetrics.MeterName)
         .AddPrometheusExporter());
 
-// Route application logs through OpenTelemetry so the OTLP exporter ships them
-// alongside metrics (e.g. to Loki in the docker-otel-lgtm stack).
 builder.Logging.AddOpenTelemetry();
 
 builder.Services.AddSingleton<IMongoClient>(sp =>
@@ -85,17 +78,15 @@ var seedMode = builder.Configuration.GetSection("Atoll:Seed").Get<SeedOptions>()
 var bulkEnabled = seedMode == SeedMode.Bulk;
 var refreshEnabled = builder.Configuration.GetSection("Atoll:Refresh").Get<RefreshOptions>()?.Enabled ?? false;
 var securityEnabled = builder.Configuration.GetSection("Atoll:Security").Get<SecurityOptions>()?.Enabled ?? true;
-// Always registered so the atoll.* instruments have a source to read; counts stay 0 when the feature is disabled.
+
 builder.Services.AddSingleton(new BulkSeedStatusStore(bulkEnabled));
 builder.Services.AddSingleton(new RefreshStatusStore(refreshEnabled));
 builder.Services.AddSingleton(new SecurityScanStatusStore(securityEnabled));
 
-// The mirror is shared by bulk seeding and refresh; register it when either is active.
 if (bulkEnabled || refreshEnabled)
     builder.Services.AddSingleton<IAurMirror>(sp =>
     {
         var options = sp.GetRequiredService<IOptions<AtollOptions>>().Value;
-        // Prefer the bulk seeder's mirror config when bulk mode is active so both workers share it.
         var (mirrorUrl, cachePath) = bulkEnabled
             ? (options.Seed.Bulk.MirrorUrl, options.Seed.Bulk.CachePath)
             : (options.Refresh.MirrorUrl, options.Refresh.CachePath);
@@ -129,7 +120,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseExceptionHandler();
 app.MapEndpoints();
-// Endpoint-routed scrape endpoint; the literal /metrics route wins over the fallback catch-all.
 app.MapPrometheusScrapingEndpoint();
 
 await app.RunAsync();

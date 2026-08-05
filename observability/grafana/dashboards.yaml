@@ -6,6 +6,11 @@ apiVersion: 1
 providers:
   - name: "Atoll"
     type: file
+    # Re-check the mounted dashboard file periodically so edits to atoll.json
+    # are picked up without restarting the stack. (If a change still does not
+    # appear, force a reload:
+    #   curl -u admin:admin -X POST http://localhost:3000/api/admin/provisioning/dashboards/reload )
+    updateIntervalSeconds: 10
     options:
       path: /otel-lgtm/grafana/conf/provisioning/dashboards/custom
       foldersFromFilesStructure: false
