@@ -53,9 +53,11 @@ public sealed class AurMetadataRepository : IAurMetadataRepository
             .Find(Builders<AurPackageMetadataDocument>.Filter.Eq(x => x.BatchId, pointer.ActiveBatchId))
             .ToListAsync(ct);
 
-        return docs
-            .Select(x => x.ToMetadata())
-            .ToList();
+        return
+        [
+            .. docs
+                .Select(x => x.ToMetadata())
+        ];
     }
 
     public async Task<bool> ExistsAsync(CancellationToken ct)

@@ -17,8 +17,6 @@ public static class Endpoints
         var packages = app.MapGroup("/packages");
         MapPackageRoutes(packages);
         MapGitProtocolRoutes(packages);
-
-        app.MapFallback("/{**path}", ([FromRoute] string? path) => TypedResults.NotFound());
     }
 
     private static Ok<AurPackageMetadata[]> Search(

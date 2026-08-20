@@ -1,0 +1,364 @@
+/*
+ * Atoll stylesheet — Tailwind CSS v4 source. Compiled to wwwroot/app.min.css
+ * (gitignored) by the BuildTailwindCss target in Atoll.Api.csproj — see
+ * tailwind.md for the UI plan and the build prerequisites.
+ *
+ * One-off layout lives as Tailwind utilities in the markup; this layer keeps
+ * the shared primitives (cards, fields, command blocks, badges, chips,
+ * buttons, tabs, the package table with its sort-button classes, the metadata
+ * list, the security status banners, and finding cards). Modeled on
+ * Remora.Public/wwwroot/app.css with Atoll's tokens and security components.
+ */
+@import "tailwindcss" source(none);
+
+/* Scan only this project's markup; auto-detection would start at the git root
+   and pull in the tailwind-ui-samples reference library. */
+@source "../Components/**/*.razor";
+
+@theme {
+    /* brand — "atoll" cyan */
+    --color-atoll: #22d3ee;
+    --color-atoll-light: #67e8f9;
+    --color-atoll-dark: #0891b2;
+
+    /* surfaces & ink — the page background is named `canvas`, not `base`,
+       so `text-base` keeps its Tailwind font-size meaning. */
+    --color-canvas: #0b1220;
+    --color-surface: #111a2c;
+    --color-ink: #f1f5f9;
+    --color-ink-soft: #94a3b8;
+    --color-ink-faint: #64748b;
+    --color-line: #263449;
+
+    /* security status */
+    --color-sec-verified: #34d399;
+    --color-sec-pending: #fbbf24;
+    --color-sec-flagged: #fb7185;
+    --color-sec-error: #f87171;
+
+    /* finding severity */
+    --color-sev-critical: #e11d48;
+    --color-sev-high: #fb923c;
+    --color-sev-medium: #facc15;
+    --color-sev-low: #38bdf8;
+    --color-sev-info: #94a3b8;
+
+    /* fonts — private/offline deployments, so no external font CDN;
+       self-hosting woff2 files is an optional later change. */
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* ---------- Base: document, typography, links ---------- */
+@layer base {
+    html {
+        @apply min-h-screen;
+        color-scheme: dark;
+    }
+
+    body {
+        @apply min-h-screen bg-canvas text-ink font-sans antialiased text-base;
+    }
+
+    a {
+        @apply text-atoll no-underline transition-colors duration-200;
+    }
+
+    a:hover {
+        @apply text-atoll-light;
+    }
+
+    ::selection {
+        @apply bg-atoll-dark text-white;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        @apply text-ink font-semibold leading-tight;
+    }
+
+    /* leading-tight is restated after each size utility: text-* carries a
+       paired line-height that would otherwise win. */
+    h1 {
+        @apply text-2xl leading-tight mb-4;
+    }
+
+    h2 {
+        @apply text-xl leading-tight mt-6 mb-3;
+    }
+
+    h3 {
+        @apply text-base leading-tight mt-4 mb-2;
+    }
+
+    code,
+    pre {
+        @apply font-mono;
+    }
+}
+
+/* ---------- Components (composed via @apply; utilities override these) ---------- */
+@layer components {
+    /* ===== Cards ===== */
+    .card {
+        @apply bg-surface border border-line rounded-xl py-5 px-6;
+    }
+
+    /* ===== Fields ===== */
+    :is(input, select).field {
+        font: inherit; /* must precede the text-* utilities */
+        @apply block w-full bg-canvas text-ink rounded-md py-2 px-3 text-base leading-6
+            outline-1 -outline-offset-1 outline-line transition-[outline-color] duration-150;
+    }
+
+    :is(input, select).field:focus {
+        @apply outline-2 -outline-offset-2 outline-atoll;
+    }
+
+    /* appearance: none + data-URI chevron — the native select arrow cannot
+       be inset from the right edge by padding. */
+    select.field {
+        -webkit-appearance: none;
+        appearance: none;
+        @apply bg-no-repeat pr-10;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2394a3b8'%3E%3Cpath d='M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z' clip-rule='evenodd' fill-rule='evenodd'/%3E%3C/svg%3E");
+        background-position: right 0.75rem center;
+        background-size: 1rem 1rem;
+    }
+
+    input.field::placeholder {
+        @apply text-ink-faint;
+    }
+
+    /* ===== Command blocks ===== */
+    .cmd {
+        @apply bg-canvas border border-line rounded-lg px-4 py-3 text-sm text-atoll-light font-mono overflow-x-auto whitespace-pre;
+    }
+
+    /* ===== Badges ===== */
+    .badge {
+        @apply inline-flex items-center rounded-full border border-line px-2 py-0.5 text-ink-soft text-xs leading-4 font-medium;
+    }
+
+    .badge-seeded {
+        @apply text-atoll border-atoll-dark;
+    }
+
+    .badge-verified {
+        @apply text-sec-verified border-sec-verified/50;
+    }
+
+    .badge-pending {
+        @apply text-sec-pending border-sec-pending/50;
+    }
+
+    .badge-flagged {
+        @apply text-sec-flagged border-sec-flagged/50;
+    }
+
+    .badge-error {
+        @apply text-sec-error border-sec-error/50;
+    }
+
+    .badge-stale {
+        @apply text-sev-medium border-sev-medium/50;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+        @apply inline-flex items-center cursor-pointer gap-x-2 transition-colors duration-150
+            rounded-md py-2.5 px-3.5 text-sm leading-5 font-semibold bg-surface text-ink border border-line;
+    }
+
+    .btn:hover {
+        @apply border-atoll text-atoll;
+    }
+
+    .btn:focus-visible {
+        @apply outline-2 outline-offset-2 outline-atoll;
+    }
+
+    .btn:disabled {
+        @apply opacity-60 cursor-wait;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--color-atoll), var(--color-atoll-dark));
+        @apply border-transparent text-canvas;
+    }
+
+    .btn-primary:hover {
+        @apply border-transparent text-canvas brightness-110;
+    }
+
+    /* ===== Chips ===== */
+    .chip {
+        @apply inline-block rounded-full bg-canvas border border-line text-ink-soft font-mono
+            text-sm px-2.5 py-1;
+    }
+
+    .chip-link {
+        @apply text-atoll border-atoll-dark;
+    }
+
+    .chip-link:hover {
+        @apply bg-atoll/10 text-atoll-light;
+    }
+
+    /* ===== Package table ===== */
+    .pkg-table {
+        @apply w-full border-collapse text-sm leading-5;
+    }
+
+    .pkg-table thead {
+        @apply border-b border-line;
+    }
+
+    .pkg-table th {
+        @apply text-left text-ink text-sm font-semibold py-3.5 px-3 whitespace-nowrap
+            max-sm:py-2 max-sm:px-2.5;
+    }
+
+    .pkg-table td {
+        @apply text-left text-ink-soft py-3.5 px-3 align-top max-sm:py-2 max-sm:px-2.5;
+    }
+
+    .pkg-table tbody tr + tr {
+        @apply border-t border-line;
+    }
+
+    .pkg-table tbody tr {
+        @apply transition-colors duration-150;
+    }
+
+    .pkg-table tbody tr:hover,
+    .pkg-table tbody tr:hover td {
+        @apply bg-atoll/5;
+    }
+
+    .pkg-table code {
+        @apply text-atoll-light font-mono text-sm;
+    }
+
+    /* Sort buttons — scoped selectors because the `arrow` span is emitted
+       from C# in the catalog page; @utility cannot express this scoping. */
+    .pkg-table button.sort {
+        font: inherit;
+        @apply inline-flex items-center cursor-pointer gap-x-2 transition-colors duration-150
+            border-0 p-0;
+        background: none;
+        color: inherit;
+        text-transform: inherit;
+        letter-spacing: inherit;
+    }
+
+    .pkg-table button.sort:hover {
+        @apply text-atoll;
+    }
+
+    .pkg-table button.sort:focus-visible {
+        @apply outline-2 outline-offset-2 outline-atoll;
+    }
+
+    .pkg-table .arrow {
+        @apply text-atoll ml-1;
+    }
+
+    /* ===== Metadata list ===== */
+    .meta {
+        @apply mb-4;
+    }
+
+    .meta > div {
+        /* raw declaration first — placed after the @apply it would
+           out-cascade the max-sm: overrides */
+        grid-template-columns: minmax(9rem, max-content) 1fr;
+        @apply grid gap-4 py-2 max-sm:grid-cols-1 max-sm:gap-1;
+    }
+
+    .meta > div + div {
+        @apply border-t border-line;
+    }
+
+    .meta dt {
+        @apply text-ink-faint text-sm leading-6;
+    }
+
+    .meta dd {
+        @apply text-ink m-0 wrap-anywhere;
+    }
+
+    /* ===== Tabs ===== */
+    .tabs {
+        @apply flex gap-6 border-b border-line mt-4 mb-5;
+    }
+
+    .tabs .tab {
+        font: inherit;
+        /* -mb-px overlaps the active underline with the container border;
+           no border-none — it flips --tw-border-style and hides border-b-2
+           (preflight already zeroes button borders). */
+        @apply inline-flex items-center cursor-pointer bg-transparent text-ink-soft text-sm leading-5 font-medium whitespace-nowrap py-3 px-1
+            -mb-px border-b-2 border-b-transparent transition-colors duration-150;
+    }
+
+    .tabs .tab:hover {
+        @apply border-b-line text-ink;
+    }
+
+    .tabs .tab:focus-visible {
+        @apply outline-2 outline-offset-2 outline-atoll;
+    }
+
+    .tabs .tab.active {
+        @apply border-b-atoll text-ink;
+    }
+
+    /* ===== Security status banners ===== */
+    .status-banner {
+        @apply rounded-lg border px-4 py-3 text-sm;
+    }
+
+    .status-banner-verified {
+        @apply border-sec-verified/40 bg-sec-verified/10;
+    }
+
+    .status-banner-flagged {
+        @apply border-sec-flagged/40 bg-sec-flagged/10;
+    }
+
+    .status-banner-pending {
+        @apply border-sec-pending/40 bg-sec-pending/10;
+    }
+
+    .status-banner-error {
+        @apply border-sec-error/40 bg-sec-error/10;
+    }
+
+    /* ===== Finding cards ===== */
+    .finding-card {
+        @apply rounded-lg border border-line bg-canvas py-3 px-4 border-l-4;
+    }
+
+    .finding-card-critical {
+        @apply border-l-sev-critical;
+    }
+
+    .finding-card-high {
+        @apply border-l-sev-high;
+    }
+
+    .finding-card-medium {
+        @apply border-l-sev-medium;
+    }
+
+    .finding-card-low {
+        @apply border-l-sev-low;
+    }
+
+    .finding-card-info {
+        @apply border-l-sev-info;
+    }
+}

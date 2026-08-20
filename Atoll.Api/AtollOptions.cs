@@ -10,6 +10,7 @@ public sealed class AtollOptions
     public SeedOptions Seed { get; init; } = new();
     public RefreshOptions Refresh { get; init; } = new();
     public SecurityOptions Security { get; init; } = new();
+    public UiOptions Ui { get; init; } = new();
 }
 
 public enum SeedMode
@@ -112,4 +113,11 @@ public sealed class SecurityOptions
     [Range(1, 64)] public int ScannerConcurrency { get; init; } = 4;
 
     [Range(100, 300_000)] public int PollIntervalMs { get; init; } = 100;
+}
+
+public sealed class UiOptions
+{
+    [Required] public string BrandName { get; init; } = "Atoll";
+
+    [Required] [Url] public string ExternalBaseUrl { get; init; } = "http://localhost:5290";
 }

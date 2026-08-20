@@ -1,0 +1,49 @@
+@inherits LayoutComponentBase
+@inject IOptions<UiOptions> Ui
+
+<div class="min-h-screen flex flex-col">
+    <header class="sticky top-0 z-100 bg-surface border-b border-line backdrop-blur-md">
+        <div class="max-w-[1200px] mx-auto px-6 max-[640px]:px-4">
+            <div class="flex h-16 items-center justify-between gap-6 max-[640px]:h-auto max-[640px]:py-2 max-[640px]:gap-3">
+                <a class="flex shrink-0 items-center gap-3 no-underline" href="/">
+                    <span class="w-11 h-11 rounded-[10px] bg-linear-to-br from-atoll to-atoll-dark grid place-items-center text-[#0f172a] font-extrabold">A</span>
+                    <span>
+                        <div class="text-xl font-bold leading-[1.2] text-atoll">@Ui.Value.BrandName</div>
+                        <div class="text-ink-faint text-xs">AUR Mirror</div>
+                    </span>
+                </a>
+                <nav aria-label="Main" class="flex items-center gap-6 max-[640px]:gap-[0.9rem]">
+                    <a class="text-sm font-medium text-ink-soft hover:text-atoll transition-colors duration-200" href="/">Packages</a>
+                    <a class="text-sm font-medium text-ink-soft hover:text-atoll transition-colors duration-200" href="/status">Status</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 w-full max-w-[1200px] mx-auto px-6 pt-7 pb-12 max-[640px]:px-4 max-[640px]:pt-4 max-[640px]:pb-4">
+        <ErrorBoundary @ref="_errorBoundary">
+            <ChildContent>@Body</ChildContent>
+            <ErrorContent Context="error">
+                <div class="card mt-4">
+                    <h2 class="mt-0">Something went wrong</h2>
+                    <p class="mb-0 text-ink-soft">An unexpected error occurred while rendering this page. Try reloading.</p>
+                </div>
+            </ErrorContent>
+        </ErrorBoundary>
+    </main>
+
+    <footer class="border-t border-line bg-surface px-6 py-5 mt-auto">
+        <div class="max-w-[1200px] mx-auto text-center text-sm text-ink-faint">
+            @Ui.Value.BrandName<span class="mx-2">·</span>self-hosted AUR mirror
+        </div>
+    </footer>
+</div>
+
+@code {
+    private ErrorBoundary? _errorBoundary;
+
+    protected override void OnParametersSet()
+    {
+        _errorBoundary?.Recover();
+    }
+}

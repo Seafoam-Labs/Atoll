@@ -69,7 +69,7 @@ public class BulkSeedPlanTests
     [Test]
     public void ChunkBy_splits_into_expected_sizes()
     {
-        var batch = BulkSeedPlan.ChunkBy(Enumerable.Range(0, 7).ToArray(), 3).ToList();
+        var batch = BulkSeedPlan.ChunkBy([.. Enumerable.Range(0, 7)], 3).ToList();
 
         Assert.Multiple(() =>
         {

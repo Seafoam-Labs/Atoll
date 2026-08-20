@@ -22,14 +22,14 @@ public static class AurMetadataExtensions
             FirstSubmitted = p.FirstSubmitted,
             LastModified = p.LastModified,
             UrlPath = p.UrlPath,
-            Depends = p.Depends.ToArray(),
-            MakeDepends = p.MakeDepends.ToArray(),
-            OptDepends = p.OptDepends.ToArray(),
-            Conflicts = p.Conflicts.ToArray(),
-            Provides = p.Provides.ToArray(),
-            License = p.License.ToArray(),
-            Keywords = p.Keywords.ToArray(),
-            CoMaintainers = p.CoMaintainers.ToArray()
+            Depends = [.. p.Depends],
+            MakeDepends = [.. p.MakeDepends],
+            OptDepends = [.. p.OptDepends],
+            Conflicts = [.. p.Conflicts],
+            Provides = [.. p.Provides],
+            License = [.. p.License],
+            Keywords = [.. p.Keywords],
+            CoMaintainers = [.. p.CoMaintainers]
         };
     }
 }

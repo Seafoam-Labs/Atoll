@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Atoll.Api;
+using Atoll.Api.Components;
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
@@ -10,6 +11,7 @@ using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Search.Refresh;
 using Atoll.Api.Services.Security;
+using Atoll.Api.Services.Ui;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
@@ -19,6 +21,8 @@ using OpenTelemetry.Resources;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.UseStaticWebAssets();
+
 builder.Services.AddOptions<AtollOptions>()
     .Bind(builder.Configuration.GetSection("Atoll"))
     .ValidateDataAnnotations()
@@ -26,6 +30,11 @@ builder.Services.AddOptions<AtollOptions>()
 
 builder.Services.AddOptions<SecurityOptions>()
     .Bind(builder.Configuration.GetSection("Atoll:Security"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddOptions<UiOptions>()
+    .Bind(builder.Configuration.GetSection("Atoll:Ui"))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
@@ -74,6 +83,14 @@ builder.Services.AddSingleton<IPackageSecurityAccess, PackageSecurityAccess>();
 builder.Services.AddSingleton<PackageSecurityFilter>();
 builder.Services.AddHostedService<PackageSecurityWorker>();
 
+builder.Services.AddSingleton<PackageCatalogService>();
+builder.Services.AddSingleton<PackageDetailsService>();
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddAntiforgery();
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
+
 var seedMode = builder.Configuration.GetSection("Atoll:Seed").Get<SeedOptions>()?.Mode ?? SeedMode.Direct;
 var bulkEnabled = seedMode == SeedMode.Bulk;
 var refreshEnabled = builder.Configuration.GetSection("Atoll:Refresh").Get<RefreshOptions>()?.Enabled ?? false;
@@ -115,11 +132,22 @@ builder.Services.AddHostedService<PackageIndexWorker>();
 
 var app = builder.Build();
 
+app.UseExceptionHandler();
+
+app.UseStaticFiles();
+app.MapStaticAssets();
+
+app.UseRouting();
+
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
-app.UseExceptionHandler();
 app.MapEndpoints();
 app.MapPrometheusScrapingEndpoint();
+
+app.UseAntiforgery();
+
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
 await app.RunAsync();

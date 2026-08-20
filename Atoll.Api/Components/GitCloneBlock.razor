@@ -1,0 +1,32 @@
+@rendermode InteractiveServer
+@inject IJSRuntime Js
+
+<div class="flex items-stretch gap-2">
+    <div class="cmd flex-1 min-w-0">git clone @CloneUrl</div>
+    <button type="button" class="btn shrink-0" @onclick="CopyAsync">@(_copied ? "Copied" : "Copy")</button>
+</div>
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public string ExternalBaseUrl { get; set; } = "";
+
+    private bool _copied;
+
+    private string CloneUrl => $"{ExternalBaseUrl.TrimEnd('/')}/packages/{Name}.git";
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", $"git clone {CloneUrl}");
+            _copied = true;
+            StateHasChanged();
+            await Task.Delay(1500);
+            _copied = false;
+        }
+        catch (JSException)
+        {
+            // Clipboard API unavailable (non-secure context); the text stays selectable.
+        }
+    }
+}

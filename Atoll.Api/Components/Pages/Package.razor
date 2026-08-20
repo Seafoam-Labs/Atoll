@@ -1,0 +1,336 @@
+@page "/package/{Name}"
+@inject PackageDetailsService Details
+@inject IOptions<UiOptions> Ui
+
+<PageTitle>@Name — @Ui.Value.BrandName</PageTitle>
+
+@if (!_loaded)
+{
+    <p class="text-ink-faint">Loading…</p>
+}
+else if (_details is null)
+{
+    <NotFound/>
+}
+else
+{
+    var meta = _details.Metadata;
+    var headScan = _details.HeadScan;
+
+    <div class="mb-5 lg:flex lg:items-start lg:justify-between">
+        <div class="min-w-0 flex-1">
+            <h1 class="mb-1 flex flex-wrap items-baseline gap-3 text-2xl/7 font-bold tracking-tight sm:text-3xl">
+                @meta.Name
+                <span class="font-mono text-atoll text-base font-medium">@meta.Version</span>
+            </h1>
+            <div class="flex flex-wrap items-center gap-2 text-ink-soft text-sm">
+                @if (_details.IsSeeded)
+                {
+                    <span class="badge badge-seeded">seeded</span>
+                }
+                @if (headScan is not null)
+                {
+                    <span class="badge @SecurityBadgeClass(headScan.Status)">@headScan.Status.ToString().ToLowerInvariant()</span>
+                }
+                @if (meta.OutOfDate is not null)
+                {
+                    <span class="badge badge-stale">out-of-date</span>
+                }
+                @if (!string.IsNullOrEmpty(meta.Maintainer))
+                {
+                    <span class="text-ink-faint">· maintained by @meta.Maintainer</span>
+                }
+                @if (meta.License.Count > 0)
+                {
+                    <span class="text-ink-faint">· @string.Join(", ", meta.License)</span>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(meta.Description))
+            {
+                <p class="mt-3 text-ink-soft max-w-[60ch]">@meta.Description</p>
+            }
+        </div>
+        <div class="mt-5 flex gap-2 lg:mt-0 lg:ml-4">
+            <PackageActions Name="@meta.Name" IsSeeded="@_details.IsSeeded" HeadRevisionId="@_details.Head?.HeadRevisionId"/>
+            <a class="btn" href="@($"https://aur.archlinux.org/packages/{meta.Name}")" target="_blank" rel="noopener">AUR ↗</a>
+            @if (!string.IsNullOrWhiteSpace(meta.Url))
+            {
+                <a class="btn" href="@meta.Url" target="_blank" rel="noopener">Upstream ↗</a>
+            }
+        </div>
+    </div>
+
+    @if (_details.IsSeeded && !_details.Access.Allowed)
+    {
+        <div class="status-banner @BannerClass(_details.Access.ReasonCode) mb-5">
+            <strong>@BannerTitle(_details.Access.ReasonCode)</strong>
+            <span class="text-ink-soft"> @BannerBody(_details.Access.ReasonCode)</span>
+            <div class="text-ink-faint text-xs mt-1">
+                Content and Git access stay blocked until a scan completes with no critical/high findings.
+                Request a rescan to re-queue it.
+            </div>
+        </div>
+    }
+
+    @if (_details.IsSeeded && _details.Access.Allowed)
+    {
+        <div class="mb-5">
+            <GitCloneBlock Name="@meta.Name" ExternalBaseUrl="@Ui.Value.ExternalBaseUrl"/>
+            <div class="text-ink-faint text-[13px] mt-2">
+                Served Git SHAs are synthesized by Atoll when it commits stored revisions — they do not match
+                upstream AUR. <code>/packages/@meta.Name/versions</code> SHAs are authoritative.
+            </div>
+        </div>
+    }
+
+    <div class="grid grid-cols-2 gap-5 max-[880px]:grid-cols-1">
+        <section class="card">
+            <h2 class="mt-0">Metadata</h2>
+            <dl class="meta mb-0">
+                <div><dt>Package base</dt><dd class="font-mono">@meta.PackageBase</dd></div>
+                <div><dt>Maintainer</dt><dd>@(meta.Maintainer ?? "—")</dd></div>
+                @if (meta.CoMaintainers.Count > 0)
+                {
+                    <div><dt>Co-maintainers</dt><dd>@string.Join(", ", meta.CoMaintainers)</dd></div>
+                }
+                <div><dt>Submitter</dt><dd>@(meta.Submitter ?? "—")</dd></div>
+                <div><dt>Votes</dt><dd class="font-mono">@meta.NumVotes</dd></div>
+                <div><dt>Popularity</dt><dd class="font-mono">@meta.Popularity.ToString("0.000000")</dd></div>
+                <div><dt>First submitted</dt><dd class="font-mono">@FormatUnix(meta.FirstSubmitted)</dd></div>
+                <div><dt>Last modified</dt><dd class="font-mono">@FormatUnix(meta.LastModified)</dd></div>
+                <div><dt>Out-of-date</dt><dd class="font-mono">@(meta.OutOfDate is null ? "no" : FormatUnix(meta.OutOfDate.Value))</dd></div>
+            </dl>
+        </section>
+
+        <section class="card">
+            <h2 class="mt-0">Relations</h2>
+            <RelationList Title="Depends" Items="meta.Depends"/>
+            <RelationList Title="Make dependencies" Items="meta.MakeDepends"/>
+            <RelationList Title="Optional dependencies" Items="meta.OptDepends"/>
+            <RelationList Title="Conflicts" Items="meta.Conflicts"/>
+            <RelationList Title="Provides" Items="meta.Provides"/>
+        </section>
+
+        <section class="card col-span-full">
+            <h2 class="mt-0">Security</h2>
+
+            @if (!_details.IsSeeded)
+            {
+                <p class="mb-0 text-ink-soft text-sm">
+                    This package is not seeded yet — Atoll stores no content and has no scan state for it.
+                    Seeding pulls the files from the AUR and runs the static security scan.
+                </p>
+            }
+            else
+            {
+                @if (headScan is not null)
+                {
+                    <div class="status-banner @BannerClass(headScan.Status) mb-4">
+                        <strong>@headScan.Status</strong>
+                        <span class="text-ink-soft"> — @StatusSummary(headScan.Status)</span>
+                        <div class="text-ink-faint text-xs mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                            <span>revision <code>@Truncate(_details.Head!.HeadRevisionId)</code></span>
+                            <span>scanned @(headScan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "not yet") UTC</span>
+                            <span>findings @SeverityCountSummary(headScan.Findings)</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="status-banner status-banner-pending mb-4">
+                        <strong>Pending</strong>
+                        <span class="text-ink-soft"> — no scan document for the head revision yet; it will be picked up by the scanner.</span>
+                    </div>
+                }
+
+                @if (_details.Scans.Count > 0)
+                {
+                    <h3>Revision scans</h3>
+                    <table class="pkg-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">Revision</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Scanned</th>
+                            <th scope="col">Findings</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var scan in _details.Scans)
+                        {
+                            <tr>
+                                <td class="font-mono">
+                                    @Truncate(scan.RevisionId)
+                                    @if (scan.IsHead)
+                                    {
+                                        <span class="badge badge-seeded ml-2">head</span>
+                                    }
+                                </td>
+                                <td><span class="badge @SecurityBadgeClass(scan.Status)">@scan.Status.ToString().ToLowerInvariant()</span></td>
+                                <td class="font-mono text-[13px]">@(scan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                                <td class="font-mono">@scan.Findings.Count</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+
+                @if (headScan is { Findings.Count: > 0 })
+                {
+                    <h3>Head findings</h3>
+                    <div class="flex flex-col gap-3">
+                        @foreach (var finding in headScan.Findings.OrderByDescending(f => f.Severity))
+                        {
+                            <div class="finding-card @FindingCardClass(finding.Severity)">
+                                <div class="flex flex-wrap items-center gap-2 text-sm">
+                                    <span class="badge @SeverityBadgeClass(finding.Severity)">@finding.Severity.ToString().ToLowerInvariant()</span>
+                                    <code class="text-ink">@finding.RuleId</code>
+                                    <span class="text-ink-faint">in</span>
+                                    <code class="text-ink">@finding.File</code>
+                                </div>
+                                <p class="text-sm text-ink-soft mt-2 mb-0">@finding.Message</p>
+                                @if (!string.IsNullOrWhiteSpace(finding.Snippet))
+                                {
+                                    <pre class="cmd mt-2 mb-0 text-[13px]">@finding.Snippet</pre>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <p class="text-ink-faint text-[13px] mt-4 mb-0">
+                    Findings below High severity are retained for review but do not block serving.
+                    Verified means no obvious red flags from static analysis — never a guarantee that a package is safe.
+                </p>
+            }
+        </section>
+    </div>
+
+    <p class="mt-6"><a href="/">← Back to the package catalog</a></p>
+}
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+
+    private PackageDetails? _details;
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _details = await Details.GetAsync(Name);
+        _loaded = true;
+    }
+
+    private static string SecurityBadgeClass(SecurityStatus status)
+    {
+        return status switch
+        {
+            SecurityStatus.Verified => "badge-verified",
+            SecurityStatus.Pending => "badge-pending",
+            SecurityStatus.Flagged => "badge-flagged",
+            SecurityStatus.Error => "badge-error",
+            _ => ""
+        };
+    }
+
+    private static string BannerClass(SecurityStatus status)
+    {
+        return status switch
+        {
+            SecurityStatus.Verified => "status-banner-verified",
+            SecurityStatus.Pending => "status-banner-pending",
+            SecurityStatus.Flagged => "status-banner-flagged",
+            SecurityStatus.Error => "status-banner-error",
+            _ => ""
+        };
+    }
+
+    private static string BannerClass(string? reasonCode)
+    {
+        return reasonCode switch
+        {
+            SecurityAccessReasonCodes.Flagged => "status-banner-flagged",
+            SecurityAccessReasonCodes.Error => "status-banner-error",
+            _ => "status-banner-pending"
+        };
+    }
+
+    private static string BannerTitle(string? reasonCode)
+    {
+        return reasonCode switch
+        {
+            SecurityAccessReasonCodes.Flagged => "Flagged",
+            SecurityAccessReasonCodes.Error => "Scan error",
+            _ => "Pending"
+        };
+    }
+
+    private static string BannerBody(string? reasonCode)
+    {
+        return reasonCode switch
+        {
+            SecurityAccessReasonCodes.Flagged => "— the scan found critical/high severity issues, so content and Git access are gated.",
+            SecurityAccessReasonCodes.Error => "— the scan failed, so content and Git access stay blocked until a successful re-scan.",
+            _ => "— the head revision is queued for scanning or being scanned right now."
+        };
+    }
+
+    private static string StatusSummary(SecurityStatus status)
+    {
+        return status switch
+        {
+            SecurityStatus.Verified => "no high/critical red flags — content is served.",
+            SecurityStatus.Flagged => "critical/high findings — content and Git access are gated.",
+            SecurityStatus.Pending => "scan queued or in progress — content is blocked until it completes.",
+            SecurityStatus.Error => "the scan failed — content stays blocked until a successful re-scan.",
+            _ => ""
+        };
+    }
+
+    private static string SeverityCountSummary(IReadOnlyCollection<SecurityFinding> findings)
+    {
+        if (findings.Count == 0) return "none";
+
+        return string.Join(", ",
+            findings
+                .GroupBy(finding => finding.Severity)
+                .OrderByDescending(group => group.Key)
+                .Select(group => $"{group.Count()} {group.Key.ToString().ToLowerInvariant()}"));
+    }
+
+    private static string FindingCardClass(FindingSeverity severity)
+    {
+        return severity switch
+        {
+            FindingSeverity.Critical => "finding-card-critical",
+            FindingSeverity.High => "finding-card-high",
+            FindingSeverity.Medium => "finding-card-medium",
+            FindingSeverity.Low => "finding-card-low",
+            _ => "finding-card-info"
+        };
+    }
+
+    private static string SeverityBadgeClass(FindingSeverity severity)
+    {
+        return severity switch
+        {
+            FindingSeverity.Critical => "badge-flagged",
+            FindingSeverity.High => "badge-flagged",
+            FindingSeverity.Medium => "badge-stale",
+            FindingSeverity.Low => "badge-seeded",
+            _ => ""
+        };
+    }
+
+    private static string Truncate(string value)
+    {
+        return value.Length <= 12 ? value : value[..12];
+    }
+
+    private static string FormatUnix(long unixSeconds)
+    {
+        return unixSeconds <= 0
+            ? "—"
+            : DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString("yyyy-MM-dd HH:mm");
+    }
+}

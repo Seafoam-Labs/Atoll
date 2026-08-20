@@ -38,6 +38,7 @@ internal sealed class GitTestFactory : WebApplicationFactory<Program>
             services.RemoveAll<IPackageRepository>();
             services.RemoveAll<IPackageService>();
             services.RemoveAll<IPackageSecurityRepository>();
+            services.RemoveAll<IAurMetadataRepository>();
 
             var store = new PackageIndexStore();
             store.Replace(TestData.LoadSampleIndexesAsync().GetAwaiter().GetResult());
@@ -45,6 +46,7 @@ internal sealed class GitTestFactory : WebApplicationFactory<Program>
 
             services.AddSingleton<IPackageRepository>(Repository);
             services.AddSingleton<IPackageSecurityRepository>(new InMemoryPackageSecurityRepository());
+            services.AddSingleton<IAurMetadataRepository>(_ => new InMemoryAurMetadataRepository());
             services.AddSingleton<IPackageService, MongoPackageService>();
             services.AddSingleton<IGitTransferService, GitTransferService>();
         });

@@ -1,0 +1,15 @@
+@if (Items.Count > 0)
+{
+    <h3>@Title</h3>
+    <div class="flex flex-wrap gap-1.5 mb-3">
+        @foreach (var item in Items)
+        {
+            <a class="chip chip-link" href="@($"/?q={Uri.EscapeDataString(item)}")">@item</a>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public IReadOnlyList<string> Items { get; set; } = [];
+}

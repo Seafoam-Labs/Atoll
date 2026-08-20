@@ -1,0 +1,249 @@
+@page "/"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject PackageCatalogService Catalog
+@inject PackageIndexUpdater IndexUpdater
+@inject IOptions<UiOptions> Ui
+
+<PageTitle>Packages — @Ui.Value.BrandName</PageTitle>
+
+<h1>Packages</h1>
+
+<div class="flex flex-wrap gap-3 mt-4 mb-2">
+    <form class="flex min-w-0 flex-1 gap-2 max-w-[540px]"
+          @onsubmit="ReloadNow" @onsubmit:preventDefault>
+        <div class="grid min-w-0 flex-1 grid-cols-1">
+            <input type="search"
+                   class="field col-start-1 row-start-1 pl-10"
+                   placeholder="Search packages…"
+                   aria-label="Search packages"
+                   value="@_query"
+                   @oninput="OnQueryInput"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"
+                 class="pointer-events-none col-start-1 row-start-1 ml-3 size-5 self-center text-ink-faint">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
+            </svg>
+        </div>
+        <button type="submit" class="btn btn-primary shrink-0">Search</button>
+    </form>
+
+    <select class="field max-w-[170px]" @bind="_mode" @bind:after="ReloadNow" aria-label="Search by">
+        <option value="@CatalogSearchMode.Name">Name / description</option>
+        <option value="@CatalogSearchMode.Words">Words</option>
+        <option value="@CatalogSearchMode.Provides">Provides</option>
+    </select>
+
+    <select class="field max-w-[170px]" @bind="_seededFilter" @bind:after="ReloadNow" aria-label="Seeded filter">
+        <option value="@CatalogSeededFilter.All">All packages</option>
+        <option value="@CatalogSeededFilter.Seeded">Seeded</option>
+        <option value="@CatalogSeededFilter.IndexOnly">Index only</option>
+    </select>
+
+    <select class="field max-w-[170px]" @bind="_securityFilter" @bind:after="ReloadNow" aria-label="Security filter">
+        <option value="@CatalogSecurityFilter.Any">Any security state</option>
+        <option value="@CatalogSecurityFilter.Verified">Verified</option>
+        <option value="@CatalogSecurityFilter.Flagged">Flagged</option>
+        <option value="@CatalogSecurityFilter.Pending">Pending</option>
+        <option value="@CatalogSecurityFilter.Error">Error</option>
+    </select>
+</div>
+
+<div class="text-ink-soft text-sm mb-4">
+    @if (_loading && _result is null)
+    {
+        <span>Loading…</span>
+    }
+    else if (_result is not null)
+    {
+        <span>@_result.TotalMatches package@(_result.TotalMatches == 1 ? "" : "s")</span>
+        @if (!string.IsNullOrWhiteSpace(_query))
+        {
+            <span> matching <strong>@_query</strong></span>
+        }
+        var refreshed = IndexUpdater.GetStatus().LastSucceededUtc;
+        <span class="text-ink-faint"> · index refreshed @(refreshed?.ToString("yyyy-MM-dd HH:mm") ?? "never") UTC</span>
+    }
+</div>
+
+@if (_result is not null && _result.TotalMatches == 0)
+{
+    <div class="card mt-4 text-center">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"
+             class="mx-auto size-12 text-ink-faint">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
+        </svg>
+        <h2 class="mt-2 mb-0 text-sm font-semibold text-ink">No packages found</h2>
+        <p class="mt-1 mb-0 text-sm text-ink-soft">Try a different search term or clear the filters.</p>
+        <div class="mt-6">
+            <button type="button" class="btn" @onclick="ClearFilters">Clear filters</button>
+        </div>
+    </div>
+}
+else if (_result is not null)
+{
+    <div class="flow-root">
+        <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6">
+            <div class="inline-block min-w-full py-2 align-middle sm:px-6">
+                <table class="pkg-table min-w-full">
+                    <thead>
+                    <tr>
+                        <th scope="col">
+                            <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.NameAsc, CatalogSort.NameDesc))">
+                                Name @SortArrow(CatalogSort.NameAsc, CatalogSort.NameDesc)
+                            </button>
+                        </th>
+                        <th scope="col" class="whitespace-nowrap">Version</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">
+                            <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.VotesDesc, CatalogSort.VotesAsc))">
+                                Votes @SortArrow(CatalogSort.VotesDesc, CatalogSort.VotesAsc)
+                            </button>
+                        </th>
+                        <th scope="col">
+                            <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc))">
+                                Popularity @SortArrow(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc)
+                            </button>
+                        </th>
+                        <th scope="col">
+                            <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc))">
+                                Last modified @SortArrow(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc)
+                            </button>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in _result.Rows)
+                    {
+                        var package = row.Package;
+                        <tr>
+                            <td>
+                                <a href="@($"/package/{package.Name}")"><strong>@package.Name</strong></a>
+                                @if (!string.Equals(package.PackageBase, package.Name, StringComparison.Ordinal))
+                                {
+                                    <div class="text-ink-faint text-[13px]">base: @package.PackageBase</div>
+                                }
+                                @if (row.IsSeeded || row.Head is not null)
+                                {
+                                    <div class="mt-1 flex flex-wrap gap-1">
+                                        @if (row.IsSeeded)
+                                        {
+                                            <span class="badge badge-seeded">seeded</span>
+                                        }
+                                        @if (row.Head is not null)
+                                        {
+                                            <span class="badge @SecurityBadgeClass(row.Head.Status)">@row.Head.Status.ToString().ToLowerInvariant()</span>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td class="whitespace-nowrap font-mono">@package.Version</td>
+                            <td>@package.Description</td>
+                            <td class="whitespace-nowrap font-mono">@package.NumVotes</td>
+                            <td class="whitespace-nowrap font-mono">@package.Popularity.ToString("0.000000")</td>
+                            <td class="whitespace-nowrap font-mono text-[13px]">@FormatUnix(package.LastModified)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    @if (_result.IsTruncated)
+    {
+        <div class="text-ink-faint text-[13px] mt-2">
+            Showing the first @PackageCatalogService.RenderCap of @_result.TotalMatches results — refine your search to see the rest.
+        </div>
+    }
+}
+
+@code {
+    private string _query = "";
+    private CatalogSearchMode _mode = CatalogSearchMode.Name;
+    private CatalogSeededFilter _seededFilter = CatalogSeededFilter.All;
+    private CatalogSecurityFilter _securityFilter = CatalogSecurityFilter.Any;
+    private CatalogSort _sort = CatalogSort.NameAsc;
+    private CatalogResult? _result;
+    private bool _loading;
+    private int _searchVersion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Chip links on the details page deep-link into the catalog via ?q={dep}.
+        var uri = new Uri(Navigation.Uri);
+        var queryParam = System.Web.HttpUtility.ParseQueryString(uri.Query).Get("q");
+        if (!string.IsNullOrWhiteSpace(queryParam))
+            _query = queryParam;
+
+        await ReloadAsync();
+    }
+
+    private void OnQueryInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? "";
+    }
+
+    private void ToggleSort(CatalogSort primary, CatalogSort secondary)
+    {
+        _sort = _sort == primary ? secondary : primary;
+        ReloadNow();
+    }
+
+    private MarkupString SortArrow(CatalogSort primary, CatalogSort secondary)
+    {
+        if (_sort == primary) return (MarkupString)"<span class=\"arrow\">▼</span>";
+        if (_sort == secondary) return (MarkupString)"<span class=\"arrow\">▲</span>";
+        return (MarkupString)"";
+    }
+
+    private void ClearFilters()
+    {
+        _query = "";
+        _mode = CatalogSearchMode.Name;
+        _seededFilter = CatalogSeededFilter.All;
+        _securityFilter = CatalogSecurityFilter.Any;
+        _sort = CatalogSort.NameAsc;
+        ReloadNow();
+    }
+
+    private void ReloadNow()
+    {
+        _ = ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var version = Interlocked.Increment(ref _searchVersion);
+        _loading = true;
+
+        try
+        {
+            var result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort);
+            if (version != _searchVersion) return;
+            _result = result;
+        }
+        finally
+        {
+            if (version == _searchVersion)
+                _loading = false;
+        }
+    }
+
+    private static string SecurityBadgeClass(SecurityStatus status)
+    {
+        return status switch
+        {
+            SecurityStatus.Verified => "badge-verified",
+            SecurityStatus.Pending => "badge-pending",
+            SecurityStatus.Flagged => "badge-flagged",
+            SecurityStatus.Error => "badge-error",
+            _ => ""
+        };
+    }
+
+    private static string FormatUnix(long unixSeconds)
+    {
+        return unixSeconds <= 0
+            ? "—"
+            : DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString("yyyy-MM-dd");
+    }
+}

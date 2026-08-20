@@ -8,7 +8,7 @@ public class ShellContentScannerTests
 {
     private static List<SecurityFinding> Scan(string content, string path = "PKGBUILD")
     {
-        return ShellContentScanner.Scan(content, path).ToList();
+        return [.. ShellContentScanner.Scan(content, path)];
     }
 
     private static SecurityFinding SingleFinding(string content, string ruleId, string path = "PKGBUILD")

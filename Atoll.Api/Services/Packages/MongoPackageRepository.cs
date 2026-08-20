@@ -72,9 +72,11 @@ public sealed class MongoPackageRepository : IPackageRepository
         if (doc is null)
             return [];
 
-        return doc.Revisions
-            .Select(r => new PackageVersion(r.RevisionId, r.CreatedAt, r.Message, r.Author))
-            .ToList();
+        return
+        [
+            .. doc.Revisions
+                .Select(r => new PackageVersion(r.RevisionId, r.CreatedAt, r.Message, r.Author))
+        ];
     }
 
     public async Task InsertSeedAsync(PackageDocument doc, PackageRevisionContentDocument revision, CancellationToken ct = default)
@@ -190,7 +192,7 @@ public sealed class MongoPackageRepository : IPackageRepository
                 .Set(p => p.LastSyncError, truncatedError);
 
         return _packages.UpdateManyAsync(
-            Builders<PackageDocument>.Filter.In(p => p.PackageName, packageNames.ToList()),
+            Builders<PackageDocument>.Filter.In(p => p.PackageName, [.. packageNames]),
             update,
             cancellationToken: ct);
     }
