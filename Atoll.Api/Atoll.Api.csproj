@@ -24,4 +24,21 @@
         <InternalsVisibleTo Include="Atoll.Api.Tests"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <Content Remove="wwwroot/app.min.css"/>
+        <Content Include="wwwroot/app.min.css"/>
+    </ItemGroup>
+
+    <Target Name="BuildTailwindCss" BeforeTargets="PrepareForBuild"
+            Condition="'$(SkipTailwind)' != 'true' And '$(DesignTimeBuild)' != 'true'">
+        <PropertyGroup>
+            <TailwindExe Condition="'$(TailwindExe)' == '' and Exists('$(HOME)/.local/bin/tailwindcss')">$(HOME)/.local/bin/tailwindcss</TailwindExe>
+            <TailwindExe Condition="'$(TailwindExe)' == ''">tailwindcss</TailwindExe>
+            <TailwindMinify Condition="'$(Configuration)' == 'Release'">--minify</TailwindMinify>
+        </PropertyGroup>
+        <Exec Command="$(TailwindExe) -i wwwroot/app.css -o wwwroot/app.min.css $(TailwindMinify)"
+              StandardOutputImportance="low"
+              ContinueOnError="false"/>
+    </Target>
+
 </Project>

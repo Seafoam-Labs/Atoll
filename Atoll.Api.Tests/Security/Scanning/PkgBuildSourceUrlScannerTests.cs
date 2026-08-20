@@ -8,7 +8,7 @@ public class PkgBuildSourceUrlScannerTests
 {
     private static List<SecurityFinding> Scan(string content, string path = "PKGBUILD")
     {
-        return PkgBuildSourceUrlScanner.Scan(content, path).ToList();
+        return [.. PkgBuildSourceUrlScanner.Scan(content, path)];
     }
 
     private static SecurityFinding SingleFinding(string content, string path = "PKGBUILD")

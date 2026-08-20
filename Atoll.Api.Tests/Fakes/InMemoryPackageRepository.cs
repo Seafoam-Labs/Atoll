@@ -14,7 +14,7 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
     {
         lock (_gate)
         {
-            IReadOnlyList<string> result = _docs.Keys.ToList();
+            IReadOnlyList<string> result = [.. _docs.Keys];
             return Task.FromResult(result);
         }
     }
@@ -64,9 +64,11 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
             if (!_docs.TryGetValue(packageName, out var doc))
                 return Task.FromResult<IReadOnlyList<PackageVersion>>([]);
 
-            IReadOnlyList<PackageVersion> result = doc.Revisions
-                .Select(r => new PackageVersion(r.RevisionId, r.CreatedAt, r.Message, r.Author))
-                .ToList();
+            IReadOnlyList<PackageVersion> result =
+            [
+                .. doc.Revisions
+                    .Select(r => new PackageVersion(r.RevisionId, r.CreatedAt, r.Message, r.Author))
+            ];
 
             return Task.FromResult(result);
         }
@@ -141,15 +143,17 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
     {
         lock (_gate)
         {
-            IReadOnlyList<PackageSyncState> result = _docs.Values
-                .Select(d => new PackageSyncState
-                {
-                    PackageName = d.PackageName,
-                    UpstreamPackageBase = d.UpstreamPackageBase,
-                    LastSyncedUpstreamHead = d.LastSyncedUpstreamHead,
-                    LastSyncSucceededAt = d.LastSyncSucceededAt
-                })
-                .ToList();
+            IReadOnlyList<PackageSyncState> result =
+            [
+                .. _docs.Values
+                    .Select(d => new PackageSyncState
+                    {
+                        PackageName = d.PackageName,
+                        UpstreamPackageBase = d.UpstreamPackageBase,
+                        LastSyncedUpstreamHead = d.LastSyncedUpstreamHead,
+                        LastSyncSucceededAt = d.LastSyncSucceededAt
+                    })
+            ];
 
             return Task.FromResult(result);
         }

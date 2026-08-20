@@ -10,6 +10,8 @@ public interface IPackageSecurityRepository
 
     Task<IReadOnlyCollection<string>> ListPackageNamesAsync(CancellationToken ct = default);
 
+    Task<IReadOnlyList<HeadScanStatus>> ListHeadStatusesAsync(CancellationToken ct = default);
+
     Task<long> CountPendingAsync(CancellationToken ct = default);
 
     Task MarkPendingAsync(string packageName, string revisionId, bool isHead, CancellationToken ct = default);

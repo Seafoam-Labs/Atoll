@@ -1,0 +1,20 @@
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Not found</PageTitle>
+
+<h1>Page not found</h1>
+<div class="card">
+    <p class="mb-0 text-ink-soft">Nothing lives at this address. The package you are looking for may have been
+        renamed, removed from the AUR index, or the link is simply wrong.</p>
+</div>
+<p class="mt-6"><a href="/">← Back to the package catalog</a></p>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Initial navigation renders via static SSR, so the real HTTP status can still be set.
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext is not null && !httpContext.Response.HasStarted)
+            httpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+    }
+}

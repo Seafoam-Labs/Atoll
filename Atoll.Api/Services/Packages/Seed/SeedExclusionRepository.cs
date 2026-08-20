@@ -47,7 +47,7 @@ public sealed class MongoSeedExclusionRepository : ISeedExclusionRepository
             .SetOnInsert(x => x.Id, packageBase)
             .SetOnInsert(x => x.PackageBase, packageBase)
             .SetOnInsert(x => x.FirstSeenUtc, now)
-            .Set(x => x.PackageNames, packageNames.ToList())
+            .Set(x => x.PackageNames, [.. packageNames])
             .Set(x => x.Reason, SeedExclusionReasons.DocumentTooLarge)
             .Set(x => x.SerializedSizeBytes, serializedSizeBytes)
             .Set(x => x.LastSeenUtc, now);

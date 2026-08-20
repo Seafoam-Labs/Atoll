@@ -35,7 +35,7 @@ internal sealed class InMemorySeedExclusionRepository : ISeedExclusionRepository
                 {
                     Id = packageBase,
                     PackageBase = packageBase,
-                    PackageNames = packageNames.ToList(),
+                    PackageNames = [.. packageNames],
                     Reason = SeedExclusionReasons.DocumentTooLarge,
                     SerializedSizeBytes = serializedSizeBytes,
                     FirstSeenUtc = existing.FirstSeenUtc,
@@ -46,7 +46,7 @@ internal sealed class InMemorySeedExclusionRepository : ISeedExclusionRepository
                 {
                     Id = packageBase,
                     PackageBase = packageBase,
-                    PackageNames = packageNames.ToList(),
+                    PackageNames = [.. packageNames],
                     Reason = SeedExclusionReasons.DocumentTooLarge,
                     SerializedSizeBytes = serializedSizeBytes,
                     FirstSeenUtc = now,

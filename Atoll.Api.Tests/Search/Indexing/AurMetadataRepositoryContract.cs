@@ -140,7 +140,7 @@ public abstract class AurMetadataRepositoryContract
     {
         var repo = CreateRepository();
 
-        await repo.SaveAsync(SamplePackages().ToList(), CancellationToken.None);
+        await repo.SaveAsync([.. SamplePackages()], CancellationToken.None);
         Assert.That(await repo.ExistsAsync(CancellationToken.None), Is.True);
 
         await repo.DeleteAsync(CancellationToken.None);
@@ -162,7 +162,7 @@ public abstract class AurMetadataRepositoryContract
     {
         var repo = CreateRepository();
 
-        await repo.SaveAsync(SamplePackages().ToList(), CancellationToken.None);
+        await repo.SaveAsync([.. SamplePackages()], CancellationToken.None);
         Assert.That(await repo.CountAsync(CancellationToken.None), Is.GreaterThan(0));
 
         await repo.SaveAsync([], CancellationToken.None);

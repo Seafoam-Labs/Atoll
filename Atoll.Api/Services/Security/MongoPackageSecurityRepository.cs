@@ -48,6 +48,20 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         return await cursor.ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<HeadScanStatus>> ListHeadStatusesAsync(CancellationToken ct = default)
+    {
+        var projected = await _scans
+            .Find(x => x.IsHead)
+            .Project(x => new { x.PackageName, x.Status, FindingCount = x.Findings.Count, x.ScannedAt })
+            .ToListAsync(ct);
+
+        return
+        [
+            .. projected
+                .Select(x => new HeadScanStatus(x.PackageName, x.Status, x.FindingCount, x.ScannedAt))
+        ];
+    }
+
     public async Task<long> CountPendingAsync(CancellationToken ct = default)
     {
         return await _scans.CountDocumentsAsync(x => x.Status == SecurityStatus.Pending, cancellationToken: ct);
@@ -131,7 +145,7 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.LeaseOwner, owner));
         var update = Builders<PackageSecurityScanDocument>.Update
             .Set(x => x.Status, result.Status)
-            .Set(x => x.Findings, result.Findings.ToList())
+            .Set(x => x.Findings, [.. result.Findings])
             .Set(x => x.ScannedAt, DateTimeOffset.UtcNow)
             .Unset(x => x.LeaseUntil)
             .Unset(x => x.LeaseOwner);

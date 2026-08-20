@@ -34,7 +34,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         lock (_gate)
         {
             IReadOnlyCollection<PackageSecurityScanDocument> result =
-                _scans.Values.Where(s => s.PackageName == packageName).ToList();
+                [.. _scans.Values.Where(s => s.PackageName == packageName)];
             return Task.FromResult(result);
         }
     }
@@ -43,7 +43,21 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
     {
         lock (_gate)
         {
-            IReadOnlyCollection<string> result = _scans.Values.Select(s => s.PackageName).Distinct().ToList();
+            IReadOnlyCollection<string> result = [.. _scans.Values.Select(s => s.PackageName).Distinct()];
+            return Task.FromResult(result);
+        }
+    }
+
+    public Task<IReadOnlyList<HeadScanStatus>> ListHeadStatusesAsync(CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            IReadOnlyList<HeadScanStatus> result =
+            [
+                .. _scans.Values
+                    .Where(s => s.IsHead)
+                    .Select(s => new HeadScanStatus(s.PackageName, s.Status, s.Findings.Count, s.ScannedAt))
+            ];
             return Task.FromResult(result);
         }
     }
@@ -131,7 +145,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
                 _scans[id] = scan with
                 {
                     Status = result.Status,
-                    Findings = result.Findings.ToList(),
+                    Findings = [.. result.Findings],
                     ScannedAt = DateTimeOffset.UtcNow,
                     LeaseUntil = null,
                     LeaseOwner = null

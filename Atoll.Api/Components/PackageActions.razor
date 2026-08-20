@@ -1,0 +1,91 @@
+@rendermode InteractiveServer
+@inject IPackageService Packages
+@inject IPackageSecurityRepository SecurityRepository
+@inject NavigationManager Navigation
+
+<div class="flex flex-col items-start gap-2">
+    @if (!IsSeeded)
+    {
+        <button type="button" class="btn btn-primary" @onclick="SeedAsync" disabled="@_busy">
+            @if (_busy)
+            {
+                <span>Seeding…</span>
+            }
+            else
+            {
+                <span>Seed from AUR</span>
+            }
+        </button>
+    }
+    else
+    {
+        <button type="button" class="btn" @onclick="RescanAsync" disabled="@_busy">
+            @if (_busy)
+            {
+                <span>Queuing…</span>
+            }
+            else
+            {
+                <span>Rescan</span>
+            }
+        </button>
+    }
+
+    @if (_error is not null)
+    {
+        <div class="text-sec-error text-sm" role="alert">@_error</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public bool IsSeeded { get; set; }
+    [Parameter] public string? HeadRevisionId { get; set; }
+
+    private bool _busy;
+    private string? _error;
+
+    private async Task SeedAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Packages.SeedFromAurAsync(Name);
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+        catch (PackageConflictException)
+        {
+            // Seeded elsewhere while we were looking — refresh to show the seeded state.
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+        catch (KeyNotFoundException)
+        {
+            _error = "This package is no longer known to the AUR index.";
+            _busy = false;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Seeding failed: {ex.Message}";
+            _busy = false;
+        }
+    }
+
+    private async Task RescanAsync()
+    {
+        if (HeadRevisionId is null) return;
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            await SecurityRepository.MarkPendingAsync(Name, HeadRevisionId, isHead: true);
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Requesting a rescan failed: {ex.Message}";
+            _busy = false;
+        }
+    }
+}

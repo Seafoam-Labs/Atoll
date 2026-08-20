@@ -420,7 +420,7 @@ public class PackageRefreshWorkerTests
         _ = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         var states = await repo.ListSyncStatesAsync();
-        var grouped = RefreshPlan.GroupByPackageBase(states.ToList(), store.Current);
+        var grouped = RefreshPlan.GroupByPackageBase([.. states], store.Current);
         var candidates = RefreshPlan.SelectCandidates(
             grouped,
             new Dictionary<string, string> { ["shelly"] = "sha-stable" },
@@ -443,7 +443,7 @@ public class PackageRefreshWorkerTests
         await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null);
 
         var states = await repo.ListSyncStatesAsync();
-        var grouped = RefreshPlan.GroupByPackageBase(states.ToList(), store.Current);
+        var grouped = RefreshPlan.GroupByPackageBase([.. states], store.Current);
         var candidates = RefreshPlan.SelectCandidates(
             grouped,
             new Dictionary<string, string> { ["shelly"] = "sha-stable" },

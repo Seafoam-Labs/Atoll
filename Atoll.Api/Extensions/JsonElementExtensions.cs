@@ -85,13 +85,15 @@ public static class JsonElementExtensions
             if (!element.TryGetProperty(property, out var propertyElement) ||
                 propertyElement.ValueKind != JsonValueKind.Array) return [];
 
-            return propertyElement
-                .EnumerateArray()
-                .Where(item => item.ValueKind == JsonValueKind.String)
-                .Select(item => item.GetString())
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Cast<string>()
-                .ToArray();
+            return
+            [
+                .. propertyElement
+                    .EnumerateArray()
+                    .Where(item => item.ValueKind == JsonValueKind.String)
+                    .Select(item => item.GetString())
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Cast<string>()
+            ];
         }
     }
 }

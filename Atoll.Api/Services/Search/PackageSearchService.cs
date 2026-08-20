@@ -13,11 +13,13 @@ public sealed class PackageSearchService(PackageIndexStore store)
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
 
-        return names
-            .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-            .Where(package => package is not null)
-            .Cast<AurPackageMetadata>()
-            .ToArray();
+        return
+        [
+            .. names
+                .Select(name => snapshot.ByNames.GetValueOrDefault(name))
+                .Where(package => package is not null)
+                .Cast<AurPackageMetadata>()
+        ];
     }
 
     public AurPackageMetadata[] FindByProvides(HashSet<string> names)
@@ -34,11 +36,13 @@ public sealed class PackageSearchService(PackageIndexStore store)
             matchingNames.UnionWith(packageNames);
         }
 
-        return matchingNames
-            .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-            .Where(package => package is not null)
-            .Cast<AurPackageMetadata>()
-            .ToArray();
+        return
+        [
+            .. matchingNames
+                .Select(name => snapshot.ByNames.GetValueOrDefault(name))
+                .Where(package => package is not null)
+                .Cast<AurPackageMetadata>()
+        ];
     }
 
     public AurPackageMetadata[] FindByWords(HashSet<string> words)
@@ -66,12 +70,14 @@ public sealed class PackageSearchService(PackageIndexStore store)
 
         if (intersection is null) return [];
 
-        return intersection
-            .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-            .Where(package => package is not null)
-            .Cast<AurPackageMetadata>()
-            .OrderByDescending(package => package.NumVotes)
-            .Take(50)
-            .ToArray();
+        return
+        [
+            .. intersection
+                .Select(name => snapshot.ByNames.GetValueOrDefault(name))
+                .Where(package => package is not null)
+                .Cast<AurPackageMetadata>()
+                .OrderByDescending(package => package.NumVotes)
+                .Take(50)
+        ];
     }
 }

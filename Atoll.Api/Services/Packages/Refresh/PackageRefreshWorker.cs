@@ -142,7 +142,7 @@ public sealed class PackageRefreshWorker(
                 new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = stoppingToken },
                 async (candidate, token) =>
                 {
-                    await repo.UpdateSyncStateAsync(candidate.Members.Select(m => m.PackageName).ToList(), candidate.UpstreamHead, true,
+                    await repo.UpdateSyncStateAsync([.. candidate.Members.Select(m => m.PackageName)], candidate.UpstreamHead, true,
                         null, token);
                     Interlocked.Add(ref packagesUnchanged, candidate.Members.Count);
                 });
@@ -190,7 +190,7 @@ public sealed class PackageRefreshWorker(
                         if (!failedBases.Contains(candidate.PackageBase)) continue;
 
                         Interlocked.Add(ref packagesSkipped, candidate.Members.Count);
-                        await repo.UpdateSyncStateAsync(candidate.Members.Select(m => m.PackageName).ToList(), null, false, "fetch failed",
+                        await repo.UpdateSyncStateAsync([.. candidate.Members.Select(m => m.PackageName)], null, false, "fetch failed",
                             stoppingToken);
                     }
 
@@ -247,7 +247,7 @@ public sealed class PackageRefreshWorker(
                         FetchedRefreshBatch envelope;
                         try
                         {
-                            var result = await mirror.FetchAsync(batch.Select(c => c.PackageBase).ToList(), produceToken);
+                            var result = await mirror.FetchAsync([.. batch.Select(c => c.PackageBase)], produceToken);
                             envelope = new FetchedRefreshBatch(batch, result, null);
                         }
                         catch (OperationCanceledException) when (produceToken.IsCancellationRequested)
@@ -310,7 +310,7 @@ public sealed class PackageRefreshWorker(
                 {
                     logger.LogWarning(ex, "Could not read files for pkgbase {PkgBase}; skipping.", candidate.PackageBase);
                     Interlocked.Add(ref skipped, candidate.Members.Count);
-                    await repo.UpdateSyncStateAsync(candidate.Members.Select(m => m.PackageName).ToList(), null, false, ex.Message, token);
+                    await repo.UpdateSyncStateAsync([.. candidate.Members.Select(m => m.PackageName)], null, false, ex.Message, token);
                     return;
                 }
 
@@ -364,7 +364,7 @@ public sealed class PackageRefreshWorker(
     private async Task RecordBatchFailureAsync(IReadOnlyList<CandidatePackageBase> batch, string error, CancellationToken ct)
     {
         foreach (var candidate in batch)
-            await repo.UpdateSyncStateAsync(candidate.Members.Select(m => m.PackageName).ToList(), null, false, error, ct);
+            await repo.UpdateSyncStateAsync([.. candidate.Members.Select(m => m.PackageName)], null, false, error, ct);
     }
 
     private sealed record FetchedRefreshBatch(

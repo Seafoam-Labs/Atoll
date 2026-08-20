@@ -9,6 +9,13 @@ EXPOSE 8081
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
+ARG TAILWIND_VERSION=4.3.3
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -fsSL "https://github.com/tailwindlabs/tailwindcss/releases/download/v${TAILWIND_VERSION}/tailwindcss-linux-x64" \
+        -o /usr/local/bin/tailwindcss \
+    && chmod +x /usr/local/bin/tailwindcss \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY ["Atoll.Api/Atoll.Api.csproj", "Atoll.Api/"]
 RUN dotnet restore "Atoll.Api/Atoll.Api.csproj"
