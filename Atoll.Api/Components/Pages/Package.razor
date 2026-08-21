@@ -214,10 +214,14 @@ else
 
     private PackageDetails? _details;
     private bool _loaded;
+    private int _loadVersion;
 
     protected override async Task OnParametersSetAsync()
     {
-        _details = await Details.GetAsync(Name);
+        var version = Interlocked.Increment(ref _loadVersion);
+        var details = await Details.GetAsync(Name);
+        if (version != _loadVersion) return; // a newer navigation superseded this load
+        _details = details;
         _loaded = true;
     }
 }

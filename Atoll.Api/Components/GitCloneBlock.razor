@@ -1,5 +1,6 @@
 @rendermode InteractiveServer
 @inject IJSRuntime Js
+@implements IDisposable
 
 <div class="flex items-stretch gap-2">
     <div class="cmd flex-1 min-w-0">git clone @CloneUrl</div>
@@ -11,6 +12,7 @@
     [Parameter] public string ExternalBaseUrl { get; set; } = "";
 
     private bool _copied;
+    private CancellationTokenSource? _resetCts;
 
     private string CloneUrl => $"{ExternalBaseUrl.TrimEnd('/')}/packages/{Name}.git";
 
@@ -21,12 +23,36 @@
             await Js.InvokeVoidAsync("navigator.clipboard.writeText", $"git clone {CloneUrl}");
             _copied = true;
             StateHasChanged();
-            await Task.Delay(1500);
-            _copied = false;
+
+            var previous = _resetCts;
+            if (previous is not null)
+            {
+                await previous.CancelAsync();
+                previous.Dispose();
+            }
+            _resetCts = new CancellationTokenSource();
+            var token = _resetCts.Token;
+
+            try
+            {
+                await Task.Delay(1500, token);
+                _copied = false;
+                StateHasChanged();
+            }
+            catch (OperationCanceledException)
+            {
+                // A newer copy superseded the reset.
+            }
         }
         catch (JSException)
         {
             // Clipboard API unavailable (non-secure context); the text stays selectable.
         }
+    }
+
+    public void Dispose()
+    {
+        _resetCts?.Cancel();
+        _resetCts?.Dispose();
     }
 }

@@ -3,6 +3,7 @@
 @inject IPackageSecurityRepository SecurityRepository
 @inject PackageCatalogService Catalog
 @inject NavigationManager Navigation
+@inject ILogger<PackageActions> Logger
 
 <div class="flex flex-col items-start gap-2">
     @if (!IsSeeded)
@@ -69,7 +70,8 @@
         }
         catch (Exception ex)
         {
-            _error = $"Seeding failed: {ex.Message}";
+            Logger.LogError(ex, "Seeding package {Package} failed", Name);
+            _error = "Seeding failed - please try again later.";
             _busy = false;
         }
     }
@@ -88,7 +90,8 @@
         }
         catch (Exception ex)
         {
-            _error = $"Requesting a rescan failed: {ex.Message}";
+            Logger.LogError(ex, "Requesting a rescan of package {Package} failed", Name);
+            _error = "Requesting a rescan failed - please try again later.";
             _busy = false;
         }
     }

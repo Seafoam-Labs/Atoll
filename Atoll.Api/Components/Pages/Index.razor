@@ -1,6 +1,5 @@
 @page "/"
 @rendermode InteractiveServer
-@inject NavigationManager Navigation
 @inject PackageCatalogService Catalog
 @inject PackageIndexUpdater IndexUpdater
 @inject IOptions<UiOptions> Ui
@@ -200,13 +199,14 @@ else if (_result is not null)
     private string? _error;
     private int _searchVersion;
 
+    [SupplyParameterFromQuery(Name = "q")]
+    private string? QueryParam { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         // Chip links on the details page deep-link into the catalog via ?q={dep}.
-        var uri = new Uri(Navigation.Uri);
-        var queryParam = System.Web.HttpUtility.ParseQueryString(uri.Query).Get("q");
-        if (!string.IsNullOrWhiteSpace(queryParam))
-            _query = queryParam;
+        if (!string.IsNullOrWhiteSpace(QueryParam))
+            _query = QueryParam;
 
         await ReloadAsync();
     }
