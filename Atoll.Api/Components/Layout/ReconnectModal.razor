@@ -1,0 +1,50 @@
+<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
+
+<dialog id="components-reconnect-modal" data-nosnippet
+        class="fixed inset-0 size-auto max-h-none max-w-none overflow-y-auto bg-transparent backdrop:bg-transparent">
+    <div class="flex min-h-full items-end justify-center p-4 text-center focus:outline-none sm:items-center sm:p-0">
+        <div class="components-reconnect-panel relative w-full max-w-sm overflow-hidden rounded-lg bg-surface px-6 py-6 text-left shadow-xl outline outline-line dark:outline-line">
+            <div class="flex flex-col items-center gap-4 text-center">
+                <div class="components-rejoining-animation" aria-hidden="true">
+                    <div></div>
+                    <div></div>
+                </div>
+                <div class="components-reconnect-failed-icon flex size-12 items-center justify-center rounded-full bg-sec-error/10">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"
+                         class="size-6 text-sec-error">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                    </svg>
+                </div>
+                <div class="components-pause-icon flex size-12 items-center justify-center rounded-full bg-sec-pending/10">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"
+                         class="size-6 text-sec-pending">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                    </svg>
+                </div>
+
+                <h3 class="text-base font-semibold text-ink">Connection lost</h3>
+
+                <div class="text-sm text-ink-soft">
+                    <p class="components-reconnect-first-attempt-visible">Rejoining the server...</p>
+                    <p class="components-reconnect-repeated-attempt-visible">
+                        Rejoin failed... trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
+                    </p>
+                    <p class="components-reconnect-failed-visible">Failed to rejoin. Please retry or reload the page.</p>
+                    <p class="components-pause-visible">The session has been paused by the server.</p>
+                    <p class="components-resume-failed-visible">Failed to resume the session. Please retry or reload the page.</p>
+                </div>
+
+                <button id="components-reconnect-button"
+                        class="components-reconnect-failed-visible inline-flex w-full justify-center rounded-md bg-atoll-dark px-3 py-2 text-sm font-semibold text-canvas shadow-xs hover:bg-atoll focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-atoll">
+                    Retry
+                </button>
+                <button id="components-resume-button"
+                        class="components-pause-visible components-resume-failed-visible inline-flex w-full justify-center rounded-md bg-atoll-dark px-3 py-2 text-sm font-semibold text-canvas shadow-xs hover:bg-atoll focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-atoll">
+                    Resume
+                </button>
+            </div>
+        </div>
+    </div>
+</dialog>

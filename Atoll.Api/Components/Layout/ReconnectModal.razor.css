@@ -1,0 +1,93 @@
+/* Blazor circuit-state machinery only — all visual styling lives as Tailwind
+   utilities in ReconnectModal.razor. These rules toggle visibility per state
+   and keep the rejoining ring animation, which can't be expressed in utilities. */
+.components-reconnect-first-attempt-visible,
+.components-reconnect-repeated-attempt-visible,
+.components-reconnect-failed-visible,
+.components-pause-visible,
+.components-resume-failed-visible,
+.components-rejoining-animation,
+.components-reconnect-failed-icon,
+.components-pause-icon {
+    display: none;
+}
+
+#components-reconnect-modal.components-reconnect-show .components-reconnect-first-attempt-visible,
+#components-reconnect-modal.components-reconnect-show .components-rejoining-animation,
+#components-reconnect-modal.components-reconnect-paused .components-pause-visible,
+#components-reconnect-modal.components-reconnect-paused .components-pause-icon,
+#components-reconnect-modal.components-reconnect-resume-failed .components-resume-failed-visible,
+#components-reconnect-modal.components-reconnect-resume-failed .components-pause-icon,
+#components-reconnect-modal.components-reconnect-retrying,
+#components-reconnect-modal.components-reconnect-retrying .components-repeated-attempt-visible,
+#components-reconnect-modal.components-reconnect-retrying .components-reconnect-repeated-attempt-visible,
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-failed .components-reconnect-failed-visible {
+    display: block;
+}
+
+/* Icon circles are flex containers in markup; show them as flex so their
+   contents stay centered instead of being overridden to block. */
+#components-reconnect-modal.components-reconnect-failed .components-reconnect-failed-icon,
+#components-reconnect-modal.components-reconnect-paused .components-pause-icon,
+#components-reconnect-modal.components-reconnect-resume-failed .components-pause-icon {
+    display: flex;
+}
+
+/* The panel wrapper must stay flexed while visible; the state classes above
+   set display:block on it during retrying/failed states. */
+#components-reconnect-modal.components-reconnect-show > div,
+#components-reconnect-modal.components-reconnect-paused > div,
+#components-reconnect-modal.components-reconnect-resume-failed > div {
+    display: flex;
+}
+
+#components-reconnect-modal[open] {
+    animation: components-reconnect-modal-slideUp 0.3s cubic-bezier(.05, .89, .25, 1.02),
+               components-reconnect-modal-fadeInOpacity 0.2s ease-in-out;
+    animation-fill-mode: both;
+}
+
+#components-reconnect-modal::backdrop {
+    background-color: rgb(11 18 32 / 0.6);
+    animation: components-reconnect-modal-fadeInOpacity 0.2s ease-in-out;
+}
+
+@keyframes components-reconnect-modal-slideUp {
+    0% { transform: translateY(16px) scale(0.97); }
+    100% { transform: translateY(0); }
+}
+
+@keyframes components-reconnect-modal-fadeInOpacity {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+.components-rejoining-animation {
+    position: relative;
+    width: 80px;
+    height: 80px;
+}
+
+.components-rejoining-animation div {
+    position: absolute;
+    border: 3px solid var(--color-atoll);
+    border-radius: 50%;
+    animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.components-rejoining-animation div:nth-child(2) {
+    animation-delay: -0.5s;
+}
+
+@keyframes components-rejoining-animation {
+    0%, 4.9% {
+        top: 40px; left: 40px; width: 0; height: 0; opacity: 0;
+    }
+    5% {
+        top: 40px; left: 40px; width: 0; height: 0; opacity: 1;
+    }
+    100% {
+        top: 0; left: 0; width: 80px; height: 80px; opacity: 0;
+    }
+}
