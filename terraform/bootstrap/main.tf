@@ -77,6 +77,20 @@ resource "aws_dynamodb_table" "tf_lock" {
   }
 }
 
+# --- Container image repository ---
+# Lives here rather than in the main stack: the pipeline pushes the first image
+# before the main stack applies, so the repository must already exist.
+
+resource "aws_ecr_repository" "app" {
+  name                 = var.project_name
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
 # --- GitHub OIDC federation (no static AWS credentials anywhere) ---
 
 data "tls_certificate" "github" {

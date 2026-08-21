@@ -10,7 +10,7 @@ output "ecs_service_name" {
 
 output "repository_url" {
   description = "The URL of the ECR repository"
-  value       = aws_ecr_repository.app.repository_url
+  value       = data.aws_ecr_repository.app.repository_url
 }
 
 output "api_gateway_url" {
