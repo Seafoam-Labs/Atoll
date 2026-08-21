@@ -8,9 +8,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="CliWrap" Version="3.10.4"/>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10"/>
-        <PackageReference Include="MongoDB.Driver" Version="3.10.0"/>
+        <PackageReference Include="CliWrap" Version="3.10.5" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+        <PackageReference Include="MongoDB.Driver" Version="3.11.0" />
         <PackageReference Include="OpenTelemetry" Version="1.17.0"/>
         <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0"/>
         <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.17.0-beta.1"/>
