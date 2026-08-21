@@ -64,12 +64,12 @@ always maps to the same id). A new head revision gets a fresh `Pending` document
 scan state, so a flagged revision blocks only itself. Each document also carries a denormalized `isHead` flag so the
 gate can resolve the head scan without a second read against the `packages` collection. The status is one of:
 
-| Status     | Meaning                                                                         | Content served? |
-| ---------- | ------------------------------------------------------------------------------- | --------------- |
-| `Pending`  | No successful scan yet for that revision (newly seeded, re-scanned, or leased). | **Blocked**     |
-| `Verified` | The scan completed with no Critical/High findings.                              | Allowed         |
-| `Flagged`  | The scan completed with at least one Critical or High finding.                  | **Blocked**     |
-| `Error`    | The scan threw; the revision must not be served until a successful re-scan.     | **Blocked**     |
+| Status | Meaning | Content served? |
+| --- | --- | --- |
+| `Pending` | No successful scan yet for that revision (newly seeded, re-scanned, or leased). | **Blocked** |
+| `Verified` | The scan completed with no Critical/High findings. | Allowed |
+| `Flagged` | The scan completed with at least one Critical or High finding. | **Blocked** |
+| `Error` | The scan threw; the revision must not be served until a successful re-scan. | **Blocked** |
 
 Findings are stored alongside the status. Severity ordering is `Info < Low < Medium < High < Critical`. Only `Critical`
 and `High` flip a revision to `Flagged`; `Medium` and below are retained for review but do not block serving. The
@@ -97,19 +97,19 @@ escapes. Every rule is matched against both the raw line and the de-obfuscated p
 
 The current rules, with their default severities:
 
-| Rule id                    | Severity (default) | What it detects                                                                                                       |
-| -------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `network-to-shell`         | Critical           | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell (`sh`, `bash`, …).                                        |
-| `decode-to-shell`          | Critical           | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell.                                        |
-| `eval-indirection`         | Critical           | `eval`/`source`/`.` fed by command substitution, backticks, or an echo/printf/base64 payload.                         |
-| `network-execution`        | High               | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`).  |
-| `write-outside-build-root` | High               | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …).                                                      |
-| `privilege-escalation`     | High               | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.)       |
-| `hidden-character`         | Critical           | Zero-width chars (U+200B/C/D), BOM (U+FEFF), bidi overrides/isolates (U+202A–E, U+2066–9), C0/C1 control bytes.       |
-| `command-substitution`     | Medium             | `$( … )` or backticks (non-blocking).                                                                                 |
-| `variable-indirection`     | Medium             | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime).                          |
-| `suspicious-source-url`    | Medium             | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only.              |
-| `local-binary`             | Critical           | A source file that is an ELF executable or contains binary bytes (NUL, control, undecodable UTF-8). Whole-file check. |
+| Rule id | Severity (default) | What it detects |
+| --- | --- | --- |
+| `network-to-shell` | Critical | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell (`sh`, `bash`, …). |
+| `decode-to-shell` | Critical | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell. |
+| `eval-indirection` | Critical | `eval`/`source`/`.` fed by command substitution, backticks, or an echo/printf/base64 payload. |
+| `network-execution` | High | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). |
+| `write-outside-build-root` | High | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). |
+| `privilege-escalation` | High | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.) |
+| `hidden-character` | Critical | Zero-width chars (U+200B/C/D), BOM (U+FEFF), bidi overrides/isolates (U+202A–E, U+2066–9), C0/C1 control bytes. |
+| `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
+| `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime). |
+| `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
+| `local-binary` | Critical | A source file that is an ELF executable or contains binary bytes (NUL, control, undecodable UTF-8). Whole-file check. |
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after), not
 as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
@@ -160,14 +160,14 @@ hosted service registered in `Program.cs`; it starts with the API and stops on s
 content-serving route group in `Endpoints.cs`, enforces it for head content, a requested revision, and both Git Smart
 HTTP routes. Decision table:
 
-| Condition                             | Result                                            |
-| ------------------------------------- | ------------------------------------------------- |
-| Security disabled (`Enabled=false`)   | Allow (everything, including previously Flagged). |
-| Package does not exist                | Allow (the route then returns 404 downstream).    |
-| Status `Verified`                     | Allow.                                            |
-| Status `Pending`, or no scan document | Block — `security_status_pending`.                |
-| Status `Flagged`                      | Block — `security_status_flagged`.                |
-| Status `Error`                        | Block — `security_scan_error`.                    |
+| Condition | Result |
+| --- | --- |
+| Security disabled (`Enabled=false`) | Allow (everything, including previously Flagged). |
+| Package does not exist | Allow (the route then returns 404 downstream). |
+| Status `Verified` | Allow. |
+| Status `Pending`, or no scan document | Block — `security_status_pending`. |
+| Status `Flagged` | Block — `security_status_flagged`. |
+| Status `Error` | Block — `security_scan_error`. |
 
 Blocked requests return `403 Forbidden` with an RFC 9457 `application/problem+json` body and a non-sensitive `reason`
 extension code (one of the three above). No file content or finding detail is leaked. The requested-version route is
@@ -192,11 +192,11 @@ status endpoint remain ungated because they expose only metadata and scan summar
 }
 ```
 
-| Option               | Default | Range      | Effect                                                                                                    |
-| -------------------- | ------- | ---------- | --------------------------------------------------------------------------------------------------------- |
-| `Enabled`            | `true`  | bool       | Master switch. `false` makes `CheckAsync` allow everything and the worker exits without polling.          |
-| `ScannerConcurrency` | `4`     | 1–64       | Number of parallel poll/scan loops. Also bounds startup backfill parallelism.                             |
-| `PollIntervalMs`     | `100`   | 100–300000 | Delay between poll attempts when no pending package was claimed. Lowered load is traded for scan latency. |
+| Option | Default | Range | Effect |
+| --- | --- | --- | --- |
+| `Enabled` | `true` | bool | Master switch. `false` makes `CheckAsync` allow everything and the worker exits without polling. |
+| `ScannerConcurrency` | `4` | 1–64 | Number of parallel poll/scan loops. Also bounds startup backfill parallelism. |
+| `PollIntervalMs` | `100` | 100–300000 | Delay between poll attempts when no pending package was claimed. Lowered load is traded for scan latency. |
 
 The lease duration is fixed at 5 minutes in `PackageSecurityWorker` and is not configurable. The
 `atoll_securityscan_pending` gauge is refreshed every 30 seconds, independent of `ScannerConcurrency`.
@@ -206,15 +206,15 @@ The lease duration is fixed at 5 minutes in `PackageSecurityWorker` and is not c
 `GET /metrics` serves Prometheus-format OpenTelemetry metrics. The `atoll_securityscan_*` instruments are backed by
 `SecurityScanStatusStore`, updated by `PackageSecurityWorker` as scans finish:
 
-| Metric                                       | Meaning                                                                                                  |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `atoll_securityscan_completed_total`         | Scans that reached a terminal status (verified + flagged + errored).                                     |
-| `atoll_securityscan_verified_total`          | Scans that completed `Verified`.                                                                         |
-| `atoll_securityscan_flagged_total`           | Scans that completed `Flagged`.                                                                          |
-| `atoll_securityscan_errored_total`           | Scans that failed and were marked `Error`.                                                               |
-| `atoll_securityscan_dropped_total`           | Claims dropped because the claimed revision aged out of the retained history before it could be scanned. |
-| `atoll_securityscan_pending`                 | Backlog depth: the number of `Pending` scan documents. Refreshed every 30 seconds.                       |
-| `atoll_securityscan_last_finished_timestamp` | Unix time of when the last scan completed or errored.                                                    |
+| Metric | Meaning |
+| --- | --- |
+| `atoll_securityscan_completed_total` | Scans that reached a terminal status (verified + flagged + errored). |
+| `atoll_securityscan_verified_total` | Scans that completed `Verified`. |
+| `atoll_securityscan_flagged_total` | Scans that completed `Flagged`. |
+| `atoll_securityscan_errored_total` | Scans that failed and were marked `Error`. |
+| `atoll_securityscan_dropped_total` | Claims dropped because the claimed revision aged out of the retained history before it could be scanned. |
+| `atoll_securityscan_pending` | Backlog depth: the number of `Pending` scan documents. Refreshed every 30 seconds. |
+| `atoll_securityscan_last_finished_timestamp` | Unix time of when the last scan completed or errored. |
 
 Content is not served until the head revision is scanned, so compare `atoll_securityscan_pending` against the
 bulk-seed and package-refresh throughput counters on the same endpoint to see whether the scanner keeps up with

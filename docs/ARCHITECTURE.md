@@ -25,15 +25,15 @@ history, provides fast in-memory search, and exposes each package as a cloneable
 
 ## Tech Stack
 
-| Layer            | Technology                                           | Rationale                                                                       |
-| ---------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Runtime          | .NET 10                                              | Current LTS runtime with built-in async primitives                              |
-| Framework        | ASP.NET Core Minimal API                             | Low-overhead routing; no controller boilerplate needed                          |
-| Database         | MongoDB 8 (via MongoDB.Driver)                       | Flexible document model suits package metadata + per-revision content documents |
-| In-memory index  | ImmutableDictionary (ByNames / ByWords / ByProvides) | Fast reads with a consistent per-request snapshot, no external cache tier       |
-| Git subprocess   | CliWrap + system `git`                               | Reuses the `git upload-pack` implementation                                     |
-| Containerization | Docker / Docker Compose                              | Single `compose.yaml` spins up API + MongoDB                                    |
-| Cloud infra      | Terraform (`terraform/`)                             | Cloud infrastructure definitions                                                |
+| Layer | Technology | Rationale |
+| --- | --- | --- |
+| Runtime | .NET 10 | Current LTS runtime with built-in async primitives |
+| Framework | ASP.NET Core Minimal API | Low-overhead routing; no controller boilerplate needed |
+| Database | MongoDB 8 (via MongoDB.Driver) | Flexible document model suits package metadata + per-revision content documents |
+| In-memory index | ImmutableDictionary (ByNames / ByWords / ByProvides) | Fast reads with a consistent per-request snapshot, no external cache tier |
+| Git subprocess | CliWrap + system `git` | Reuses the `git upload-pack` implementation |
+| Containerization | Docker / Docker Compose | Single `compose.yaml` spins up API + MongoDB |
+| Cloud infra | Terraform (`terraform/`) | Cloud infrastructure definitions |
 
 ## Architecture
 
@@ -144,21 +144,21 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 
 ### Endpoints
 
-| Method   | Path                                                     | Description                                                           |
-| -------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
-| GET/HEAD | `/health`                                                | Liveness only - does not check MongoDB or index readiness             |
-| GET      | `/metrics`                                               | OpenTelemetry metrics in Prometheus format (see Operations)           |
-| GET      | `/search?query=…&by=name\|words\|provides`               | In-memory package search (comma-separated values)                     |
-| GET      | `/packages`                                              | List all seeded package names                                         |
-| POST     | `/packages/{name}/seed`                                  | Clone from AUR and persist (409 if exists)                            |
-| GET      | `/packages/{name}`                                       | Get head revision files                                               |
-| GET      | `/packages/{name}/versions`                              | Get revision history                                                  |
-| GET      | `/packages/{name}/versions/{sha}`                        | Get specific revision files                                           |
-| DELETE   | `/packages/{name}`                                       | Delete package (MongoDB document only - see note below)               |
-| GET      | `/packages/{name}/security`                              | Get per-revision security status (`?revision={sha}` for one revision) |
-| POST     | `/packages/{name}/security/rescan`                       | Mark a revision for re-scan (`?revision={sha}`, defaults to head)     |
-| GET      | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement                                                 |
-| POST     | `/packages/{name}.git/git-upload-pack`                   | Git pack negotiation and transfer                                     |
+| Method | Path | Description |
+| --- | --- | --- |
+| GET/HEAD | `/health` | Liveness only - does not check MongoDB or index readiness |
+| GET | `/metrics` | OpenTelemetry metrics in Prometheus format (see Operations) |
+| GET | `/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
+| GET | `/packages` | List all seeded package names |
+| POST | `/packages/{name}/seed` | Clone from AUR and persist (409 if exists) |
+| GET | `/packages/{name}` | Get head revision files |
+| GET | `/packages/{name}/versions` | Get revision history |
+| GET | `/packages/{name}/versions/{sha}` | Get specific revision files |
+| DELETE | `/packages/{name}` | Delete package (MongoDB document only - see note below) |
+| GET | `/packages/{name}/security` | Get per-revision security status (`?revision={sha}` for one revision) |
+| POST | `/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head) |
+| GET | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement |
+| POST | `/packages/{name}.git/git-upload-pack` | Git pack negotiation and transfer |
 
 > **Known issue:** `DELETE` removes the MongoDB document but leaves the bare repo on disk, so `git clone` keeps serving
 > the deleted package's content indefinitely. Fix by either deleting the directory or having `GitTransferService` verify
@@ -173,13 +173,13 @@ configuration, and limitations are documented in [Package security scanning](SEC
 
 ## Key Decisions (ADRs)
 
-| Decision                                  | Rationale                                                    | Trade-offs                                                                                                                                                                                                                                 | Status |
-| ----------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| In-memory search index (no Elasticsearch) | Fast reads; AUR metadata fits comfortably in RAM             | Index must be rebuilt on restart; no ranked full-text scoring                                                                                                                                                                              | Active |
-| MongoDB for package storage               | Flexible schema; embedded revision metadata avoids joins     | Revision file content is normalized into `package-revisions`, so the 16 MiB cap applies per snapshot; content reads take an extra indexed find; appends write two documents without transactions (write ordering keeps readers consistent) | Active |
-| Shell out to `git upload-pack`            | Reuses the complete and reliable Git transfer implementation | Requires `git` installed in the container; subprocess overhead per request                                                                                                                                                                 | Active |
-| Atomic `PackageIndexStore` snapshot swap  | Lock-free reads; consistent view per request                 | Full index rebuild on each refresh; 2× peak memory while both snapshots are live. Incremental updates evaluated and rejected: rebuild cost is negligible at ~116k packages per 10-minute cycle.                                            | Active |
-| No authentication                         | Keeps the API simple for trusted private deployments         | Unauthenticated callers can seed **and delete** packages; must sit behind a reverse proxy / firewall if exposed                                                                                                                            | Active |
+| Decision | Rationale | Trade-offs | Status |
+| --- | --- | --- | --- |
+| In-memory search index (no Elasticsearch) | Fast reads; AUR metadata fits comfortably in RAM | Index must be rebuilt on restart; no ranked full-text scoring | Active |
+| MongoDB for package storage | Flexible schema; embedded revision metadata avoids joins | Revision file content is normalized into `package-revisions`, so the 16 MiB cap applies per snapshot; content reads take an extra indexed find; appends write two documents without transactions (write ordering keeps readers consistent) | Active |
+| Shell out to `git upload-pack` | Reuses the complete and reliable Git transfer implementation | Requires `git` installed in the container; subprocess overhead per request | Active |
+| Atomic `PackageIndexStore` snapshot swap | Lock-free reads; consistent view per request | Full index rebuild on each refresh; 2× peak memory while both snapshots are live. Incremental updates evaluated and rejected: rebuild cost is negligible at ~116k packages per 10-minute cycle. | Active |
+| No authentication | Keeps the API simple for trusted private deployments | Unauthenticated callers can seed **and delete** packages; must sit behind a reverse proxy / firewall if exposed | Active |
 
 Security notes not covered by the ADRs: options are validated on startup via Data Annotations (`[Required]`, `[Range]`,
 `[Url]`); raw stack traces are never returned to clients; `git-receive-pack` (push) is explicitly rejected with

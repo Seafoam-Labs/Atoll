@@ -152,13 +152,13 @@ failed refs, seeded/skipped/excluded packages, and cycle timestamps. Each cycle-
 total cycle time with the fetch and seed phase durations, which overlap because of pipelining. Use logs and metrics
 together to distinguish these outcomes:
 
-| Symptom                              | Expected evidence                                                                                                                                  |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Target absent from mirror            | `atoll_bulkseed_refs_skipped_total` increases; direct fallback is used only if enabled.                                                            |
-| Ref changed after discovery          | `atoll_bulkseed_refs_failed_total` increases after bisection; other refs in the original batch continue.                                           |
-| Tree cannot be read                  | A `git archive`-related warning; mapped pkgnames are skipped for that cycle.                                                                       |
+| Symptom | Expected evidence |
+| --- | --- |
+| Target absent from mirror | `atoll_bulkseed_refs_skipped_total` increases; direct fallback is used only if enabled. |
+| Ref changed after discovery | `atoll_bulkseed_refs_failed_total` increases after bisection; other refs in the original batch continue. |
+| Tree cannot be read | A `git archive`-related warning; mapped pkgnames are skipped for that cycle. |
 | Revision snapshot exceeds BSON limit | `atoll_bulkseed_packages_excluded_total` increases and the pkgbase is persisted in `seed-exclusions`, preventing repeated fetches in later cycles. |
-| Nothing to seed                      | The worker waits five minutes before the next check.                                                                                               |
+| Nothing to seed | The worker waits five minutes before the next check. |
 
 ## Periodic refresh
 
@@ -287,13 +287,13 @@ outcomes (`packages.updated.total` / `packages.unchanged.total` / `packages.skip
 reports the total cycle time with the fetch and apply phase durations, which overlap because of pipelining. Use logs
 and metrics together to distinguish these outcomes:
 
-| Symptom                                        | Expected evidence                                                                                            |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| pkgbase no longer on the mirror                | `atoll_packagerefresh_refs_skipped_total` increases; member watermarks stay untouched.                       |
+| Symptom | Expected evidence |
+| --- | --- |
+| pkgbase no longer on the mirror | `atoll_packagerefresh_refs_skipped_total` increases; member watermarks stay untouched. |
 | Branch disappeared between discovery and fetch | `atoll_packagerefresh_refs_failed_total` increases after bisection; affected members record `lastSyncError`. |
-| Cycle capped by `MaxPackagesPerRun`            | Log line about deferral; remaining candidates are picked up in later cycles.                                 |
-| Staleness sweep found no SHA movement          | `atoll_packagerefresh_packages_unchanged_total` increases without any fetch batches.                         |
-| Tree cannot be read                            | A `git archive`-related warning; affected members record `lastSyncError`.                                    |
+| Cycle capped by `MaxPackagesPerRun` | Log line about deferral; remaining candidates are picked up in later cycles. |
+| Staleness sweep found no SHA movement | `atoll_packagerefresh_packages_unchanged_total` increases without any fetch batches. |
+| Tree cannot be read | A `git archive`-related warning; affected members record `lastSyncError`. |
 
 ## Mirror transport
 
@@ -304,11 +304,11 @@ refspecs, depth-one fetches, and `git archive` extraction.
 
 Both workers use the same controls with the same defaults and validation:
 
-| Option         | Default and range     | Effect                                                                                                                                                                                                                               |
-| -------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `BatchSize`    | `1000`; 10–10,000     | Pkgbases requested by each `git fetch` invocation.                                                                                                                                                                                   |
-| `BatchDelayMs` | `1000` ms; 100–60,000 | Delay between fetch batches. Runtime values below 100 ms are clamped to 100 ms.                                                                                                                                                      |
-| `Parallelism`  | `4`; 1–128            | Pkgbases from a fetched batch archived and applied concurrently. Higher values trade CPU and MongoDB write pressure for shorter cycles; fetching and application already overlap, so this does not increase mirror request pressure. |
+| Option | Default and range | Effect |
+| --- | --- | --- |
+| `BatchSize` | `1000`; 10–10,000 | Pkgbases requested by each `git fetch` invocation. |
+| `BatchDelayMs` | `1000` ms; 100–60,000 | Delay between fetch batches. Runtime values below 100 ms are clamped to 100 ms. |
+| `Parallelism` | `4`; 1–128 | Pkgbases from a fetched batch archived and applied concurrently. Higher values trade CPU and MongoDB write pressure for shorter cycles; fetching and application already overlap, so this does not increase mirror request pressure. |
 
 The controls live under `Atoll:Seed:Bulk` for bulk seeding and `Atoll:Refresh` for refresh. When bulk seeding is active,
 its mirror settings configure the shared transport; see [Cache lifecycle](#cache-lifecycle).
@@ -318,14 +318,14 @@ its mirror settings configure the shared transport; see [Cache lifecycle](#cache
 The configured default mirror is `https://github.com/archlinux/aur`. The following are required assumptions, not
 incidental implementation details:
 
-| Contract                                                                | Why it matters                                                                                                                                                    |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A mirror branch is `refs/heads/<pkgbase>`.                              | Both workers must map pkgname to pkgbase before discovery and fetching.                                                                                           |
-| Branch discovery uses `git ls-remote --heads`.                          | Official packages and other non-AUR index entries have no mirror branch and must not enter fetch lists.                                                           |
+| Contract | Why it matters |
+| --- | --- |
+| A mirror branch is `refs/heads/<pkgbase>`. | Both workers must map pkgname to pkgbase before discovery and fetching. |
+| Branch discovery uses `git ls-remote --heads`. | Official packages and other non-AUR index entries have no mirror branch and must not enter fetch lists. |
 | Fetch uses explicit refspecs, such as `+refs/heads/foo:refs/atoll/foo`. | Git protocol v2 can limit the advertised refs to requested prefixes; the cache keeps fetched trees addressable by pkgbase without creating normal local branches. |
-| Fetch is `--depth=1 --no-tags`.                                         | Seeding and refresh only need the current tree, not history or tags.                                                                                              |
-| File extraction is `git archive --format=tar refs/atoll/<pkgbase>`.     | Workers read a tree, not a checkout, and exclude Git-internal paths defensively.                                                                                  |
-| A failed multi-ref fetch is treated as an unsuccessful batch.           | A ref can disappear after discovery. The application bisects the batch until it can skip only unreachable refs and continue with the rest.                        |
+| Fetch is `--depth=1 --no-tags`. | Seeding and refresh only need the current tree, not history or tags. |
+| File extraction is `git archive --format=tar refs/atoll/<pkgbase>`. | Workers read a tree, not a checkout, and exclude Git-internal paths defensively. |
+| A failed multi-ref fetch is treated as an unsuccessful batch. | A ref can disappear after discovery. The application bisects the batch until it can skip only unreachable refs and continue with the rest. |
 
 The cache is a bare repository at the configured `CachePath` (default `./data/aur-mirror`). Its fetched refs live in
 `refs/atoll/`; it is not a clone of every mirror branch.
