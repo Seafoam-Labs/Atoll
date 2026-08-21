@@ -1,0 +1,189 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# OIDC token issuance for AWS federation; no AWS credentials are stored in GitHub.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: "1.15.8"
+
+jobs:
+  build-image:
+    name: Build container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Validates the Dockerfile on every PR, including fork PRs (no AWS access needed).
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Atoll.Api/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  plan:
+    name: Terraform plan
+    runs-on: ubuntu-latest
+    # Fork PRs run under the fork's OIDC subject, which the deploy role trust
+    # policy does not allow, so plans run only for same-repo branches.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify AWS_DEPLOY_ROLE_ARN is configured
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          if [ -z "$AWS_DEPLOY_ROLE_ARN" ]; then
+            echo "::error::AWS_DEPLOY_ROLE_ARN repository variable is not set. Run the bootstrap stack (terraform/bootstrap) and set its deploy_role_arn output as a repository variable."
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform plan
+        run: |
+          set -o pipefail
+          terraform plan -input=false -no-color -var "image_tag=${{ github.sha }}" 2>&1 | tee plan.txt
+
+      - name: Prepare plan comment
+        if: always()
+        run: |
+          if [ ! -f plan.txt ]; then
+            echo "Terraform plan produced no output (check the init/fmt steps above)." > plan.txt
+          fi
+          {
+            echo '### Terraform plan'
+            echo ''
+            echo '```terraform'
+            head -c 60000 plan.txt
+            echo '```'
+            if [ "$(wc -c < plan.txt)" -gt 60000 ]; then
+              echo ''
+              echo '_Plan output truncated — see the workflow logs for the full plan._'
+            fi
+          } > plan-comment.md
+
+      - name: Post plan to PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- atoll-terraform-plan -->';
+            const body = marker + '\n' + fs.readFileSync('terraform/plan-comment.md', 'utf8');
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify AWS_DEPLOY_ROLE_ARN is configured
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          if [ -z "$AWS_DEPLOY_ROLE_ARN" ]; then
+            echo "::error::AWS_DEPLOY_ROLE_ARN repository variable is not set. Run the bootstrap stack (terraform/bootstrap) and set its deploy_role_arn output as a repository variable."
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Atoll.Api/Dockerfile
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/atoll-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve -var "image_tag=${{ github.sha }}"
+
+      - name: Publish endpoints
+        run: |
+          {
+            echo "## Atoll deployment"
+            echo ""
+            echo "- Image: \`${{ steps.ecr.outputs.registry }}/atoll-api:${{ github.sha }}\`"
+            echo "- API Gateway URL: $(terraform output -raw api_gateway_url)"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
@@ -33,11 +37,11 @@ resource "aws_security_group" "ecs_sg" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "Allow all traffic to 8080 (temporary debugging)"
-    from_port   = var.container_port
-    to_port     = var.container_port
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "Allow API Gateway VPC link traffic to the API port"
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.api_gw_sg.id]
   }
 
   egress {
@@ -87,7 +91,7 @@ resource "aws_security_group" "api_gw_sg" {
 
 resource "aws_ecr_repository" "app" {
   name                 = var.project_name
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
   force_delete         = true
 
   image_scanning_configuration {
@@ -138,7 +142,7 @@ resource "aws_ecs_task_definition" "app" {
   container_definitions = jsonencode([
     {
       name      = var.project_name
-      image     = "${aws_ecr_repository.app.repository_url}:latest"
+      image     = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
       essential = true
       portMappings = [
         {
@@ -154,6 +158,12 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "ASPNETCORE_URLS"
           value = "http://+:8080"
+        }
+      ]
+      secrets = [
+        {
+          name      = "Atoll__Mongo__ConnectionString"
+          valueFrom = aws_secretsmanager_secret.mongo_connection_string.arn
         }
       ]
       logConfiguration = {
@@ -205,13 +215,13 @@ resource "aws_apigatewayv2_vpc_link" "main" {
 }
 
 resource "aws_apigatewayv2_integration" "main" {
-  api_id           = aws_apigatewayv2_api.main.id
-  integration_type = "HTTP_PROXY"
-  integration_uri  = aws_service_discovery_service.main.arn
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_uri    = aws_service_discovery_service.main.arn
   integration_method = "ANY"
 
-  connection_type = "VPC_LINK"
-  connection_id   = aws_apigatewayv2_vpc_link.main.id
+  connection_type        = "VPC_LINK"
+  connection_id          = aws_apigatewayv2_vpc_link.main.id
   payload_format_version = "1.0"
 }
 

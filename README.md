@@ -116,6 +116,12 @@ Main settings are defined in `Atoll.Api/appsettings.json` and `Atoll.Api/AtollOp
 `compose.yaml` shows their environment-variable form. Detailed worker and security settings are
 in [SYNC.md](docs/SYNC.md) and [SECURITY.md](docs/SECURITY.md), respectively.
 
+## Deployment
+
+Atoll deploys to AWS (ECS Fargate, API Gateway, DocumentDB) through GitHub Actions using OIDC
+federation — no AWS credentials are stored in the repository. See [DEPLOYMENT.md](docs/DEPLOYMENT.md)
+for the one-time bootstrap steps and how the pipeline works.
+
 ## Tests
 
 The test suite is split into tiers so fast unit/contract tests don't require Docker.
