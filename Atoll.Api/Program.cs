@@ -136,7 +136,11 @@ app.UseExceptionHandler();
 
 // Re-execute 4xx/5xx responses with empty bodies as /not-found so browsers get
 // the styled page - the Blazor fallback alone renders nothing for unmatched paths.
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Only GET/HEAD requests are re-executed; non-GET methods (e.g. POST git-upload-pack)
+// must preserve their status code without routing into Blazor's GET-only /not-found.
+app.UseWhen(
+    context => HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method),
+    branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 
 app.UseStaticFiles();
 app.MapStaticAssets();
