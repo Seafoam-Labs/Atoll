@@ -89,14 +89,11 @@ resource "aws_security_group" "api_gw_sg" {
   }
 }
 
-resource "aws_ecr_repository" "app" {
-  name                 = var.project_name
-  image_tag_mutability = "IMMUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
+# The repository is created by the bootstrap stack (terraform/bootstrap): the
+# pipeline pushes the first image before this stack applies, so the repository
+# must already exist.
+data "aws_ecr_repository" "app" {
+  name = var.project_name
 }
 
 resource "aws_ecs_cluster" "main" {
@@ -142,7 +139,7 @@ resource "aws_ecs_task_definition" "app" {
   container_definitions = jsonencode([
     {
       name      = var.project_name
-      image     = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
+      image     = "${data.aws_ecr_repository.app.repository_url}:${var.image_tag}"
       essential = true
       portMappings = [
         {
