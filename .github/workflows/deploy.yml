@@ -43,6 +43,10 @@ jobs:
     # Fork PRs run under the fork's OIDC subject, which the deploy role trust
     # policy does not allow, so plans run only for same-repo branches.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
     defaults:
       run:
         working-directory: terraform
@@ -74,7 +78,55 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform plan
-        run: terraform plan -input=false -var "image_tag=${{ github.sha }}"
+        run: |
+          set -o pipefail
+          terraform plan -input=false -no-color -var "image_tag=${{ github.sha }}" 2>&1 | tee plan.txt
+
+      - name: Prepare plan comment
+        if: always()
+        run: |
+          if [ ! -f plan.txt ]; then
+            echo "Terraform plan produced no output (check the init/fmt steps above)." > plan.txt
+          fi
+          {
+            echo '### Terraform plan'
+            echo ''
+            echo '```terraform'
+            head -c 60000 plan.txt
+            echo '```'
+            if [ "$(wc -c < plan.txt)" -gt 60000 ]; then
+              echo ''
+              echo '_Plan output truncated — see the workflow logs for the full plan._'
+            fi
+          } > plan-comment.md
+
+      - name: Post plan to PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- atoll-terraform-plan -->';
+            const body = marker + '\n' + fs.readFileSync('terraform/plan-comment.md', 'utf8');
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
 
   deploy:
     name: Deploy to AWS
