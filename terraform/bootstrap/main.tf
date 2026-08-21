@@ -254,6 +254,7 @@ resource "aws_iam_policy" "github_deploy" {
           "rds:CreateDBCluster",
           "rds:DeleteDBCluster",
           "rds:DescribeDBClusters",
+          "rds:DescribeGlobalClusters",
           "rds:ModifyDBCluster",
           "rds:CreateDBInstance",
           "rds:DeleteDBInstance",
@@ -359,9 +360,13 @@ resource "aws_iam_policy" "github_deploy" {
           # the RDS service-linked role. IAM has no docdb.amazonaws.com SLR
           # template, so that principal cannot be used here.
           "arn:aws:iam::${local.account_id}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
-          # HTTP API VPC links are implemented with an NLB managed by API
-          # Gateway, which needs the ELB service-linked role.
+          # Pre-created in the account; kept allowlisted in case the VPC
+          # link provisioning flow needs it downstream.
           "arn:aws:iam::${local.account_id}:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+          # API Gateway VPC links need the API Gateway service-linked role.
+          # Its service principal is ops.apigateway.amazonaws.com — CloudTrail
+          # shows CreateVpcLink attempting to create exactly this role.
+          "arn:aws:iam::${local.account_id}:role/aws-service-role/ops.apigateway.amazonaws.com/AWSServiceRoleForAPIGateway",
           # ECS uses this role to register/deregister tasks in Cloud Map
           # (the ECS service below uses service_registries).
           "arn:aws:iam::${local.account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
@@ -371,6 +376,7 @@ resource "aws_iam_policy" "github_deploy" {
             "iam:AWSServiceName" = [
               "rds.amazonaws.com",
               "elasticloadbalancing.amazonaws.com",
+              "ops.apigateway.amazonaws.com",
               "ecs.amazonaws.com",
             ]
           }
