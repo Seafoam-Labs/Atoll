@@ -1,0 +1,13 @@
+@* Gate banner shown where a revision's content is blocked by its security scan. *@
+<div class="status-banner @UiFormatting.BannerClass(Access.ReasonCode)">
+    <strong>@UiFormatting.BannerTitle(Access.ReasonCode)</strong>
+    <span class="text-ink-soft"> @UiFormatting.BannerBody(Access.ReasonCode)</span>
+    <div class="mt-1 text-xs text-ink-faint">
+        The file list and contents of this revision stay hidden until its scan completes with no
+        critical/high findings. Request a rescan from the package overview to re-queue it.
+    </div>
+</div>
+
+@code {
+    [Parameter] public SecurityAccessResult Access { get; set; } = SecurityAccessResult.Allow();
+}

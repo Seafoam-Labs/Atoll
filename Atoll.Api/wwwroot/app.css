@@ -316,6 +316,89 @@
         @apply border-b-atoll text-ink;
     }
 
+    /* Count pill on a tab label ("Revisions 12") - from the underline+badges tabs block,
+       recolored to the atoll accent. */
+    .tabs .tab .tab-count {
+        @apply ml-2.5 rounded-full border border-line bg-canvas px-2 py-0.5 font-mono text-xs leading-4 text-ink-soft;
+    }
+
+    .tabs .tab:hover .tab-count {
+        @apply text-ink;
+    }
+
+    .tabs .tab.active .tab-count {
+        @apply border-atoll-dark text-atoll;
+    }
+
+    /* ===== Revision list ===== */
+    .rev-list {
+        @apply bg-surface border border-line rounded-xl divide-y divide-line;
+    }
+
+    .rev-list .rev-item {
+        @apply flex items-center gap-x-6 py-4 px-5 max-sm:flex-col max-sm:items-start max-sm:gap-3;
+    }
+
+    .rev-list .rev-message {
+        @apply mt-1 text-sm leading-5 text-ink-soft truncate;
+    }
+
+    .rev-list .rev-meta {
+        @apply mt-1 flex items-center gap-x-2 text-xs leading-5 text-ink-faint;
+    }
+
+    /* ===== File tree ===== */
+    .file-tree {
+        @apply bg-surface border border-line rounded-xl py-2;
+    }
+
+    .file-tree li {
+        @apply m-0;
+    }
+
+    .file-tree-dir,
+    .file-tree-file {
+        @apply flex items-center gap-2 text-sm leading-6;
+        /* depth comes from the markup as --depth:N so indenting needs no dynamic classes */
+        padding-left: calc(var(--depth, 0) * 0.875rem + 0.875rem);
+        padding-right: 0.875rem;
+    }
+
+    .file-tree-dir {
+        @apply pt-2 pb-1 font-medium text-ink-faint select-none;
+    }
+
+    .file-tree-file {
+        @apply py-1.5 text-ink-soft;
+    }
+
+    .file-tree-file:hover {
+        @apply text-atoll;
+    }
+
+    .file-tree-file:focus-visible {
+        @apply outline-2 outline-offset-[-2px] outline-atoll;
+    }
+
+    .file-tree-file.selected {
+        @apply bg-atoll/10 text-atoll;
+    }
+
+    /* ===== Code viewer =====
+       Two plain <pre> blocks (gutter + body) instead of per-line markup - the fastest way
+       to render large files; the sticky gutter keeps line numbers visible while scrolling. */
+    .code-view {
+        @apply flex max-h-[75vh] overflow-auto rounded-lg border border-line bg-canvas font-mono text-[13px] leading-5;
+    }
+
+    .code-view .code-nums {
+        @apply sticky h-full left-0 z-10 shrink-0 border-r border-line bg-surface px-3 py-3 text-right whitespace-pre text-ink-faint select-none;
+    }
+
+    .code-view .code-body {
+        @apply shrink-0 px-3 py-3 text-ink whitespace-pre;
+    }
+
     /* ===== Security status banners ===== */
     .status-banner {
         @apply rounded-lg border px-4 py-3 text-sm;

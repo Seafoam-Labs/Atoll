@@ -15,50 +15,29 @@ else if (_details is null)
 else
 {
     var meta = _details.Metadata;
-    var headScan = _details.HeadScan;
+    var selectedScan = _details.SelectedScan;
+    var revForTabs = _details is { RevisionFellBack: false, SelectedIsHead: false }
+        ? _details.SelectedRevisionId
+        : null;
 
-    <div class="mb-5 lg:flex lg:items-start lg:justify-between">
-        <div class="min-w-0 flex-1">
-            <h1 class="mb-1 flex flex-wrap items-baseline gap-3 text-2xl/7 font-bold tracking-tight sm:text-3xl">
-                @meta.Name
-                <span class="font-mono text-atoll text-base font-medium">@meta.Version</span>
-            </h1>
-            <div class="flex flex-wrap items-center gap-2 text-ink-soft text-sm">
-                @if (_details.IsSeeded)
-                {
-                    <span class="badge badge-seeded">seeded</span>
-                }
-                @if (headScan is not null)
-                {
-                    <span class="badge @UiFormatting.BadgeClass(headScan.Status)">@headScan.Status.ToString().ToLowerInvariant()</span>
-                }
-                @if (meta.OutOfDate is not null)
-                {
-                    <span class="badge badge-stale">out-of-date</span>
-                }
-                @if (!string.IsNullOrEmpty(meta.Maintainer))
-                {
-                    <span class="text-ink-faint">· maintained by @meta.Maintainer</span>
-                }
-                @if (meta.License.Count > 0)
-                {
-                    <span class="text-ink-faint">· @string.Join(", ", meta.License)</span>
-                }
-            </div>
-            @if (!string.IsNullOrWhiteSpace(meta.Description))
-            {
-                <p class="mt-3 text-ink-soft max-w-[60ch]">@meta.Description</p>
-            }
+    <PackageHeader Details="@_details"/>
+
+    <PackageTabs Name="@Name" RevisionCount="@(_details.Head?.Revisions.Count ?? 0)" Current="overview" Rev="@revForTabs"/>
+
+    @if (_details.RevisionFellBack)
+    {
+        <div class="status-banner status-banner-pending mb-5">
+            <strong>Revision not found</strong>
+            <span class="text-ink-soft"> — no revision <code>@Rev</code> exists for this package; showing the head revision instead.</span>
         </div>
-        <div class="mt-5 flex gap-2 lg:mt-0 lg:ml-4">
-            <PackageActions Name="@meta.Name" IsSeeded="@_details.IsSeeded" HeadRevisionId="@_details.Head?.HeadRevisionId"/>
-            <a class="btn" href="@($"https://aur.archlinux.org/packages/{meta.Name}")" target="_blank" rel="noopener">AUR ↗</a>
-            @if (!string.IsNullOrWhiteSpace(meta.Url))
-            {
-                <a class="btn" href="@meta.Url" target="_blank" rel="noopener">Upstream ↗</a>
-            }
+    }
+    else if (!_details.SelectedIsHead && _details.IsSeeded)
+    {
+        <div class="mb-5 text-sm text-ink-soft">
+            Pinned to revision <code class="text-atoll-light">@UiFormatting.Truncate(_details.SelectedRevisionId)</code>
+            (not head) · <a href="@($"/package/{Name}")">back to head</a>
         </div>
-    </div>
+    }
 
     @if (_details.IsSeeded && !_details.Access.Allowed)
     {
@@ -123,15 +102,17 @@ else
             }
             else
             {
-                @if (headScan is not null)
+                @if (selectedScan is not null)
                 {
-                    <div class="status-banner @UiFormatting.BannerClass(headScan.Status) mb-4">
-                        <strong>@headScan.Status</strong>
-                        <span class="text-ink-soft"> — @UiFormatting.StatusSummary(headScan.Status)</span>
+                    <div class="status-banner @UiFormatting.BannerClass(selectedScan.Status) mb-4">
+                        <strong>@selectedScan.Status</strong>
+                        <span class="text-ink-soft"> — @UiFormatting.StatusSummary(selectedScan.Status)</span>
                         <div class="text-ink-faint text-xs mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                            <span>revision <code>@UiFormatting.Truncate(_details.Head!.HeadRevisionId)</code></span>
-                            <span>scanned @(headScan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "not yet") UTC</span>
-                            <span>findings @UiFormatting.SeverityCountSummary(headScan.Findings)</span>
+                            <span>
+                                revision <code>@UiFormatting.Truncate(_details.SelectedRevisionId)</code>@(_details.SelectedIsHead ? "" : " (not head)")
+                            </span>
+                            <span>scanned @(selectedScan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "not yet") UTC</span>
+                            <span>findings @UiFormatting.SeverityCountSummary(selectedScan.Findings)</span>
                         </div>
                     </div>
                 }
@@ -139,7 +120,8 @@ else
                 {
                     <div class="status-banner status-banner-pending mb-4">
                         <strong>Pending</strong>
-                        <span class="text-ink-soft"> — no scan document for the head revision yet; it will be picked up by the scanner.</span>
+                        <span class="text-ink-soft"> — no scan document for revision
+                            <code>@UiFormatting.Truncate(_details.SelectedRevisionId)</code> yet; it will be picked up by the scanner.</span>
                     </div>
                 }
 
@@ -160,7 +142,7 @@ else
                         {
                             <tr>
                                 <td class="font-mono">
-                                    @UiFormatting.Truncate(scan.RevisionId)
+                                    <a href="@($"/package/{Name}?rev={scan.RevisionId}")">@UiFormatting.Truncate(scan.RevisionId)</a>
                                     @if (scan.IsHead)
                                     {
                                         <span class="badge badge-seeded ml-2">head</span>
@@ -175,11 +157,11 @@ else
                     </table>
                 }
 
-                @if (headScan is { Findings.Count: > 0 })
+                @if (selectedScan is { Findings.Count: > 0 })
                 {
-                    <h3>Head findings</h3>
+                    <h3>@(_details.SelectedIsHead ? "Head findings" : "Revision findings")</h3>
                     <div class="flex flex-col gap-3">
-                        @foreach (var finding in headScan.Findings.OrderByDescending(f => f.Severity))
+                        @foreach (var finding in selectedScan.Findings.OrderByDescending(f => f.Severity))
                         {
                             <div class="finding-card @UiFormatting.FindingCardClass(finding.Severity)">
                                 <div class="flex flex-wrap items-center gap-2 text-sm">
@@ -212,6 +194,11 @@ else
 @code {
     [Parameter] public string Name { get; set; } = "";
 
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    [SupplyParameterFromQuery(Name = "rev")]
+    private string? Rev { get; set; }
+
     private PackageDetails? _details;
     private bool _loaded;
     private int _loadVersion;
@@ -219,9 +206,14 @@ else
     protected override async Task OnParametersSetAsync()
     {
         var version = Interlocked.Increment(ref _loadVersion);
-        var details = await Details.GetAsync(Name);
+        var details = await Details.GetAsync(Name, Rev);
         if (version != _loadVersion) return; // a newer navigation superseded this load
         _details = details;
         _loaded = true;
+
+        // Unknown packages render the 404 body with a matching status code; pages render
+        // buffered (no stream rendering), so the code can still be set here.
+        if (_details is null)
+            HttpContext?.Response.StatusCode = StatusCodes.Status404NotFound;
     }
 }

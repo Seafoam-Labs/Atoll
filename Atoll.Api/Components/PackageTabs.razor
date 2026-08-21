@@ -1,0 +1,30 @@
+@* URL-driven tab bar shared by the package pages; the current tab is a plain link target,
+   so tabs stay shareable and the pages stay static SSR. Keeps a valid ?rev= pin alive
+   across tabs; callers drop the pin when it fell back to head. *@
+<nav class="tabs" aria-label="Package sections">
+    <a class="tab @(Current == "overview" ? "active" : "")"
+       href="@Href("")"
+       aria-current="@(Current == "overview" ? "page" : null)">Overview</a>
+    <a class="tab @(Current == "revisions" ? "active" : "")"
+       href="@Href("/revisions")"
+       aria-current="@(Current == "revisions" ? "page" : null)">
+        Revisions
+        <span class="tab-count">@RevisionCount</span>
+    </a>
+    <a class="tab @(Current == "files" ? "active" : "")"
+       href="@Href("/files")"
+       aria-current="@(Current == "files" ? "page" : null)">Files</a>
+</nav>
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public int RevisionCount { get; set; }
+    [Parameter] public string Current { get; set; } = "";
+    [Parameter] public string? Rev { get; set; }
+
+    private string Href(string suffix)
+    {
+        var path = $"/package/{Name}{suffix}";
+        return string.IsNullOrEmpty(Rev) ? path : $"{path}?rev={Rev}";
+    }
+}

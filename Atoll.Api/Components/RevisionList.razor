@@ -1,0 +1,43 @@
+@* Revision history rows - stacked-list layout (SHA + badges, message, author/date meta, files action). *@
+<ul class="rev-list" role="list">
+    @foreach (var rev in Revisions)
+    {
+        <li class="rev-item">
+            <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <a class="font-mono text-sm text-atoll" href="@($"/package/{Name}?rev={rev.Sha}")">
+                        @UiFormatting.Truncate(rev.Sha)<span class="sr-only"> — pin the page to this revision</span>
+                    </a>
+                    @if (rev.IsHead)
+                    {
+                        <span class="badge badge-seeded">head</span>
+                    }
+                    <span class="badge @(rev.Status is null ? "" : UiFormatting.BadgeClass(rev.Status.Value))">
+                        @(rev.Status?.ToString().ToLowerInvariant() ?? "unscanned")
+                    </span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(rev.Message))
+                {
+                    <p class="rev-message">@rev.Message</p>
+                }
+                <div class="rev-meta">
+                    <time datetime="@rev.Date.ToString("yyyy-MM-ddTHH:mm:ssK")">@rev.Date.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC</time>
+                    <svg viewBox="0 0 2 2" class="size-0.5 fill-current flex-none" aria-hidden="true">
+                        <circle r="1" cx="1" cy="1"/>
+                    </svg>
+                    <span class="truncate">@rev.Author</span>
+                </div>
+            </div>
+            <div class="flex-none">
+                <a class="btn" href="@($"/package/{Name}/files?rev={rev.Sha}")">
+                    Files<span class="sr-only"> at revision @UiFormatting.Truncate(rev.Sha)</span>
+                </a>
+            </div>
+        </li>
+    }
+</ul>
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public IReadOnlyList<RevisionRow> Revisions { get; set; } = [];
+}

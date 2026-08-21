@@ -75,6 +75,59 @@ public class UiPagesTests
             name, "rev-1", "test", new ScanResult(status, findings ?? []));
     }
 
+    /// <summary>
+    ///     Seeds two revisions with distinct PKGBUILD content so pinned views are distinguishable,
+    /// completing each revision's scan with the given status (mirrors the append-then-promote flow).
+    /// </summary>
+    private async Task SeedTwoRevisionsAsync(
+        string name,
+        SecurityStatus oldStatus,
+        SecurityStatus headStatus,
+        IReadOnlyList<SecurityFinding>? oldFindings = null)
+    {
+        await _factory.Repository.InsertSeedAsync(
+            Doc(name),
+            RevisionContent(name, "rev-1", "seeded from AUR", "pkgname=old\n"));
+        await CompleteScanAsync(name, "rev-1", oldStatus, oldFindings);
+
+        await _factory.Repository.AppendRevisionAsync(
+            name,
+            RevisionContent(name, "rev-2", "sync from upstream", "pkgname=new\n"),
+            maxRevisions: 10);
+        await _factory.SecurityRepository.PromoteHeadAsync(name, "rev-2");
+        await CompleteScanAsync(name, "rev-2", headStatus);
+    }
+
+    private async Task CompleteScanAsync(
+        string name, string sha, SecurityStatus status, IReadOnlyList<SecurityFinding>? findings = null)
+    {
+        await _factory.SecurityRepository.MarkPendingAsync(name, sha, true);
+        if (status == SecurityStatus.Pending) return;
+
+        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await _factory.SecurityRepository.CompleteScanAsync(
+            name, sha, "test", new ScanResult(status, findings ?? []));
+    }
+
+    private static PackageRevisionContentDocument RevisionContent(
+        string name, string sha, string message, string pkgbuild)
+    {
+        return new PackageRevisionContentDocument
+        {
+            Id = PackageSchema.RevisionDocumentId(name, sha),
+            PackageName = name,
+            RevisionId = sha,
+            CreatedAt = DateTimeOffset.UtcNow,
+            Author = "test",
+            Message = message,
+            Files = new Dictionary<string, PackageFile>
+            {
+                ["PKGBUILD"] = new() { Content = pkgbuild, Size = pkgbuild.Length, Hash = "h" },
+                [".SRCINFO"] = new() { Content = "pkgname = test\n", Size = 15, Hash = "h" }
+            }
+        };
+    }
+
     [Test]
     public async Task RootPageRendersCatalogWithPackages()
     {
@@ -178,5 +231,192 @@ public class UiPagesTests
         var response = await _client.GetAsync("/some/unknown/route");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
+    public async Task PackageDetailsRenderTabLinks()
+    {
+        var response = await _client.GetAsync("/package/portable-kit");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("href=\"/package/portable-kit/revisions\""));
+            Assert.That(body, Does.Contain("href=\"/package/portable-kit/files\""));
+            Assert.That(body, Does.Contain("tab-count"));
+        });
+    }
+
+    [Test]
+    public async Task RevisionsTabRendersHistoryRowsWithBadges()
+    {
+        await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Flagged, SecurityStatus.Verified);
+
+        var response = await _client.GetAsync("/package/shelly-bin/revisions");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("rev-list"));
+            Assert.That(body, Does.Contain("sync from upstream"));
+            Assert.That(body, Does.Contain(">seed</p>"));
+            Assert.That(body, Does.Contain("badge-verified"));
+            Assert.That(body, Does.Contain("badge-flagged"));
+            Assert.That(body, Does.Contain(">head</span>"));
+            Assert.That(body, Does.Contain($"href=\"/package/shelly-bin?rev=rev-1\""));
+            Assert.That(body, Does.Contain($"href=\"/package/shelly-bin/files?rev=rev-2\""));
+        });
+    }
+
+    [Test]
+    public async Task RevisionsTabShowsUnseededStateForIndexOnlyPackage()
+    {
+        var response = await _client.GetAsync("/package/portable-kit/revisions");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(body, Does.Contain("not seeded"));
+    }
+
+    [Test]
+    public async Task FilesTabShowsGateBannerInsteadOfFilesForFlaggedRevision()
+    {
+        await SeedAsync("shelly-bin", SecurityStatus.Flagged);
+
+        var response = await _client.GetAsync("/package/shelly-bin/files");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("Flagged"));
+            Assert.That(body, Does.Contain("stay hidden"));
+            Assert.That(body, Does.Not.Contain("file-tree"));
+            Assert.That(body, Does.Not.Contain("PKGBUILD"));
+        });
+    }
+
+    [Test]
+    public async Task FilesTabRendersTreeAndKeepsSelectionInUrl()
+    {
+        await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
+
+        var response = await _client.GetAsync("/package/shelly-bin/files");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("file-tree"));
+            Assert.That(body, Does.Contain("rev=rev-2&amp;path=PKGBUILD"));
+            Assert.That(body, Does.Contain("rev=rev-2&amp;path=.SRCINFO"));
+            // Directory-free sample keeps the root order ordinal: .SRCINFO before PKGBUILD.
+            Assert.That(body.IndexOf("path=.SRCINFO", StringComparison.Ordinal),
+                Is.LessThan(body.IndexOf("path=PKGBUILD", StringComparison.Ordinal)));
+            Assert.That(body, Does.Contain("Pick a file to preview"));
+        });
+    }
+
+    [Test]
+    public async Task FilesTabRendersSelectedFileContent()
+    {
+        await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
+
+        var head = await _client.GetAsync("/package/shelly-bin/files?path=PKGBUILD");
+        var headBody = await head.Content.ReadAsStringAsync();
+
+        Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            Assert.That(headBody, Does.Contain("code-view"));
+            Assert.That(headBody, Does.Contain("pkgname=new"));
+            Assert.That(headBody, Does.Contain("PKGBUILD"));
+        });
+
+        var pinned = await _client.GetAsync("/package/shelly-bin/files?rev=rev-1&path=PKGBUILD");
+        var pinnedBody = await pinned.Content.ReadAsStringAsync();
+
+        Assert.That(pinned.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(pinnedBody, Does.Contain("pkgname=old"));
+    }
+
+    [Test]
+    public async Task FilesTabFallsBackToHeadForUnknownRevision()
+    {
+        await SeedAsync("shelly-bin", SecurityStatus.Verified);
+
+        var response = await _client.GetAsync("/package/shelly-bin/files?rev=garbage");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("Revision not found"));
+            Assert.That(body, Does.Contain("PKGBUILD"));
+        });
+    }
+
+    [Test]
+    public async Task FilesTabMarksMissingPathAsNotFound()
+    {
+        await SeedAsync("shelly-bin", SecurityStatus.Verified);
+
+        var response = await _client.GetAsync("/package/shelly-bin/files?path=nope.txt");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(body, Does.Contain("File not found"));
+    }
+
+    [Test]
+    public async Task PackageOverviewPinsToRevisionAndShowsItsScan()
+    {
+        var findings = new[]
+        {
+            new SecurityFinding("evil-curl", FindingSeverity.High, "pipes curl into sh", "", "PKGBUILD")
+        };
+        await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Flagged, SecurityStatus.Verified, findings);
+
+        var response = await _client.GetAsync("/package/shelly-bin?rev=rev-1");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            // Head is verified, so the page renders; the pinned revision's own scan and findings show instead.
+            Assert.That(body, Does.Contain("evil-curl"));
+            Assert.That(body, Does.Contain("(not head)"));
+            Assert.That(body, Does.Contain("Revision findings"));
+            Assert.That(body, Does.Contain("href=\"/package/shelly-bin/files?rev=rev-1\""));
+            Assert.That(body, Does.Contain("back to head"));
+        });
+    }
+
+    [Test]
+    public async Task PackageOverviewFallsBackToHeadForUnknownRevision()
+    {
+        await SeedAsync("shelly-bin", SecurityStatus.Verified);
+
+        var response = await _client.GetAsync("/package/shelly-bin?rev=garbage");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("Revision not found"));
+            Assert.That(body, Does.Contain("Metadata"));
+        });
+    }
+
+    [Test]
+    public async Task UnknownPackageOnPhase2TabsReturnsNotFound()
+    {
+        var revisions = await _client.GetAsync("/package/no-such-package/revisions");
+        var files = await _client.GetAsync("/package/no-such-package/files");
+
+        Assert.That(revisions.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That(files.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
 }

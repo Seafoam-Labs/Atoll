@@ -1,0 +1,85 @@
+@page "/package/{Name}/revisions"
+@inject PackageDetailsService Details
+@inject IOptions<UiOptions> Ui
+
+<PageTitle>Revisions — @Name — @Ui.Value.BrandName</PageTitle>
+
+@if (!_loaded)
+{
+    <p class="text-ink-faint">Loading…</p>
+}
+else if (_details is null || _revisions is null)
+{
+    <NotFound/>
+}
+else
+{
+    <PackageHeader Details="@_details"/>
+
+    <PackageTabs Name="@Name" RevisionCount="@(_details.Head?.Revisions.Count ?? 0)" Current="revisions"/>
+
+    @if (!_details.IsSeeded)
+    {
+        <div class="card text-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"
+                 class="mx-auto size-12 text-ink-faint">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+            </svg>
+            <h2 class="mt-2 mb-0 text-sm font-semibold text-ink">No revision history yet</h2>
+            <p class="mt-1 mb-0 text-sm text-ink-soft">
+                This package is not seeded - Atoll stores no revisions for it. Seed it from the
+                overview page to capture the AUR sources as the first revision.
+            </p>
+            <div class="mt-6">
+                <a class="btn" href="@($"/package/{Name}")">Go to overview</a>
+            </div>
+        </div>
+    }
+    else if (_revisions.Rows.Count == 0)
+    {
+        <div class="card text-center">
+            <h2 class="mt-0 mb-0 text-sm font-semibold text-ink">No stored revisions</h2>
+            <p class="mt-1 mb-0 text-sm text-ink-soft">The package document has no revisions recorded for it.</p>
+        </div>
+    }
+    else
+    {
+        <RevisionList Name="@Name" Revisions="_revisions.Rows"/>
+
+        @if (_revisions.IsTruncated)
+        {
+            <div class="mt-2 text-[13px] text-ink-faint">
+                Showing the first @PackageDetailsService.RevisionRenderCap of @_revisions.TotalRevisions stored
+                revisions - the rest were pruned from this page. Clone the repository for the full history.
+            </div>
+        }
+    }
+
+    <p class="mt-6"><a href="/">← Back to the package catalog</a></p>
+}
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private PackageDetails? _details;
+    private RevisionListResult? _revisions;
+    private bool _loaded;
+    private int _loadVersion;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var version = Interlocked.Increment(ref _loadVersion);
+        var details = await Details.GetAsync(Name);
+        var revisions = await Details.GetRevisionsAsync(Name);
+        if (version != _loadVersion) return; // a newer navigation superseded this load
+        _details = details;
+        _revisions = revisions;
+        _loaded = true;
+
+        if (_details is null)
+            HttpContext?.Response.StatusCode = StatusCodes.Status404NotFound;
+    }
+}

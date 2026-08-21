@@ -9,3 +9,4 @@ riderModule.iml
 *.DotSettings.user
 packages-meta-ext-v1.json
 /Atoll.Api/data
+/Atoll.Api/wwwroot/app.min.css

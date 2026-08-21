@@ -111,6 +111,16 @@ public static class UiFormatting
         return value.Length <= 12 ? value : value[..12];
     }
 
+    public static string FormatBytes(long bytes)
+    {
+        return bytes switch
+        {
+            < 1024 => $"{bytes} B",
+            < 1024 * 1024 => $"{bytes / 1024.0:0.#} kB",
+            _ => $"{bytes / (1024.0 * 1024.0):0.#} MB"
+        };
+    }
+
     public static string FormatUnix(long unixSeconds, string format = "yyyy-MM-dd")
     {
         return unixSeconds <= 0
