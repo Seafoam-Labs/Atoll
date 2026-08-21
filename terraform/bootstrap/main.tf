@@ -229,6 +229,17 @@ resource "aws_iam_policy" "github_deploy" {
         Resource = "*"
       },
       {
+        # A private DNS namespace is backed by a Route 53 private hosted zone,
+        # which Cloud Map creates/deletes using the caller's permissions.
+        Sid    = "ServiceDiscoveryDns"
+        Effect = "Allow"
+        Action = [
+          "route53:CreateHostedZone",
+          "route53:DeleteHostedZone",
+        ]
+        Resource = "*"
+      },
+      {
         Sid    = "ApiGateway"
         Effect = "Allow"
         Action = ["apigateway:*"]
@@ -268,6 +279,7 @@ resource "aws_iam_policy" "github_deploy" {
           "secretsmanager:CreateSecret",
           "secretsmanager:DeleteSecret",
           "secretsmanager:DescribeSecret",
+          "secretsmanager:GetResourcePolicy",
           "secretsmanager:GetSecretValue",
           "secretsmanager:PutSecretValue",
           "secretsmanager:UpdateSecret",
@@ -344,10 +356,20 @@ resource "aws_iam_policy" "github_deploy" {
         Action = ["iam:CreateServiceLinkedRole"]
         Resource = [
           "arn:aws:iam::${local.account_id}:role/aws-service-role/docdb.amazonaws.com/AWSServiceRoleForDocDB",
+          # HTTP API VPC links are implemented with an NLB managed by API
+          # Gateway, which needs the ELB service-linked role.
+          "arn:aws:iam::${local.account_id}:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+          # ECS uses this role to register/deregister tasks in Cloud Map
+          # (the ECS service below uses service_registries).
+          "arn:aws:iam::${local.account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
         ]
         Condition = {
           StringEquals = {
-            "iam:AWSServiceName" = "docdb.amazonaws.com"
+            "iam:AWSServiceName" = [
+              "docdb.amazonaws.com",
+              "elasticloadbalancing.amazonaws.com",
+              "ecs.amazonaws.com",
+            ]
           }
         }
       },

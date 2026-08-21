@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual re-trigger from the Actions tab, e.g. to redeploy main without a new
+  # commit. Only runs the deploy job when dispatched from the main branch.
+  workflow_dispatch:
 
 # OIDC token issuance for AWS federation; no AWS credentials are stored in GitHub.
 permissions:
@@ -131,7 +134,7 @@ jobs:
   deploy:
     name: Deploy to AWS
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     defaults:
       run:
         working-directory: terraform
