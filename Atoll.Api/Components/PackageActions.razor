@@ -1,6 +1,7 @@
 @rendermode InteractiveServer
 @inject IPackageService Packages
 @inject IPackageSecurityRepository SecurityRepository
+@inject PackageCatalogService Catalog
 @inject NavigationManager Navigation
 
 <div class="flex flex-col items-start gap-2">
@@ -52,11 +53,13 @@
         try
         {
             await Packages.SeedFromAurAsync(Name);
+            Catalog.InvalidateSnapshot();
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }
         catch (PackageConflictException)
         {
             // Seeded elsewhere while we were looking — refresh to show the seeded state.
+            Catalog.InvalidateSnapshot();
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }
         catch (KeyNotFoundException)
@@ -80,6 +83,7 @@
         try
         {
             await SecurityRepository.MarkPendingAsync(Name, HeadRevisionId, isHead: true);
+            Catalog.InvalidateSnapshot();
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }
         catch (Exception ex)

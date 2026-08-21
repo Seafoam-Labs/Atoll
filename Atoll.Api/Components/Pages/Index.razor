@@ -4,6 +4,7 @@
 @inject PackageCatalogService Catalog
 @inject PackageIndexUpdater IndexUpdater
 @inject IOptions<UiOptions> Ui
+@inject ILogger<Index> Logger
 
 <PageTitle>Packages — @Ui.Value.BrandName</PageTitle>
 
@@ -53,6 +54,10 @@
     {
         <span>Loading…</span>
     }
+    else if (_error is not null)
+    {
+        <span class="text-sec-error" role="alert">@_error</span>
+    }
     else if (_result is not null)
     {
         <span>@_result.TotalMatches package@(_result.TotalMatches == 1 ? "" : "s")</span>
@@ -89,24 +94,52 @@ else if (_result is not null)
                     <tr>
                         <th scope="col">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.NameAsc, CatalogSort.NameDesc))">
-                                Name @SortArrow(CatalogSort.NameAsc, CatalogSort.NameDesc)
+                                Name @if (_sort == CatalogSort.NameAsc)
+                                {
+                                    <span class="arrow">▼</span>
+                                }
+                                else if (_sort == CatalogSort.NameDesc)
+                                {
+                                    <span class="arrow">▲</span>
+                                }
                             </button>
                         </th>
                         <th scope="col" class="whitespace-nowrap">Version</th>
                         <th scope="col">Description</th>
                         <th scope="col">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.VotesDesc, CatalogSort.VotesAsc))">
-                                Votes @SortArrow(CatalogSort.VotesDesc, CatalogSort.VotesAsc)
+                                Votes @if (_sort == CatalogSort.VotesDesc)
+                                {
+                                    <span class="arrow">▼</span>
+                                }
+                                else if (_sort == CatalogSort.VotesAsc)
+                                {
+                                    <span class="arrow">▲</span>
+                                }
                             </button>
                         </th>
                         <th scope="col">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc))">
-                                Popularity @SortArrow(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc)
+                                Popularity @if (_sort == CatalogSort.PopularityDesc)
+                                {
+                                    <span class="arrow">▼</span>
+                                }
+                                else if (_sort == CatalogSort.PopularityAsc)
+                                {
+                                    <span class="arrow">▲</span>
+                                }
                             </button>
                         </th>
                         <th scope="col">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc))">
-                                Last modified @SortArrow(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc)
+                                Last modified @if (_sort == CatalogSort.LastModifiedDesc)
+                                {
+                                    <span class="arrow">▼</span>
+                                }
+                                else if (_sort == CatalogSort.LastModifiedAsc)
+                                {
+                                    <span class="arrow">▲</span>
+                                }
                             </button>
                         </th>
                     </tr>
@@ -131,7 +164,7 @@ else if (_result is not null)
                                         }
                                         @if (row.Head is not null)
                                         {
-                                            <span class="badge @SecurityBadgeClass(row.Head.Status)">@row.Head.Status.ToString().ToLowerInvariant()</span>
+                                            <span class="badge @UiFormatting.BadgeClass(row.Head.Status)">@row.Head.Status.ToString().ToLowerInvariant()</span>
                                         }
                                     </div>
                                 }
@@ -140,7 +173,7 @@ else if (_result is not null)
                             <td>@package.Description</td>
                             <td class="whitespace-nowrap font-mono">@package.NumVotes</td>
                             <td class="whitespace-nowrap font-mono">@package.Popularity.ToString("0.000000")</td>
-                            <td class="whitespace-nowrap font-mono text-[13px]">@FormatUnix(package.LastModified)</td>
+                            <td class="whitespace-nowrap font-mono text-[13px]">@UiFormatting.FormatUnix(package.LastModified)</td>
                         </tr>
                     }
                     </tbody>
@@ -164,6 +197,7 @@ else if (_result is not null)
     private CatalogSort _sort = CatalogSort.NameAsc;
     private CatalogResult? _result;
     private bool _loading;
+    private string? _error;
     private int _searchVersion;
 
     protected override async Task OnInitializedAsync()
@@ -186,13 +220,6 @@ else if (_result is not null)
     {
         _sort = _sort == primary ? secondary : primary;
         ReloadNow();
-    }
-
-    private MarkupString SortArrow(CatalogSort primary, CatalogSort secondary)
-    {
-        if (_sort == primary) return (MarkupString)"<span class=\"arrow\">▼</span>";
-        if (_sort == secondary) return (MarkupString)"<span class=\"arrow\">▲</span>";
-        return (MarkupString)"";
     }
 
     private void ClearFilters()
@@ -220,30 +247,18 @@ else if (_result is not null)
             var result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort);
             if (version != _searchVersion) return;
             _result = result;
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            if (version != _searchVersion) return;
+            _error = "The search failed - the package index may be temporarily unavailable.";
+            Logger.LogError(ex, "Catalog search failed");
         }
         finally
         {
             if (version == _searchVersion)
                 _loading = false;
         }
-    }
-
-    private static string SecurityBadgeClass(SecurityStatus status)
-    {
-        return status switch
-        {
-            SecurityStatus.Verified => "badge-verified",
-            SecurityStatus.Pending => "badge-pending",
-            SecurityStatus.Flagged => "badge-flagged",
-            SecurityStatus.Error => "badge-error",
-            _ => ""
-        };
-    }
-
-    private static string FormatUnix(long unixSeconds)
-    {
-        return unixSeconds <= 0
-            ? "—"
-            : DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString("yyyy-MM-dd");
     }
 }
