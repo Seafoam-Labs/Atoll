@@ -79,8 +79,7 @@
             Flatten(directory, depth + 1, flat);
         }
 
-        foreach (var file in node.Files)
-            flat.Add((file, depth));
+        flat.AddRange(node.Files.Select(file => (file, depth)));
     }
 
     private sealed class TreeNode(string name = "", string path = "", bool isDir = true, long size = 0)
