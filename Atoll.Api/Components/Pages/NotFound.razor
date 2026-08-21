@@ -1,4 +1,5 @@
-@inject IHttpContextAccessor HttpContextAccessor
+@page "/not-found"
+@layout Layout.MainLayout
 
 <PageTitle>Not found</PageTitle>
 
@@ -8,13 +9,3 @@
         renamed, removed from the AUR index, or the link is simply wrong.</p>
 </div>
 <p class="mt-6"><a href="/">← Back to the package catalog</a></p>
-
-@code {
-    protected override void OnInitialized()
-    {
-        // Initial navigation renders via static SSR, so the real HTTP status can still be set.
-        var httpContext = HttpContextAccessor.HttpContext;
-        if (httpContext is not null && !httpContext.Response.HasStarted)
-            httpContext.Response.StatusCode = StatusCodes.Status404NotFound;
-    }
-}

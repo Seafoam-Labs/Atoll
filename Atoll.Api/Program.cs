@@ -134,6 +134,10 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+// Re-execute 4xx/5xx responses with empty bodies as /not-found so browsers get
+// the styled page - the Blazor fallback alone renders nothing for unmatched paths.
+app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
 app.UseStaticFiles();
 app.MapStaticAssets();
 
