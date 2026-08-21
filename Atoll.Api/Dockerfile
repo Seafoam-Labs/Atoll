@@ -1,7 +1,12 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
+# .NET on Linux validates TLS against the OS trust store; tlsCAFile alone
+# leaves the DocumentDB chain untrusted (PartialChain), so the RDS CA bundle
+# is also installed system-wide.
 RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates \
     && curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /app/rds-combined-ca-bundle.pem \
+    && cp /app/rds-combined-ca-bundle.pem /usr/local/share/ca-certificates/rds-ca-bundle.crt \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app/data && chown -R $APP_UID /app/data
 USER $APP_UID
