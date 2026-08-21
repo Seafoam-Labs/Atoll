@@ -137,6 +137,14 @@ app.UseExceptionHandler();
 app.UseStaticFiles();
 app.MapStaticAssets();
 
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    await next();
+});
+
 app.UseRouting();
 
 if (app.Environment.IsDevelopment())
