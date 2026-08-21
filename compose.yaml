@@ -20,15 +20,16 @@
       - Atoll__Security__ScannerConcurrency=2
       - Atoll__Security__PollIntervalMs=100
       # Set Atoll__Seed__Mode=Off to disable automated package seeding.
-      - Atoll__Seed__Mode=Bulk
-    # - Atoll__Seed__Direct__SeedDelayMs=1000
+      - Atoll__Seed__Mode=Off
+      # Set Atoll__Seed__Mode=Direct to enable direct package seeding.
+      # - Atoll__Seed__Direct__SeedDelayMs=1000
       # Bulk mode (GitHub mirror, ~30 min full sync): set Atoll__Seed__Mode=Bulk and uncomment.
-      - Atoll__Seed__Bulk__MirrorUrl=https://github.com/archlinux/aur
-      - Atoll__Seed__Bulk__CachePath=/app/data/aur-mirror
-      - Atoll__Seed__Bulk__BatchSize=1000
-      - Atoll__Seed__Bulk__BatchDelayMs=1000
-      - Atoll__Seed__Bulk__Parallelism=2
-      - Atoll__Seed__Bulk__AurFallbackForNotOnMirror=false
+      # - Atoll__Seed__Bulk__MirrorUrl=https://github.com/archlinux/aur
+      # - Atoll__Seed__Bulk__CachePath=/app/data/aur-mirror
+      # - Atoll__Seed__Bulk__BatchSize=1000
+      # - Atoll__Seed__Bulk__BatchDelayMs=1000
+      # - Atoll__Seed__Bulk__Parallelism=2
+      # - Atoll__Seed__Bulk__AurFallbackForNotOnMirror=false
       - Atoll__Refresh__Enabled=true
       - Atoll__Refresh__BatchSize=1000
       - Atoll__Refresh__BatchDelayMs=1000
@@ -70,6 +71,7 @@
   # Grafana: http://localhost:3000 (admin/admin); the "Atoll" dashboard is provisioned and set as home.
   lgtm:
     image: grafana/otel-lgtm:0.30.0@sha256:46ca028e294bd728e8e930a28e887f640a8f2a9533cc283f79bcc6ab73d2ffd8
+    profiles: ["observability"]
     restart: unless-stopped
     ports:
       - "3000:3000" # Grafana
