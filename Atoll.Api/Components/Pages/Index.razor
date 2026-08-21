@@ -208,11 +208,22 @@ else if (_result is not null)
     private string? _error;
     private int _searchVersion;
     private bool _parametersInitialized;
+    // URIs of navigations this component initiated but hasn't seen resolved yet.
+    private readonly HashSet<string> _pendingSelfNavigations = new(StringComparer.Ordinal);
 
     [SupplyParameterFromQuery(Name = "q")] private string? QueryParam { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
+        // Navigations we initiated ourselves come back through here. The input
+        // already holds the target query (or newer text, if the user kept typing
+        // while the navigation was in flight), so skip the sync instead of
+        // clobbering it.
+        if (_pendingSelfNavigations.Remove(Nav.Uri))
+        {
+            return;
+        }
+
         var query = QueryParam ?? "";
         var queryChanged = !_parametersInitialized ||
                            !string.Equals(_query, query, StringComparison.Ordinal);
@@ -258,8 +269,12 @@ else if (_result is not null)
         _appliedQuery = _query;
 
         var q = string.IsNullOrWhiteSpace(_query) ? null : _query;
-        if (Nav.GetUriWithQueryParameter("q", q) != Nav.Uri)
-            Nav.NavigateTo(Nav.GetUriWithQueryParameter("q", q), forceLoad: false);
+        var uri = Nav.GetUriWithQueryParameter("q", q);
+        if (uri != Nav.Uri)
+        {
+            _pendingSelfNavigations.Add(uri);
+            Nav.NavigateTo(uri, forceLoad: false);
+        }
 
         try
         {
