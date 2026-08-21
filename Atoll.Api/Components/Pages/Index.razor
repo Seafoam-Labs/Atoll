@@ -10,7 +10,7 @@
 <h1>Packages</h1>
 
 <div class="flex flex-wrap gap-3 mt-4 mb-2">
-    <form class="flex min-w-0 flex-1 gap-2 max-w-[540px]"
+    <form class="flex min-w-0 flex-1 gap-2 max-w-135"
           @onsubmit="ReloadNow" @onsubmit:preventDefault>
         <div class="grid min-w-0 flex-1 grid-cols-1">
             <input type="search"
@@ -27,19 +27,19 @@
         <button type="submit" class="btn btn-primary shrink-0">Search</button>
     </form>
 
-    <select class="field max-w-[170px]" @bind="_mode" @bind:after="ReloadNow" aria-label="Search by">
+    <select class="field max-w-42.5" @bind="_mode" @bind:after="ReloadNow" aria-label="Search by">
         <option value="@CatalogSearchMode.Name">Name / description</option>
         <option value="@CatalogSearchMode.Words">Words</option>
         <option value="@CatalogSearchMode.Provides">Provides</option>
     </select>
 
-    <select class="field max-w-[170px]" @bind="_seededFilter" @bind:after="ReloadNow" aria-label="Seeded filter">
+    <select class="field max-w-42.5" @bind="_seededFilter" @bind:after="ReloadNow" aria-label="Seeded filter">
         <option value="@CatalogSeededFilter.All">All packages</option>
         <option value="@CatalogSeededFilter.Seeded">Seeded</option>
         <option value="@CatalogSeededFilter.IndexOnly">Index only</option>
     </select>
 
-    <select class="field max-w-[170px]" @bind="_securityFilter" @bind:after="ReloadNow" aria-label="Security filter">
+    <select class="field max-w-42.5" @bind="_securityFilter" @bind:after="ReloadNow" aria-label="Security filter">
         <option value="@CatalogSecurityFilter.Any">Any security state</option>
         <option value="@CatalogSecurityFilter.Verified">Verified</option>
         <option value="@CatalogSecurityFilter.Flagged">Flagged</option>
@@ -91,7 +91,7 @@ else if (_result is not null)
                 <table class="pkg-table min-w-full">
                     <thead>
                     <tr>
-                        <th scope="col">
+                        <th scope="col" class="w-64">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.NameAsc, CatalogSort.NameDesc))">
                                 Name @if (_sort == CatalogSort.NameAsc)
                                 {
@@ -148,25 +148,27 @@ else if (_result is not null)
                     {
                         var package = row.Package;
                         <tr>
-                            <td>
-                                <a href="@($"/package/{package.Name}")"><strong>@package.Name</strong></a>
-                                @if (!string.Equals(package.PackageBase, package.Name, StringComparison.Ordinal))
-                                {
-                                    <div class="text-ink-faint text-[13px]">base: @package.PackageBase</div>
-                                }
-                                @if (row.IsSeeded || row.Head is not null)
-                                {
-                                    <div class="mt-1 flex flex-wrap gap-1">
-                                        @if (row.IsSeeded)
-                                        {
-                                            <span class="badge badge-seeded">seeded</span>
-                                        }
-                                        @if (row.Head is not null)
-                                        {
-                                            <span class="badge @UiFormatting.BadgeClass(row.Head.Status)">@row.Head.Status.ToString().ToLowerInvariant()</span>
-                                        }
-                                    </div>
-                                }
+                            <td class="w-64">
+                                <div class="flex flex-col gap-1 max-w-[16rem]">
+                                    <a href="@($"/package/{package.Name}")" class="truncate font-semibold text-ink" title="@package.Name">@package.Name</a>
+                                    @if (!string.Equals(package.PackageBase, package.Name, StringComparison.Ordinal))
+                                    {
+                                        <div class="text-ink-faint text-[13px] truncate -mt-1" title="base: @package.PackageBase">base: @package.PackageBase</div>
+                                    }
+                                    @if (row.IsSeeded || row.Head is not null)
+                                    {
+                                        <div class="flex flex-wrap gap-1 -ml-1">
+                                            @if (row.IsSeeded)
+                                            {
+                                                <span class="badge badge-seeded">seeded</span>
+                                            }
+                                            @if (row.Head is not null)
+                                            {
+                                                <span class="badge @UiFormatting.BadgeClass(row.Head.Status)">@row.Head.Status.ToString().ToLowerInvariant()</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             </td>
                             <td class="whitespace-nowrap font-mono">@package.Version</td>
                             <td>@package.Description</td>
