@@ -22,3 +22,28 @@ variable "memory" {
   description = "Fargate instance memory to provision (in MiB)"
   default     = "2048"
 }
+
+variable "image_tag" {
+  description = "Container image tag to deploy (CI passes the git commit SHA)"
+  default     = "latest"
+}
+
+variable "mongo_database" {
+  description = "Application database name used in the DocumentDB connection string"
+  default     = "atoll"
+}
+
+variable "docdb_instance_class" {
+  description = "DocumentDB instance class (db.t4g.medium is the only T4G class DocumentDB offers)"
+  default     = "db.t4g.medium"
+}
+
+variable "docdb_engine_version" {
+  description = "DocumentDB engine version"
+  default     = "5.0.0"
+}
+
+variable "docdb_master_username" {
+  description = "DocumentDB master username"
+  default     = "atollmaster"
+}

@@ -10,3 +10,10 @@ riderModule.iml
 packages-meta-ext-v1.json
 /Atoll.Api/data
 /Atoll.Api/wwwroot/app.min.css
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
