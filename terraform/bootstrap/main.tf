@@ -355,7 +355,10 @@ resource "aws_iam_policy" "github_deploy" {
         Effect = "Allow"
         Action = ["iam:CreateServiceLinkedRole"]
         Resource = [
-          "arn:aws:iam::${local.account_id}:role/aws-service-role/docdb.amazonaws.com/AWSServiceRoleForDocDB",
+          # DocumentDB shares the RDS control plane; creating a cluster needs
+          # the RDS service-linked role. IAM has no docdb.amazonaws.com SLR
+          # template, so that principal cannot be used here.
+          "arn:aws:iam::${local.account_id}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
           # HTTP API VPC links are implemented with an NLB managed by API
           # Gateway, which needs the ELB service-linked role.
           "arn:aws:iam::${local.account_id}:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
@@ -366,7 +369,7 @@ resource "aws_iam_policy" "github_deploy" {
         Condition = {
           StringEquals = {
             "iam:AWSServiceName" = [
-              "docdb.amazonaws.com",
+              "rds.amazonaws.com",
               "elasticloadbalancing.amazonaws.com",
               "ecs.amazonaws.com",
             ]
