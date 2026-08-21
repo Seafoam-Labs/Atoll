@@ -1,6 +1,7 @@
 @page "/"
 @rendermode InteractiveServer
 @inject PackageCatalogService Catalog
+@inject NavigationManager Nav
 @inject PackageIndexUpdater IndexUpdater
 @inject IOptions<UiOptions> Ui
 @inject ILogger<Index> Logger
@@ -60,10 +61,11 @@
     else if (_result is not null)
     {
         <span>@_result.TotalMatches package@(_result.TotalMatches == 1 ? "" : "s")</span>
-        @if (!string.IsNullOrWhiteSpace(_query))
+        @if (!string.IsNullOrWhiteSpace(_appliedQuery))
         {
-            <span> matching <strong>@_query</strong></span>
+            <span> matching <strong>@_appliedQuery</strong></span>
         }
+
         var refreshed = IndexUpdater.GetStatus().LastSucceededUtc;
         <span class="text-ink-faint"> · index refreshed @(refreshed?.ToString("yyyy-MM-dd HH:mm") ?? "never") UTC</span>
     }
@@ -93,7 +95,8 @@ else if (_result is not null)
                     <tr>
                         <th scope="col" class="w-64">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.NameAsc, CatalogSort.NameDesc))">
-                                Name @if (_sort == CatalogSort.NameAsc)
+                                Name
+                                @if (_sort == CatalogSort.NameAsc)
                                 {
                                     <span class="arrow">▼</span>
                                 }
@@ -107,7 +110,8 @@ else if (_result is not null)
                         <th scope="col">Description</th>
                         <th scope="col">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.VotesDesc, CatalogSort.VotesAsc))">
-                                Votes @if (_sort == CatalogSort.VotesDesc)
+                                Votes
+                                @if (_sort == CatalogSort.VotesDesc)
                                 {
                                     <span class="arrow">▼</span>
                                 }
@@ -119,7 +123,8 @@ else if (_result is not null)
                         </th>
                         <th scope="col">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc))">
-                                Popularity @if (_sort == CatalogSort.PopularityDesc)
+                                Popularity
+                                @if (_sort == CatalogSort.PopularityDesc)
                                 {
                                     <span class="arrow">▼</span>
                                 }
@@ -131,7 +136,8 @@ else if (_result is not null)
                         </th>
                         <th scope="col">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc))">
-                                Last modified @if (_sort == CatalogSort.LastModifiedDesc)
+                                Last modified
+                                @if (_sort == CatalogSort.LastModifiedDesc)
                                 {
                                     <span class="arrow">▼</span>
                                 }
@@ -192,6 +198,7 @@ else if (_result is not null)
 
 @code {
     private string _query = "";
+    private string _appliedQuery = "";
     private CatalogSearchMode _mode = CatalogSearchMode.Name;
     private CatalogSeededFilter _seededFilter = CatalogSeededFilter.All;
     private CatalogSecurityFilter _securityFilter = CatalogSecurityFilter.Any;
@@ -200,17 +207,22 @@ else if (_result is not null)
     private bool _loading;
     private string? _error;
     private int _searchVersion;
+    private bool _parametersInitialized;
 
-    [SupplyParameterFromQuery(Name = "q")]
-    private string? QueryParam { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] private string? QueryParam { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        // Chip links on the details page deep-link into the catalog via ?q={dep}.
-        if (!string.IsNullOrWhiteSpace(QueryParam))
-            _query = QueryParam;
+        var query = QueryParam ?? "";
+        var queryChanged = !_parametersInitialized ||
+                           !string.Equals(_query, query, StringComparison.Ordinal);
+        _parametersInitialized = true;
 
-        await ReloadAsync();
+        if (queryChanged)
+        {
+            _query = query;
+            await ReloadAsync();
+        }
     }
 
     private void OnQueryInput(ChangeEventArgs e)
@@ -226,7 +238,7 @@ else if (_result is not null)
 
     private void ClearFilters()
     {
-        _query = "";
+        _query = _appliedQuery = "";
         _mode = CatalogSearchMode.Name;
         _seededFilter = CatalogSeededFilter.All;
         _securityFilter = CatalogSecurityFilter.Any;
@@ -243,6 +255,11 @@ else if (_result is not null)
     {
         var version = Interlocked.Increment(ref _searchVersion);
         _loading = true;
+        _appliedQuery = _query;
+
+        var q = string.IsNullOrWhiteSpace(_query) ? null : _query;
+        if (Nav.GetUriWithQueryParameter("q", q) != Nav.Uri)
+            Nav.NavigateTo(Nav.GetUriWithQueryParameter("q", q), forceLoad: false);
 
         try
         {
@@ -263,4 +280,5 @@ else if (_result is not null)
                 _loading = false;
         }
     }
+
 }
