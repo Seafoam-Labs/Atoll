@@ -30,7 +30,7 @@ else
                 }
                 @if (headScan is not null)
                 {
-                    <span class="badge @SecurityBadgeClass(headScan.Status)">@headScan.Status.ToString().ToLowerInvariant()</span>
+                    <span class="badge @UiFormatting.BadgeClass(headScan.Status)">@headScan.Status.ToString().ToLowerInvariant()</span>
                 }
                 @if (meta.OutOfDate is not null)
                 {
@@ -62,9 +62,9 @@ else
 
     @if (_details.IsSeeded && !_details.Access.Allowed)
     {
-        <div class="status-banner @BannerClass(_details.Access.ReasonCode) mb-5">
-            <strong>@BannerTitle(_details.Access.ReasonCode)</strong>
-            <span class="text-ink-soft"> @BannerBody(_details.Access.ReasonCode)</span>
+        <div class="status-banner @UiFormatting.BannerClass(_details.Access.ReasonCode) mb-5">
+            <strong>@UiFormatting.BannerTitle(_details.Access.ReasonCode)</strong>
+            <span class="text-ink-soft"> @UiFormatting.BannerBody(_details.Access.ReasonCode)</span>
             <div class="text-ink-faint text-xs mt-1">
                 Content and Git access stay blocked until a scan completes with no critical/high findings.
                 Request a rescan to re-queue it.
@@ -96,9 +96,9 @@ else
                 <div><dt>Submitter</dt><dd>@(meta.Submitter ?? "—")</dd></div>
                 <div><dt>Votes</dt><dd class="font-mono">@meta.NumVotes</dd></div>
                 <div><dt>Popularity</dt><dd class="font-mono">@meta.Popularity.ToString("0.000000")</dd></div>
-                <div><dt>First submitted</dt><dd class="font-mono">@FormatUnix(meta.FirstSubmitted)</dd></div>
-                <div><dt>Last modified</dt><dd class="font-mono">@FormatUnix(meta.LastModified)</dd></div>
-                <div><dt>Out-of-date</dt><dd class="font-mono">@(meta.OutOfDate is null ? "no" : FormatUnix(meta.OutOfDate.Value))</dd></div>
+                <div><dt>First submitted</dt><dd class="font-mono">@UiFormatting.FormatUnix(meta.FirstSubmitted, "yyyy-MM-dd HH:mm")</dd></div>
+                <div><dt>Last modified</dt><dd class="font-mono">@UiFormatting.FormatUnix(meta.LastModified, "yyyy-MM-dd HH:mm")</dd></div>
+                <div><dt>Out-of-date</dt><dd class="font-mono">@(meta.OutOfDate is null ? "no" : UiFormatting.FormatUnix(meta.OutOfDate.Value, "yyyy-MM-dd HH:mm"))</dd></div>
             </dl>
         </section>
 
@@ -125,13 +125,13 @@ else
             {
                 @if (headScan is not null)
                 {
-                    <div class="status-banner @BannerClass(headScan.Status) mb-4">
+                    <div class="status-banner @UiFormatting.BannerClass(headScan.Status) mb-4">
                         <strong>@headScan.Status</strong>
-                        <span class="text-ink-soft"> — @StatusSummary(headScan.Status)</span>
+                        <span class="text-ink-soft"> — @UiFormatting.StatusSummary(headScan.Status)</span>
                         <div class="text-ink-faint text-xs mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                            <span>revision <code>@Truncate(_details.Head!.HeadRevisionId)</code></span>
+                            <span>revision <code>@UiFormatting.Truncate(_details.Head!.HeadRevisionId)</code></span>
                             <span>scanned @(headScan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "not yet") UTC</span>
-                            <span>findings @SeverityCountSummary(headScan.Findings)</span>
+                            <span>findings @UiFormatting.SeverityCountSummary(headScan.Findings)</span>
                         </div>
                     </div>
                 }
@@ -160,13 +160,13 @@ else
                         {
                             <tr>
                                 <td class="font-mono">
-                                    @Truncate(scan.RevisionId)
+                                    @UiFormatting.Truncate(scan.RevisionId)
                                     @if (scan.IsHead)
                                     {
                                         <span class="badge badge-seeded ml-2">head</span>
                                     }
                                 </td>
-                                <td><span class="badge @SecurityBadgeClass(scan.Status)">@scan.Status.ToString().ToLowerInvariant()</span></td>
+                                <td><span class="badge @UiFormatting.BadgeClass(scan.Status)">@scan.Status.ToString().ToLowerInvariant()</span></td>
                                 <td class="font-mono text-[13px]">@(scan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
                                 <td class="font-mono">@scan.Findings.Count</td>
                             </tr>
@@ -181,9 +181,9 @@ else
                     <div class="flex flex-col gap-3">
                         @foreach (var finding in headScan.Findings.OrderByDescending(f => f.Severity))
                         {
-                            <div class="finding-card @FindingCardClass(finding.Severity)">
+                            <div class="finding-card @UiFormatting.FindingCardClass(finding.Severity)">
                                 <div class="flex flex-wrap items-center gap-2 text-sm">
-                                    <span class="badge @SeverityBadgeClass(finding.Severity)">@finding.Severity.ToString().ToLowerInvariant()</span>
+                                    <span class="badge @UiFormatting.SeverityBadgeClass(finding.Severity)">@finding.Severity.ToString().ToLowerInvariant()</span>
                                     <code class="text-ink">@finding.RuleId</code>
                                     <span class="text-ink-faint">in</span>
                                     <code class="text-ink">@finding.File</code>
@@ -219,118 +219,5 @@ else
     {
         _details = await Details.GetAsync(Name);
         _loaded = true;
-    }
-
-    private static string SecurityBadgeClass(SecurityStatus status)
-    {
-        return status switch
-        {
-            SecurityStatus.Verified => "badge-verified",
-            SecurityStatus.Pending => "badge-pending",
-            SecurityStatus.Flagged => "badge-flagged",
-            SecurityStatus.Error => "badge-error",
-            _ => ""
-        };
-    }
-
-    private static string BannerClass(SecurityStatus status)
-    {
-        return status switch
-        {
-            SecurityStatus.Verified => "status-banner-verified",
-            SecurityStatus.Pending => "status-banner-pending",
-            SecurityStatus.Flagged => "status-banner-flagged",
-            SecurityStatus.Error => "status-banner-error",
-            _ => ""
-        };
-    }
-
-    private static string BannerClass(string? reasonCode)
-    {
-        return reasonCode switch
-        {
-            SecurityAccessReasonCodes.Flagged => "status-banner-flagged",
-            SecurityAccessReasonCodes.Error => "status-banner-error",
-            _ => "status-banner-pending"
-        };
-    }
-
-    private static string BannerTitle(string? reasonCode)
-    {
-        return reasonCode switch
-        {
-            SecurityAccessReasonCodes.Flagged => "Flagged",
-            SecurityAccessReasonCodes.Error => "Scan error",
-            _ => "Pending"
-        };
-    }
-
-    private static string BannerBody(string? reasonCode)
-    {
-        return reasonCode switch
-        {
-            SecurityAccessReasonCodes.Flagged => "— the scan found critical/high severity issues, so content and Git access are gated.",
-            SecurityAccessReasonCodes.Error => "— the scan failed, so content and Git access stay blocked until a successful re-scan.",
-            _ => "— the head revision is queued for scanning or being scanned right now."
-        };
-    }
-
-    private static string StatusSummary(SecurityStatus status)
-    {
-        return status switch
-        {
-            SecurityStatus.Verified => "no high/critical red flags — content is served.",
-            SecurityStatus.Flagged => "critical/high findings — content and Git access are gated.",
-            SecurityStatus.Pending => "scan queued or in progress — content is blocked until it completes.",
-            SecurityStatus.Error => "the scan failed — content stays blocked until a successful re-scan.",
-            _ => ""
-        };
-    }
-
-    private static string SeverityCountSummary(IReadOnlyCollection<SecurityFinding> findings)
-    {
-        if (findings.Count == 0) return "none";
-
-        return string.Join(", ",
-            findings
-                .GroupBy(finding => finding.Severity)
-                .OrderByDescending(group => group.Key)
-                .Select(group => $"{group.Count()} {group.Key.ToString().ToLowerInvariant()}"));
-    }
-
-    private static string FindingCardClass(FindingSeverity severity)
-    {
-        return severity switch
-        {
-            FindingSeverity.Critical => "finding-card-critical",
-            FindingSeverity.High => "finding-card-high",
-            FindingSeverity.Medium => "finding-card-medium",
-            FindingSeverity.Low => "finding-card-low",
-            _ => "finding-card-info"
-        };
-    }
-
-    private static string SeverityBadgeClass(FindingSeverity severity)
-    {
-        return severity switch
-        {
-            FindingSeverity.Critical => "badge-flagged",
-            FindingSeverity.High => "badge-flagged",
-            FindingSeverity.Medium => "badge-stale",
-            FindingSeverity.Low => "badge-seeded",
-            _ => ""
-        };
-    }
-
-    private static string Truncate(string value)
-    {
-        return value.Length <= 12 ? value : value[..12];
-    }
-
-    private static string FormatUnix(long unixSeconds)
-    {
-        return unixSeconds <= 0
-            ? "—"
-            : DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString("yyyy-MM-dd HH:mm");
     }
 }

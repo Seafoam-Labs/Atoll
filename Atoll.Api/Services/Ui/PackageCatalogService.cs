@@ -63,6 +63,13 @@ public sealed class PackageCatalogService(
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
     private SeededSnapshot _snapshot = SeededSnapshot.Empty;
 
+    /// <summary>Drops the cached seeded/head-status snapshot so the next search re-reads it.
+    /// Call after seed/rescan actions so the catalog reflects new state immediately.</summary>
+    public void InvalidateSnapshot()
+    {
+        Volatile.Write(ref _snapshot, _snapshot with { FetchedAt = DateTimeOffset.MinValue });
+    }
+
     public async Task<CatalogResult> SearchAsync(
         string? query,
         CatalogSeededFilter seededFilter,
@@ -204,13 +211,13 @@ public sealed class PackageCatalogService(
             var seeded = await packageService.ListAsync();
             var heads = await securityRepository.ListHeadStatusesAsync(ct);
 
-            var headStatuses = new Dictionary<string, HeadScanStatus>(StringComparer.Ordinal);
+            var headStatuses = ImmutableDictionary.CreateBuilder<string, HeadScanStatus>(StringComparer.Ordinal);
             foreach (var head in heads)
                 headStatuses[head.PackageName] = head;
 
             var next = new SeededSnapshot(
                 seeded.ToImmutableHashSet(StringComparer.Ordinal),
-                headStatuses.ToImmutableDictionary(),
+                headStatuses.ToImmutable(),
                 DateTimeOffset.UtcNow);
 
             Volatile.Write(ref _snapshot, next);

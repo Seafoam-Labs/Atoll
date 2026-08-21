@@ -10,8 +10,7 @@ public sealed record PackageDetails(
     PackageDocument? Head,
     SecurityAccessResult Access,
     PackageSecurityScanDocument? HeadScan,
-    IReadOnlyList<PackageSecurityScanDocument> Scans,
-    IReadOnlyList<PackageVersion> History)
+    IReadOnlyList<PackageSecurityScanDocument> Scans)
 {
     public bool IsSeeded => Head is not null;
 }
@@ -29,16 +28,15 @@ public sealed class PackageDetailsService(
 
         var head = await packageRepository.GetHeadAsync(name, ct);
         if (head is null)
-            return new PackageDetails(metadata, null, SecurityAccessResult.Allow(), null, [], []);
+            return new PackageDetails(metadata, null, SecurityAccessResult.Allow(), null, []);
 
         var headScan = await securityRepository.GetHeadAsync(name, ct);
         var scans = (await securityRepository.ListForPackageAsync(name, ct))
             .OrderByDescending(scan => scan.IsHead)
             .ThenByDescending(scan => scan.ScannedAt)
             .ToList();
-        var history = await packageRepository.GetHistoryAsync(name, ct);
         var access = await securityAccess.CheckAsync(name, null, ct);
 
-        return new PackageDetails(metadata, head, access, headScan, scans, history);
+        return new PackageDetails(metadata, head, access, headScan, scans);
     }
 }
