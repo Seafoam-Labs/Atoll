@@ -40,7 +40,7 @@ variable "docdb_instance_class" {
 
 variable "docdb_engine_version" {
   description = "DocumentDB engine version"
-  default     = "5.0.0"
+  default     = "8.0.1"
 }
 
 variable "docdb_master_username" {
