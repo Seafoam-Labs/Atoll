@@ -29,6 +29,7 @@ history, provides fast in-memory search, and exposes each package as a cloneable
 | --- | --- | --- |
 | Runtime | .NET 10 | Current LTS runtime with built-in async primitives |
 | Framework | ASP.NET Core Minimal API | Low-overhead routing; no controller boilerplate needed |
+| Web UI | Blazor (Interactive Server + SSR) + Tailwind CSS v4 | Built-in web interface for catalog search, file inspection, and status dashboard |
 | Database | MongoDB 8 (via MongoDB.Driver) | Flexible document model suits package metadata + per-revision content documents |
 | In-memory index | ImmutableDictionary (ByNames / ByWords / ByProvides) | Fast reads with a consistent per-request snapshot, no external cache tier |
 | Git subprocess | CliWrap + system `git` | Reuses the `git upload-pack` implementation |
@@ -38,27 +39,27 @@ history, provides fast in-memory search, and exposes each package as a cloneable
 ## Architecture
 
 ```txt
-[Git client / HTTP client]
+[Git client / HTTP client / Web browser]
            │
            ▼
-  [ASP.NET Core Minimal API]  (:8080 container / :5290 dev)
+  [ASP.NET Core Minimal API / Blazor]  (:8080 container / :5290 dev)
            │
-     ┌─────┴──────────────────────────┐
-     │                                │
-     ▼                                ▼
-[PackageSearchService]        [IPackageService / IGitTransferService]
-(in-memory index)             (MongoDB-backed; git subprocess)
-     │                                │
-     ▼                                ▼
-[PackageIndexStore]           [MongoDB]
-     ▲                        (packages + aur-metadata collections)
-     │ rebuild on refresh
-[PackageIndexWorker (background)]
+     ┌─────┼──────────────────────────┬──────────────────────────┐
+     │     │                          │                          │
+     ▼     ▼                          ▼                          ▼
+[PackageSearchService]        [IPackageService /         [PackageDetailsService /
+(in-memory index)              IGitTransferService]       StatusDashboardService]
+     │                        (MongoDB; git subprocess)  (UI view models)
+     ▼                                │                          │
+[PackageIndexStore]                   ▼                          │
+     ▲                            [MongoDB]                      │
+     │ rebuild on refresh         (packages + aur-metadata       │
+[PackageIndexWorker (bg)]          collections) ─────────────────┘
      │ fetches metadata every N minutes
      ▼
 [AUR packages-meta-ext-v1.json.gz]
 
-[DirectSeedWorker (background)]
+[DirectSeedWorker (bg)]
      │  clones missing packages from aur.archlinux.org, delay between seeds
      ▼
 [MongoDB packages collection]
@@ -74,6 +75,10 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   Seeding and refresh mechanics, configuration, cache lifecycle, metrics, and operational verification are documented
   in [Package seeding and refresh](SYNC.md).
 - **PackageSearchService** serves all search queries from the immutable in-memory snapshot with no database round-trips.
+- **Blazor Web UI:** Razor components under `Components/` provide a rich web UI. `PackageCatalogService` powers the
+  interactive package catalog with top-K max-heap selection and snapshot caching; `PackageDetailsService` assembles
+  package metadata, relations, file views, and security verdicts; `StatusDashboardService` consolidates worker status,
+  sync metrics, and exclusions for the status dashboard.
 - **GitTransferService** shells out to `git upload-pack` to serve clone/fetch requests. Bare repositories under
   `data/repos/` are materialized lazily from MongoDB documents by `MongoPackageService.EnsureGitRepositoryAsync`
   (commits are synthesized from stored revisions; a `.atoll-head` marker tracks the last materialized revision). Because
@@ -89,6 +94,9 @@ history, provides fast in-memory search, and exposes each package as a cloneable
 Request paths of note (everything else is standard Minimal API routing with `GlobalExceptionHandler` converting
 unhandled exceptions to RFC 9457 `ProblemDetails`):
 
+- **Web UI:** Blazor routes (`/`, `/package/{name}`, `/package/{name}/files`, `/package/{name}/revisions`, `/status`)
+  map to Razor components rendering interactive and static SSR pages directly backed by `PackageCatalogService`,
+  `PackageDetailsService`, and `StatusDashboardService`.
 - **Search:** `PackageSearchService` reads the current immutable `PackageIndexStore` snapshot and returns results with
   no I/O.
 - **Package CRUD:** `MongoPackageService` delegates to `MongoPackageRepository`; seeding clones the AUR Git repo to a
@@ -159,6 +167,16 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | POST | `/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head) |
 | GET | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement |
 | POST | `/packages/{name}.git/git-upload-pack` | Git pack negotiation and transfer |
+
+### Web UI routes
+
+| Path | Render Mode | Description |
+| --- | --- | --- |
+| `/` | Interactive Server | Package catalog search, live filtering (all/seeded/unseeded), and sorting |
+| `/package/{name}` | Static SSR | Package details, metadata, relationships, clone block, security banner |
+| `/package/{name}/files` | Static SSR | PKGBUILD and source file viewer across revisions |
+| `/package/{name}/revisions` | Static SSR | Revision history list and static security analysis findings |
+| `/status` | Static SSR | Operational dashboard: index sync, workers, security scans, exclusions |
 
 > **Known issue:** `DELETE` removes the MongoDB document but leaves the bare repo on disk, so `git clone` keeps serving
 > the deleted package's content indefinitely. Fix by either deleting the directory or having `GitTransferService` verify

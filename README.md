@@ -2,8 +2,9 @@
 
 > Atoll - A ring-shaped coral reef; a community ecosystem for arch packages.
 
-Minimal API that mirrors Arch Linux AUR package metadata, manages package versions and history, and provides fast
-package search endpoints.
+Minimal API and web interface that mirrors Arch Linux AUR package metadata, manages package versions and history,
+provides fast package search endpoints, and includes a built-in Blazor web UI for browsing packages, inspecting files,
+and monitoring system status.
 
 ## Requirements
 
@@ -16,7 +17,7 @@ package search endpoints.
 dotnet run --project Atoll.Api
 ```
 
-- API base URL: `http://localhost:5290`
+- Web UI & API base URL: `http://localhost:5290`
 - OpenAPI URL: `http://localhost:5290/openapi/v1.json`
 
 ## Docker
@@ -40,6 +41,21 @@ caches. Configure collections under `Atoll:Mongo` in `appsettings.json`.
 
 For the storage layout, retention limits, BSON-size handling, and cache considerations, see
 [Architecture](docs/ARCHITECTURE.md#state--storage).
+
+## Web UI
+
+Atoll includes a built-in Blazor web interface for interactive package exploration and system administration:
+
+- **Package Catalog (`/`)**: Fast, in-memory package catalog search with instant filtering (all, seeded, unseeded) and
+  sorting by votes, popularity, name, or last modified date.
+- **Package Details (`/package/{name}`)**: View package metadata, maintainers, upstream URLs, dependencies and
+  relationships, clone instructions, and security scanning verdicts.
+- **File Browser (`/package/{name}/files`)**: Browse and inspect PKGBUILD, `.SRCINFO`, patches, and other source files
+  directly in the browser across package revisions.
+- **Revision History (`/package/{name}/revisions`)**: Review version history, commit SHAs, and security scan finding
+  details for each revision.
+- **Status Dashboard (`/status`)**: Real-time overview of index sync status, automated seeding (Direct or Bulk)
+  progress, package refresh worker state, security scanning throughput/backlog, and excluded package bases.
 
 ## Endpoints
 
@@ -113,7 +129,8 @@ corresponding example settings in `compose.yaml`.
 ## Configuration
 
 Main settings are defined in `Atoll.Api/appsettings.json` and `Atoll.Api/AtollOptions.cs`.
-`compose.yaml` shows their environment-variable form. Detailed worker and security settings are
+`compose.yaml` shows their environment-variable form. UI branding and links can be customized
+under `Atoll:Ui` (`BrandName`, `ExternalBaseUrl`, `GrafanaUrl`). Detailed worker and security settings are
 in [SYNC.md](docs/SYNC.md) and [SECURITY.md](docs/SECURITY.md), respectively.
 
 ## Deployment
