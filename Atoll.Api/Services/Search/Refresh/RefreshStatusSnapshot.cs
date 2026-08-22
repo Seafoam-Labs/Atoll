@@ -8,4 +8,5 @@ public sealed record RefreshStatusSnapshot(
     long Failures,
     DateTimeOffset? LastStartedUtc,
     DateTimeOffset? LastSucceededUtc,
-    DateTimeOffset? LastFailedUtc);
+    DateTimeOffset? LastFailedUtc,
+    DateTimeOffset? LastLoadedFromCacheUtc);

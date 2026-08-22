@@ -18,6 +18,7 @@ public sealed class PackageIndexUpdater(
     private long _attempts;
     private long _failures;
     private DateTimeOffset? _lastFailedUtc;
+    private DateTimeOffset? _lastLoadedFromCacheUtc;
     private DateTimeOffset? _lastStartedUtc;
     private DateTimeOffset? _lastSucceededUtc;
     private long _successes;
@@ -38,7 +39,8 @@ public sealed class PackageIndexUpdater(
                 Interlocked.Read(ref _failures),
                 _lastStartedUtc,
                 _lastSucceededUtc,
-                _lastFailedUtc);
+                _lastFailedUtc,
+                _lastLoadedFromCacheUtc);
         }
     }
 
@@ -54,6 +56,10 @@ public sealed class PackageIndexUpdater(
         logger.LogInformation("Loaded {Count} packages. Building indexes.", packages.Count);
         var next = PackageDataLoader.BuildFromPackages(packages);
         store.Replace(next);
+        lock (_timeLock)
+        {
+            _lastLoadedFromCacheUtc = DateTimeOffset.UtcNow;
+        }
     }
 
     public async Task<bool> DownloadAndReloadAsync(CancellationToken cancellationToken)

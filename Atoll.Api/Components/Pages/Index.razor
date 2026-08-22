@@ -69,7 +69,19 @@
         }
 
         var refreshed = IndexUpdater.GetStatus().LastSucceededUtc;
-        <span class="text-ink-faint"> · index refreshed @(refreshed?.ToString("yyyy-MM-dd HH:mm") ?? "never") UTC</span>
+        var loaded = IndexUpdater.GetStatus().LastLoadedFromCacheUtc;
+        @if (refreshed is not null)
+        {
+            <span class="text-ink-faint"> · index refreshed @refreshed.Value.ToString("yyyy-MM-dd HH:mm") UTC</span>
+        }
+        else if (loaded is not null)
+        {
+            <span class="text-ink-faint"> · index loaded from cache @loaded.Value.ToString("yyyy-MM-dd HH:mm") UTC, refresh pending</span>
+        }
+        else
+        {
+            <span class="text-ink-faint"> · index not yet loaded</span>
+        }
     }
 </div>
 
