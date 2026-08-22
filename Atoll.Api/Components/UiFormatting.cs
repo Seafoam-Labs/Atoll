@@ -127,4 +127,9 @@ public static class UiFormatting
             ? "-"
             : DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString(format);
     }
+
+    public static string FormatUtc(DateTimeOffset? timestamp)
+    {
+        return timestamp?.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "Never";
+    }
 }

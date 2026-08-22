@@ -1,5 +1,6 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Packages.Seed;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
@@ -16,6 +17,13 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
 {
     public InMemoryPackageRepository Repository { get; } = new();
     public InMemoryPackageSecurityRepository SecurityRepository { get; } = new();
+    public InMemorySeedExclusionRepository SeedExclusions { get; } = new();
+
+    /// <summary>Set false to render the /status security card in its bypassed state.</summary>
+    public bool SecurityEnabled { get; init; } = true;
+
+    /// <summary>Set false to render /status with an empty (not-yet-loaded) index.</summary>
+    public bool LoadSampleIndex { get; init; } = true;
 
     private string RepositoriesRoot { get; } = Path.Combine(Path.GetTempPath(), $"atoll-security-{Guid.NewGuid():N}");
 
@@ -27,7 +35,10 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Atoll:Git:RepositoriesPath"] = RepositoriesRoot,
-                ["Atoll:Security:Enabled"] = "true"
+                ["Atoll:Security:Enabled"] = SecurityEnabled ? "true" : "false",
+                // Deterministic worker cards on /status regardless of appsettings.json defaults.
+                ["Atoll:Seed:Mode"] = "Direct",
+                ["Atoll:Refresh:Enabled"] = "false"
             })
             .Build());
 
@@ -39,13 +50,16 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
             services.RemoveAll<IPackageService>();
             services.RemoveAll<IPackageSecurityRepository>();
             services.RemoveAll<IAurMetadataRepository>();
+            services.RemoveAll<ISeedExclusionRepository>();
 
             var store = new PackageIndexStore();
-            store.Replace(TestData.LoadSampleIndexesAsync().GetAwaiter().GetResult());
+            if (LoadSampleIndex)
+                store.Replace(TestData.LoadSampleIndexesAsync().GetAwaiter().GetResult());
             services.AddSingleton(store);
 
             services.AddSingleton<IPackageRepository>(Repository);
             services.AddSingleton<IPackageSecurityRepository>(SecurityRepository);
+            services.AddSingleton<ISeedExclusionRepository>(SeedExclusions);
             services.AddSingleton<IAurMetadataRepository>(_ => new InMemoryAurMetadataRepository());
             services.AddSingleton<IPackageService, MongoPackageService>();
             services.AddSingleton<IGitTransferService, GitTransferService>();

@@ -120,4 +120,6 @@ public sealed class UiOptions
     [Required] public string BrandName { get; init; } = "Atoll";
 
     [Required] [Url] public string ExternalBaseUrl { get; init; } = "http://localhost:5290";
+
+    [Url] public string? GrafanaUrl { get; init; }
 }

@@ -62,6 +62,23 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         ];
     }
 
+    public async Task<HeadScanStatusCounts> CountHeadStatusesAsync(CancellationToken ct = default)
+    {
+        var counts = await _scans
+            .Aggregate()
+            .Match(x => x.IsHead)
+            .Group(x => x.Status, g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        long CountOf(SecurityStatus status) => counts.FirstOrDefault(c => c.Status == status)?.Count ?? 0;
+
+        return new HeadScanStatusCounts(
+            CountOf(SecurityStatus.Verified),
+            CountOf(SecurityStatus.Flagged),
+            CountOf(SecurityStatus.Pending),
+            CountOf(SecurityStatus.Error));
+    }
+
     public async Task<long> CountPendingAsync(CancellationToken ct = default)
     {
         return await _scans.CountDocumentsAsync(x => x.Status == SecurityStatus.Pending, cancellationToken: ct);

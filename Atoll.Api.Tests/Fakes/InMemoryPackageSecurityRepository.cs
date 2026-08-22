@@ -62,6 +62,19 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         }
     }
 
+    public Task<HeadScanStatusCounts> CountHeadStatusesAsync(CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            var heads = _scans.Values.Where(s => s.IsHead).ToList();
+            return Task.FromResult(new HeadScanStatusCounts(
+                heads.Count(s => s.Status == SecurityStatus.Verified),
+                heads.Count(s => s.Status == SecurityStatus.Flagged),
+                heads.Count(s => s.Status == SecurityStatus.Pending),
+                heads.Count(s => s.Status == SecurityStatus.Error)));
+        }
+    }
+
     public Task<long> CountPendingAsync(CancellationToken ct = default)
     {
         lock (_gate)

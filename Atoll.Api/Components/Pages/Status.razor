@@ -1,0 +1,554 @@
+@page "/status"
+@inject StatusDashboardService Dashboard
+@inject IWebHostEnvironment Env
+@inject IOptions<UiOptions> Ui
+@inject IOptions<AtollOptions> Options
+
+<PageTitle>Status - @Ui.Value.BrandName</PageTitle>
+
+<h1>Status</h1>
+
+@if (_model is null)
+{
+    <p class="text-ink-faint">Loading…</p>
+}
+else
+{
+    var m = _model;
+    var idxBadge = IndexBadge();
+    <div class="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-1 mb-5">
+        <p class="text-ink-faint text-sm m-0">Point-in-time view assembled at render; values from separate workers may be moments apart.</p>
+        <p class="text-ink-faint text-sm m-0 whitespace-nowrap">Last rendered <span
+                class="font-mono text-ink-soft">@UiFormatting.FormatUtc(DateTimeOffset.UtcNow)</span></p>
+    </div>
+
+    <h2 class="flex flex-wrap items-center gap-x-3">Overview</h2>
+    <dl class="stats">
+        <div class="stat">
+            <div class="stat-label">
+                <span class="stat-icon stat-icon-brand">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
+                    </svg>
+                </span>
+                <dt>Index packages</dt>
+            </div>
+            <div class="stat-figure">
+                <dd class="stat-value">@m.IndexPackages</dd>
+            </div>
+            <p class="stat-note">AUR metadata snapshot in the in-memory search index</p>
+        </div>
+        <div class="stat">
+            <div class="stat-label">
+                <span class="stat-icon stat-icon-brand">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/>
+                    </svg>
+                </span>
+                <dt>Seeded packages</dt>
+            </div>
+            <div class="stat-figure">
+                <dd class="stat-value">@m.SeededPackages</dd>
+            </div>
+            <p class="stat-note">stored with revisions in MongoDB</p>
+        </div>
+        <div class="stat">
+            <div class="stat-label">
+                <span class="stat-icon @(m.PendingScans > 0 ? "stat-icon-warn" : "stat-icon-brand")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                    </svg>
+                </span>
+                <dt>Pending scans</dt>
+            </div>
+            <div class="stat-figure">
+                <dd class="stat-value">@m.PendingScans</dd>
+            </div>
+            <p class="stat-note">queued or in progress, across stored revisions</p>
+        </div>
+        <div class="stat">
+            <div class="stat-label">
+                <span class="stat-icon stat-icon-ok">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/>
+                    </svg>
+                </span>
+                <dt>Verified packages</dt>
+            </div>
+            <div class="stat-figure">
+                <dd class="stat-value stat-ok">@m.SecurityHeadCounts.Verified</dd>
+            </div>
+            <p class="stat-note">queried live from the head-revision scan state</p>
+        </div>
+        <div class="stat">
+            <div class="stat-label">
+                <span class="stat-icon @(m.SecurityHeadCounts.Flagged > 0 ? "stat-icon-bad" : "stat-icon-neutral")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+                    </svg>
+                </span>
+                <dt>Flagged packages</dt>
+            </div>
+            <div class="stat-figure">
+                <dd class="stat-value stat-bad">@m.SecurityHeadCounts.Flagged</dd>
+            </div>
+            <p class="stat-note">queried live from the head-revision scan state</p>
+        </div>
+    </dl>
+
+    <h2 class="flex flex-wrap items-center gap-x-3">
+        Index refresh
+        <span class="badge gap-1 @idxBadge.Class"><span class="badge-dot" aria-hidden="true"></span>@idxBadge.Text</span>
+    </h2>
+    <section class="card">
+        <dl class="meta mb-0">
+            <div>
+                <dt>Metadata collection</dt>
+                <dd class="font-mono">@m.IndexRefresh.MetadataCollection</dd>
+            </div>
+            <div>
+                <dt>Refresh interval</dt>
+                <dd class="font-mono">@((int)m.IndexRefresh.Interval.TotalMinutes) min</dd>
+            </div>
+            <div>
+                <dt>Attempts</dt>
+                <dd class="font-mono">@m.IndexRefresh.Attempts</dd>
+            </div>
+            <div>
+                <dt>Successes</dt>
+                <dd class="font-mono stat-ok-inline">@m.IndexRefresh.Successes</dd>
+            </div>
+            <div>
+                <dt>Failures</dt>
+                <dd class="font-mono @(m.IndexRefresh.Failures > 0 ? "text-sec-error" : "")">@m.IndexRefresh.Failures</dd>
+            </div>
+            <div>
+                <dt>Last started</dt>
+                <dd class="font-mono">@UiFormatting.FormatUtc(m.IndexRefresh.LastStartedUtc)</dd>
+            </div>
+            <div>
+                <dt>Last succeeded</dt>
+                <dd class="font-mono">@UiFormatting.FormatUtc(m.IndexRefresh.LastSucceededUtc)</dd>
+            </div>
+            <div>
+                <dt>Last failed</dt>
+                <dd class="font-mono">@UiFormatting.FormatUtc(m.IndexRefresh.LastFailedUtc)</dd>
+            </div>
+            <div>
+                <dt>Loaded from cache</dt>
+                <dd class="font-mono">@UiFormatting.FormatUtc(m.IndexRefresh.LastLoadedFromCacheUtc)</dd>
+            </div>
+        </dl>
+        @if (m.IndexRefresh.LastSucceededUtc is null && m.IndexRefresh.LastLoadedFromCacheUtc is null && m.IndexRefresh.LastStartedUtc is null)
+        {
+            <p class="text-ink-faint text-sm mb-0">Not loaded yet - the index is empty until the first refresh or cache load completes.</p>
+        }
+    </section>
+
+    <h2>Package workers</h2>
+    <div class="grid gap-5 max-[880px]:grid-cols-1 lg:grid-cols-2">
+        <section class="card">
+            <div class="card-head">
+                <h3>Seeding - @m.SeedMode.ToString().ToLowerInvariant()</h3>
+                @if (m.SeedMode != SeedMode.Off)
+                {
+                    <span class="badge badge-seeded gap-1"><span class="badge-dot" aria-hidden="true"></span>active</span>
+                }
+                else
+                {
+                    <span class="badge gap-1"><span class="badge-dot" aria-hidden="true"></span>disabled</span>
+                }
+            </div>
+            @switch (m.SeedMode)
+            {
+                case SeedMode.Direct:
+                    <p class="text-ink-faint text-xs font-semibold uppercase tracking-wide mb-2">Activity</p>
+                    <dl class="meta">
+                        <div>
+                            <dt>Cycles started</dt>
+                            <dd class="font-mono">@m.DirectSeed.CyclesStarted</dd>
+                        </div>
+                        <div>
+                            <dt>Cycles completed</dt>
+                            <dd class="font-mono">@m.DirectSeed.CyclesCompleted</dd>
+                        </div>
+                        <div>
+                            <dt>Found packages</dt>
+                            <dd class="font-mono">@m.DirectSeed.Candidates</dd>
+                        </div>
+                        <div>
+                            <dt>Seeded</dt>
+                            <dd class="font-mono stat-ok-inline">@m.DirectSeed.Seeded</dd>
+                        </div>
+                        <div>
+                            <dt>Already present</dt>
+                            <dd class="font-mono">@m.DirectSeed.AlreadyPresent</dd>
+                        </div>
+                        <div>
+                            <dt>Failed</dt>
+                            <dd class="font-mono @(m.DirectSeed.Failed > 0 ? "text-sec-error" : "")">@m.DirectSeed.Failed</dd>
+                        </div>
+                        <div>
+                            <dt>Last cycle started</dt>
+                            <dd class="font-mono">@UiFormatting.FormatUtc(m.DirectSeed.LastStartedUtc)</dd>
+                        </div>
+                        <div>
+                            <dt>Last cycle finished</dt>
+                            <dd class="font-mono">@UiFormatting.FormatUtc(m.DirectSeed.LastFinishedUtc)</dd>
+                        </div>
+                    </dl>
+                    
+                    <p class="text-ink-faint text-xs font-semibold uppercase tracking-wide mb-2">Configuration</p>
+                    <dl class="meta mb-0">
+                        <div>
+                            <dt>Seed delay</dt>
+                            <dd class="font-mono">@Options.Value.Seed.Direct.SeedDelayMs ms</dd>
+                        </div>
+                    </dl>
+                    break;
+                case SeedMode.Bulk:
+                    <p class="text-ink-faint text-xs font-semibold uppercase tracking-wide mb-2">Activity</p>
+                    <dl class="meta">
+                        <div>
+                            <dt>Batches attempted</dt>
+                            <dd class="font-mono">@m.BulkSeed.BatchesAttempted</dd>
+                        </div>
+                        <div>
+                            <dt>Batches succeeded</dt>
+                            <dd class="font-mono stat-ok-inline">@m.BulkSeed.BatchesSucceeded</dd>
+                        </div>
+                        <div>
+                            <dt>Batches failed</dt>
+                            <dd class="font-mono @(m.BulkSeed.BatchesFailed > 0 ? "text-sec-error" : "")">@m.BulkSeed.BatchesFailed</dd>
+                        </div>
+                        <div>
+                            <dt>Refs skipped</dt>
+                            <dd class="font-mono">@m.BulkSeed.RefsSkipped</dd>
+                        </div>
+                        <div>
+                            <dt>Refs failed</dt>
+                            <dd class="font-mono">@m.BulkSeed.RefsFailed</dd>
+                        </div>
+                        <div>
+                            <dt>Packages seeded</dt>
+                            <dd class="font-mono stat-ok-inline">@m.BulkSeed.PackagesSeeded</dd>
+                        </div>
+                        <div>
+                            <dt>Packages skipped</dt>
+                            <dd class="font-mono">@m.BulkSeed.PackagesSkipped</dd>
+                        </div>
+                        <div>
+                            <dt>Packages excluded</dt>
+                            <dd class="font-mono">@m.BulkSeed.PackagesExcluded</dd>
+                        </div>
+                        <div>
+                            <dt>Last cycle started</dt>
+                            <dd class="font-mono">@UiFormatting.FormatUtc(m.BulkSeed.LastStartedUtc)</dd>
+                        </div>
+                        <div>
+                            <dt>Last cycle finished</dt>
+                            <dd class="font-mono">@UiFormatting.FormatUtc(m.BulkSeed.LastFinishedUtc)</dd>
+                        </div>
+                    </dl>
+                    
+                    <p class="text-ink-faint text-xs font-semibold uppercase tracking-wide mb-2">Configuration</p>
+                    <dl class="meta mb-0">
+                        <div>
+                            <dt>Batch size</dt>
+                            <dd class="font-mono">@Options.Value.Seed.Bulk.BatchSize</dd>
+                        </div>
+                        <div>
+                            <dt>Batch delay</dt>
+                            <dd class="font-mono">@Options.Value.Seed.Bulk.BatchDelayMs ms</dd>
+                        </div>
+                        <div>
+                            <dt>Parallelism</dt>
+                            <dd class="font-mono">@Options.Value.Seed.Bulk.Parallelism</dd>
+                        </div>
+                    </dl>
+                    break;
+                case SeedMode.Off:
+                default:
+                    <p class="mb-0 text-ink-soft text-sm">
+                        Automatic seeding is off - packages are only seeded through manual requests.
+                    </p>
+                    break;
+            }
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h3>Package refresh</h3>
+                @if (m.Refresh.Enabled)
+                {
+                    <span class="badge badge-seeded gap-1"><span class="badge-dot" aria-hidden="true"></span>active</span>
+                }
+                else
+                {
+                    <span class="badge gap-1"><span class="badge-dot" aria-hidden="true"></span>disabled</span>
+                }
+            </div>
+            @if (m.Refresh.Enabled)
+            {
+                <p class="text-ink-faint text-xs font-semibold uppercase tracking-wide mb-2">Activity</p>
+                <dl class="meta">
+                    <div>
+                        <dt>Cycles attempted</dt>
+                        <dd class="font-mono">@m.Refresh.CyclesAttempted</dd>
+                    </div>
+                    <div>
+                        <dt>Cycles succeeded</dt>
+                        <dd class="font-mono stat-ok-inline">@m.Refresh.CyclesSucceeded</dd>
+                    </div>
+                    <div>
+                        <dt>Cycles failed</dt>
+                        <dd class="font-mono @(m.Refresh.CyclesFailed > 0 ? "text-sec-error" : "")">@m.Refresh.CyclesFailed</dd>
+                    </div>
+                    <div>
+                        <dt>Found packages</dt>
+                        <dd class="font-mono">@m.Refresh.CandidatePackages</dd>
+                    </div>
+                    <div>
+                        <dt>Found package bases</dt>
+                        <dd class="font-mono">@m.Refresh.CandidatePackageBases</dd>
+                    </div>
+                    <div>
+                        <dt>Updated</dt>
+                        <dd class="font-mono stat-ok-inline">@m.Refresh.PackagesUpdated</dd>
+                    </div>
+                    <div>
+                        <dt>Unchanged</dt>
+                        <dd class="font-mono">@m.Refresh.PackagesUnchanged</dd>
+                    </div>
+                    <div>
+                        <dt>Skipped</dt>
+                        <dd class="font-mono">@m.Refresh.PackagesSkipped</dd>
+                    </div>
+                    <div>
+                        <dt>Refs skipped</dt>
+                        <dd class="font-mono">@m.Refresh.RefsSkipped</dd>
+                    </div>
+                    <div>
+                        <dt>Refs failed</dt>
+                        <dd class="font-mono">@m.Refresh.RefsFailed</dd>
+                    </div>
+                    <div>
+                        <dt>Last cycle started</dt>
+                        <dd class="font-mono">@UiFormatting.FormatUtc(m.Refresh.LastStartedUtc)</dd>
+                    </div>
+                    <div>
+                        <dt>Last cycle finished</dt>
+                        <dd class="font-mono">@UiFormatting.FormatUtc(m.Refresh.LastFinishedUtc)</dd>
+                    </div>
+                </dl>
+                
+                <p class="text-ink-faint text-xs font-semibold uppercase tracking-wide mb-2">Configuration</p>
+                <dl class="meta mb-0">
+                    <div>
+                        <dt>Max staleness</dt>
+                        <dd class="font-mono">@Options.Value.Refresh.MaxStalenessHours h</dd>
+                    </div>
+                    <div>
+                        <dt>Batch size</dt>
+                        <dd class="font-mono">@Options.Value.Refresh.BatchSize</dd>
+                    </div>
+                    <div>
+                        <dt>Batch delay</dt>
+                        <dd class="font-mono">@Options.Value.Refresh.BatchDelayMs ms</dd>
+                    </div>
+                    <div>
+                        <dt>Parallelism</dt>
+                        <dd class="font-mono">@Options.Value.Refresh.Parallelism</dd>
+                    </div>
+                </dl>
+            }
+            else
+            {
+                <p class="mb-0 text-ink-soft text-sm">
+                    Background refresh is off - seeded packages do not track upstream changes.
+                </p>
+            }
+        </section>
+    </div>
+
+    <h2 class="flex flex-wrap items-center gap-x-3">
+        Security scanner
+        @if (m.Security.Enabled)
+        {
+            <span class="badge badge-verified gap-1"><span class="badge-dot" aria-hidden="true"></span>enabled</span>
+        }
+        else
+        {
+            <span class="badge badge-error gap-1"><span class="badge-dot" aria-hidden="true"></span>bypassed</span>
+        }
+    </h2>
+    <section class="card">
+        @if (m.Security.Enabled)
+        {
+            <dl class="meta">
+                <div>
+                    <dt>Verified</dt>
+                    <dd class="font-mono stat-ok-inline">@m.SecurityHeadCounts.Verified</dd>
+                </div>
+                <div>
+                    <dt>Flagged</dt>
+                    <dd class="font-mono @(m.SecurityHeadCounts.Flagged > 0 ? "text-sec-flagged" : "")">@m.SecurityHeadCounts.Flagged</dd>
+                </div>
+                <div>
+                    <dt>Pending</dt>
+                    <dd class="font-mono">@m.SecurityHeadCounts.Pending</dd>
+                </div>
+                <div>
+                    <dt>Errored</dt>
+                    <dd class="font-mono @(m.SecurityHeadCounts.Error > 0 ? "text-sec-error" : "")">@m.SecurityHeadCounts.Error</dd>
+                </div>
+            </dl>
+            <p class="text-ink-faint text-[13px] mb-5 -mt-1">
+                Live counts of head-revision scan status, queried from storage - includes packages scanned before this
+                process started.
+            </p>
+            <dl class="meta">
+                <div>
+                    <dt>Completed</dt>
+                    <dd class="font-mono">@m.Security.ScansCompleted</dd>
+                </div>
+                <div>
+                    <dt>Verified</dt>
+                    <dd class="font-mono stat-ok-inline">@m.Security.ScansVerified</dd>
+                </div>
+                <div>
+                    <dt>Flagged</dt>
+                    <dd class="font-mono @(m.Security.ScansFlagged > 0 ? "text-sec-flagged" : "")">@m.Security.ScansFlagged</dd>
+                </div>
+                <div>
+                    <dt>Errored</dt>
+                    <dd class="font-mono @(m.Security.ScansErrored > 0 ? "text-sec-error" : "")">@m.Security.ScansErrored</dd>
+                </div>
+                <div>
+                    <dt>Dropped</dt>
+                    <dd class="font-mono">@m.Security.ScansDropped</dd>
+                </div>
+                <div>
+                    <dt>Pending scans</dt>
+                    <dd class="font-mono">@m.Security.PendingScans</dd>
+                </div>
+                <div>
+                    <dt>Last scan finished</dt>
+                    <dd class="font-mono">@UiFormatting.FormatUtc(m.Security.LastScanFinishedUtc)</dd>
+                </div>
+            </dl>
+            <p class="text-ink-faint text-[13px] mb-0 -mt-1">
+                Completed, verified, flagged, and errored are cumulative counters since the process started - not the
+                number of scan documents currently stored.
+            </p>
+        }
+        else
+        {
+            <div class="status-banner status-banner-error mb-0 flex items-start gap-3">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"
+                     class="size-5 shrink-0 mt-0.5 text-sec-error">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+                </svg>
+                <p class="mb-0">
+                    <strong>Content checks bypassed by configuration</strong>
+                    <span class="text-ink-soft"> - Atoll:Security:Enabled is false, so all package content is served without scanning.
+                    Zero flagged scans does not mean the content is clean.</span>
+                </p>
+            </div>
+        }
+    </section>
+
+    <h2>Operations</h2>
+    <div class="grid gap-4 max-[640px]:grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="link-card">
+            <span class="link-card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-5">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/>
+                </svg>
+            </span>
+            <div class="link-card-body">
+                <a href="/metrics" class="link-card-title">Prometheus metrics</a>
+                <p class="link-card-desc">Raw exposition endpoint for scrapers</p>
+            </div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Ui.Value.GrafanaUrl))
+        {
+            <div class="link-card">
+                <span class="link-card-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-5">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
+                    </svg>
+                </span>
+                <div class="link-card-body">
+                    <a href="@Ui.Value.GrafanaUrl" target="_blank" rel="noopener" class="link-card-title">Grafana dashboards</a>
+                    <p class="link-card-desc">Observability dashboards and alerts</p>
+                </div>
+            </div>
+        }
+        @if (Env.IsDevelopment())
+        {
+            <div class="link-card">
+                <span class="link-card-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-5">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"/>
+                    </svg>
+                </span>
+                <div class="link-card-body">
+                    <a href="/openapi/v1.json" class="link-card-title">OpenAPI schema</a>
+                    <p class="link-card-desc">Machine-readable API contract (development only)</p>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (m.ExcludedPackageBaseNames.Count > 0)
+    {
+        <h2>Excluded package bases</h2>
+        <section class="card">
+            <div class="flex flex-wrap gap-2">
+                @foreach (var packageBase in m.ExcludedPackageBaseNames)
+                {
+                    <span class="chip" title="excluded: too large for a single BSON document">@packageBase</span>
+                }
+            </div>
+            @if (m.ExcludedPackageBases > m.ExcludedPackageBaseNames.Count)
+            {
+                <p class="text-ink-faint text-[13px] mt-3 mb-0">
+                    Showing the first @m.ExcludedPackageBaseNames.Count of @m.ExcludedPackageBases - the full set lives in the
+                    <code>@Options.Value.Mongo.Collections.SeedExclusions</code> collection.
+                </p>
+            }
+        </section>
+    }
+}
+
+@code {
+    private StatusDashboardModel? _model;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _model = await Dashboard.GetAsync();
+    }
+
+    /// <summary>Index refresh headline state, from the freshest terminal event in the snapshot.</summary>
+    private (string Class, string Text) IndexBadge()
+    {
+        var r = _model!.IndexRefresh;
+        if (r.LastSucceededUtc is not null && (r.LastFailedUtc is null || r.LastSucceededUtc >= r.LastFailedUtc))
+            return ("badge-verified", "healthy");
+        if (r.LastFailedUtc is not null && (r.LastSucceededUtc is null || r.LastFailedUtc > r.LastSucceededUtc))
+            return ("badge-error", "failing");
+        if (r.LastLoadedFromCacheUtc is not null)
+            return ("badge-pending", "from cache");
+        return r.LastStartedUtc is null ? ("", "not loaded") : ("badge-pending", "starting");
+    }
+
+}

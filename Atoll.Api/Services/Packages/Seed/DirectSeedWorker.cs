@@ -3,10 +3,20 @@ using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Packages.Seed;
 
+internal enum DirectSeedCycleOutcome
+{
+    Completed,
+    IndexEmpty,
+    NothingMissing
+}
+
+internal sealed record DirectSeedCycleResult(DirectSeedCycleOutcome Outcome, int Seeded);
+
 public sealed class DirectSeedWorker(
     PackageIndexStore indexStore,
     IPackageRepository repo,
     IPackageService packageService,
+    DirectSeedStatusStore status,
     IOptions<AtollOptions> options,
     ILogger<DirectSeedWorker> logger) : BackgroundService
 {
@@ -20,61 +30,30 @@ public sealed class DirectSeedWorker(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var index = indexStore.Current;
+            DirectSeedCycleResult result;
 
-            if (index.ByNames.Count == 0)
+            try
             {
-                logger.LogDebug("Package index is empty; waiting 15 seconds before the next seed attempt.");
-                await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
-                continue;
+                result = await RunCycleAsync(seedDelay, stoppingToken);
             }
-
-            var existing = new HashSet<string>(await repo.ListAsync(stoppingToken), StringComparer.Ordinal);
-            var missing = index.ByNames.Keys.Except(existing, StringComparer.Ordinal).ToList();
-
-            if (missing.Count == 0)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                logger.LogDebug("All indexed packages are already seeded; waiting five minutes before checking again.");
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Direct seed cycle failed; retrying in five minutes.");
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
                 continue;
             }
 
-            logger.LogDebug("Starting a direct seed cycle for {CandidateCount} missing packages.", missing.Count);
-
-            var seeded = 0;
-            var failed = 0;
-            var conflicts = 0;
-
-            foreach (var packageName in missing)
+            // Retry failed packages immediately only when the cycle made progress; otherwise back off.
+            if (result.Outcome == DirectSeedCycleOutcome.IndexEmpty)
             {
-                if (stoppingToken.IsCancellationRequested) break;
-
-                try
-                {
-                    await packageService.SeedFromAurAsync(packageName);
-                    Interlocked.Increment(ref seeded);
-                    logger.LogTrace("Seeded package {PackageName}.", packageName);
-                }
-                catch (PackageConflictException ex)
-                {
-                    // Race condition: package was seeded between list and seed.
-                    Interlocked.Increment(ref conflicts);
-                    logger.LogDebug(ex, "Package {PackageName} was seeded by another operation.", packageName);
-                }
-                catch (Exception ex)
-                {
-                    Interlocked.Increment(ref failed);
-                    logger.LogWarning(ex, "Failed to seed {PackageName}.", packageName);
-                }
-
-                await Task.Delay(seedDelay, stoppingToken);
+                logger.LogDebug("Package index is empty; waiting 15 seconds before the next seed attempt.");
+                await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
             }
-
-            logger.LogInformation(
-                "Direct seed cycle complete: {Candidates} candidates, {Seeded} seeded, {Conflicts} already seeded, {Failed} failed.",
-                missing.Count, seeded, conflicts, failed);
-
-            if (seeded == 0)
+            else if (result.Outcome == DirectSeedCycleOutcome.NothingMissing || result.Seeded == 0)
             {
                 logger.LogDebug("No packages were seeded; waiting five minutes before the next seed attempt.");
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
@@ -82,5 +61,73 @@ public sealed class DirectSeedWorker(
         }
 
         logger.LogInformation("Package seeding stopped.");
+    }
+
+    internal async Task<DirectSeedCycleResult> RunCycleAsync(TimeSpan seedDelay, CancellationToken stoppingToken)
+    {
+        var index = indexStore.Current;
+
+        if (index.ByNames.Count == 0)
+        {
+            logger.LogDebug("Package index is empty; skipping direct seed cycle.");
+            return new DirectSeedCycleResult(DirectSeedCycleOutcome.IndexEmpty, 0);
+        }
+
+        var existing = new HashSet<string>(await repo.ListAsync(stoppingToken), StringComparer.Ordinal);
+        var missing = index.ByNames.Keys.Except(existing, StringComparer.Ordinal).ToList();
+
+        if (missing.Count == 0)
+        {
+            logger.LogDebug("All indexed packages are already seeded; skipping direct seed cycle.");
+            return new DirectSeedCycleResult(DirectSeedCycleOutcome.NothingMissing, 0);
+        }
+
+        logger.LogDebug("Starting a direct seed cycle for {CandidateCount} missing packages.", missing.Count);
+
+        status.BeginCycle(missing.Count);
+        var seeded = 0;
+        var failed = 0;
+        var alreadyPresent = 0;
+
+        try
+        {
+            foreach (var packageName in missing)
+            {
+                if (stoppingToken.IsCancellationRequested) break;
+
+                try
+                {
+                    await packageService.SeedFromAurAsync(packageName);
+                    seeded++;
+                    status.RecordSeeded();
+                    logger.LogTrace("Seeded package {PackageName}.", packageName);
+                }
+                catch (PackageConflictException ex)
+                {
+                    // Race condition: package was seeded between list and seed.
+                    alreadyPresent++;
+                    status.RecordAlreadyPresent();
+                    logger.LogDebug(ex, "Package {PackageName} was seeded by another operation.", packageName);
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    status.RecordFailed();
+                    logger.LogWarning(ex, "Failed to seed {PackageName}.", packageName);
+                }
+
+                await Task.Delay(seedDelay, stoppingToken);
+            }
+        }
+        finally
+        {
+            status.EndCycle();
+        }
+
+        logger.LogInformation(
+            "Direct seed cycle complete: {Candidates} candidates, {Seeded} seeded, {AlreadyPresent} already seeded, {Failed} failed.",
+            missing.Count, seeded, alreadyPresent, failed);
+
+        return new DirectSeedCycleResult(DirectSeedCycleOutcome.Completed, seeded);
     }
 }

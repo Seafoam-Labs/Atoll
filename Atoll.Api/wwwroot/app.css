@@ -4,10 +4,14 @@
  * tailwind.md for the UI plan and the build prerequisites.
  *
  * One-off layout lives as Tailwind utilities in the markup; this layer keeps
- * the shared primitives (cards, fields, command blocks, badges, chips,
- * buttons, tabs, the package table with its sort-button classes, the metadata
- * list, the security status banners, and finding cards). Modeled on
- * Remora.Public/wwwroot/app.css with Atoll's tokens and security components.
+ * the shared primitives (cards, card heads, fields, command blocks, badges,
+ * chips, buttons, tabs, the package table with its sort-button classes, the
+ * metadata list, the security status banners, finding cards, dashboard stat
+ * cards with their icon/delta-pill accessories, and operations link cards).
+ * Modeled on Remora.Public/wwwroot/app.css with Atoll's tokens and security
+ * components; card heads, stat pills, and link cards follow the Tailwind UI
+ * application-ui samples (headings/card-headings, data-display/stats,
+ * lists/grid-lists).
  */
 @import "tailwindcss" source(none);
 
@@ -106,6 +110,15 @@
         @apply bg-surface border border-line rounded-xl py-5 px-6;
     }
 
+    /* Card header row - title left, status badge right (headings/card-headings). */
+    .card-head {
+        @apply flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3;
+    }
+
+    .card-head h3 {
+        @apply mt-0 mb-0;
+    }
+
     /* ===== Fields ===== */
     :is(input, select).field {
         font: inherit; /* must precede the text-* utilities */
@@ -164,6 +177,12 @@
 
     .badge-stale {
         @apply text-sev-medium border-sev-medium/50;
+    }
+
+    /* Status dot inside a badge (elements/badges with dot) - bg-current keeps
+       the dot in the badge's text color. */
+    .badge-dot {
+        @apply inline-block size-1.5 rounded-full bg-current;
     }
 
     /* ===== Buttons ===== */
@@ -423,6 +442,136 @@
     /* ===== Finding cards ===== */
     .finding-card {
         @apply rounded-lg border border-line bg-canvas py-3 px-4 border-l-4;
+    }
+
+    /* ===== Dashboard stat grid ===== */
+    .stats {
+        @apply grid grid-cols-2 gap-5 mb-0 max-[640px]:grid-cols-1 lg:grid-cols-3 xl:grid-cols-5;
+    }
+
+    .stats .stat {
+        @apply bg-surface border border-line rounded-xl py-4 px-5 min-w-0;
+    }
+
+    /* Label row - icon + truncated term (data-display/stats with icon). */
+    .stats .stat-label {
+        @apply flex items-center gap-2.5 min-w-0;
+    }
+
+    .stats .stat-label dt {
+        @apply text-ink-faint text-sm leading-5 font-medium truncate;
+    }
+
+    .stats .stat-icon {
+        @apply inline-flex shrink-0 items-center justify-center rounded-md p-1.5;
+    }
+
+    .stat-icon-brand {
+        @apply bg-atoll/10 text-atoll;
+    }
+
+    .stat-icon-ok {
+        @apply bg-sec-verified/10 text-sec-verified;
+    }
+
+    .stat-icon-warn {
+        @apply bg-sec-pending/10 text-sec-pending;
+    }
+
+    .stat-icon-bad {
+        @apply bg-sec-flagged/10 text-sec-flagged;
+    }
+
+    .stat-icon-neutral {
+        @apply bg-ink-faint/10 text-ink-faint;
+    }
+
+    /* Value row - number plus optional delta pill (data-display/stats with trending). */
+    .stats .stat-figure {
+        @apply mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1;
+    }
+
+    .stats .stat .stat-value {
+        @apply text-2xl leading-tight font-semibold text-ink font-mono
+            [text-wrap:balance] break-words;
+    }
+
+    .stats .stat .stat-note {
+        @apply mt-1.5 mb-0 text-ink-faint text-xs leading-4;
+    }
+
+    .stats .stat .stat-ok {
+        @apply text-sec-verified;
+    }
+
+    .stats .stat .stat-bad {
+        @apply text-sec-flagged;
+    }
+
+    .stat-pill {
+        @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs leading-4 font-medium;
+    }
+
+    .stat-pill-ok {
+        @apply bg-sec-verified/10 text-sec-verified;
+    }
+
+    .stat-pill-warn {
+        @apply bg-sec-pending/10 text-sec-pending;
+    }
+
+    .stat-pill-bad {
+        @apply bg-sec-flagged/10 text-sec-flagged;
+    }
+
+    .stat-pill-neutral {
+        @apply border border-line bg-canvas text-ink-faint;
+    }
+
+    /* inline counter accents inside .meta lists */
+    .stat-ok-inline {
+        @apply text-sec-verified;
+    }
+
+    /* ===== Operations link cards (lists/grid-lists horizontal link cards) =====
+       The title anchor stretches over the whole card via ::after. */
+    .link-card {
+        @apply relative flex items-center gap-x-4 rounded-lg border border-line bg-canvas px-4 py-4
+            transition-colors duration-150;
+    }
+
+    .link-card:hover {
+        @apply border-atoll-dark;
+    }
+
+    .link-card:focus-within {
+        @apply outline-2 -outline-offset-1 outline-atoll;
+    }
+
+    .link-card .link-card-icon {
+        @apply inline-flex shrink-0 items-center justify-center rounded-md bg-atoll/10 p-2 text-atoll;
+    }
+
+    .link-card .link-card-body {
+        @apply min-w-0;
+    }
+
+    .link-card .link-card-title {
+        @apply text-sm font-semibold text-ink no-underline;
+    }
+
+    .link-card:hover .link-card-title {
+        @apply text-atoll;
+    }
+
+    .link-card .link-card-title::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+    }
+
+    .link-card .link-card-desc {
+        @apply mt-0.5 mb-0 text-xs leading-4 text-ink-faint;
     }
 
     .finding-card-critical {
