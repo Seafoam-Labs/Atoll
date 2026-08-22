@@ -26,6 +26,15 @@ public sealed class MongoPackageRepository : IPackageRepository
             .ToListAsync(ct);
     }
 
+    public Task<long> CountAsync(CancellationToken ct = default)
+    {
+        // An empty-filter count is answered from an index-only COUNT_SCAN instead of
+        // streaming and deserializing every PackageName.
+        return _packages.CountDocumentsAsync(
+            Builders<PackageDocument>.Filter.Empty,
+            cancellationToken: ct);
+    }
+
     public async Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
     {
         var count = await _packages.CountDocumentsAsync(

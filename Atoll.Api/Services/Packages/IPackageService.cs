@@ -3,6 +3,7 @@ namespace Atoll.Api.Services.Packages;
 public interface IPackageService
 {
     Task<IReadOnlyList<string>> ListAsync();
+    Task<int> CountAsync();
     Task<bool> ExistsAsync(string packageName, CancellationToken ct = default);
     Task<PackageFiles> GetAsync(string packageName, string? commitSha = null);
     Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName);

@@ -19,6 +19,14 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
         }
     }
 
+    public Task<long> CountAsync(CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            return Task.FromResult((long)_docs.Count);
+        }
+    }
+
     public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
     {
         lock (_gate)

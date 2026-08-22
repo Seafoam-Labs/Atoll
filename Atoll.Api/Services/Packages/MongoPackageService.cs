@@ -32,6 +32,11 @@ public sealed class MongoPackageService(
         return repo.ListAsync();
     }
 
+    public async Task<int> CountAsync()
+    {
+        return (int)await repo.CountAsync();
+    }
+
     public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
     {
         return repo.ExistsAsync(packageName, ct);

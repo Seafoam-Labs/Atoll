@@ -17,9 +17,9 @@ else
     var m = _model;
     var idxBadge = IndexBadge();
     <div class="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-1 mb-5">
-        <p class="text-ink-faint text-sm m-0">Point-in-time view assembled at render; values from separate workers may be moments apart.</p>
-        <p class="text-ink-faint text-sm m-0 whitespace-nowrap">Last rendered <span
-                class="font-mono text-ink-soft">@UiFormatting.FormatUtc(DateTimeOffset.UtcNow)</span></p>
+        <p class="text-ink-faint text-sm m-0">Point-in-time view, cached for a few seconds; values from separate workers may be moments apart.</p>
+        <p class="text-ink-faint text-sm m-0 whitespace-nowrap">Data assembled <span
+                class="font-mono text-ink-soft">@UiFormatting.FormatUtc(m.AssembledUtc)</span></p>
     </div>
 
     <h2 class="flex flex-wrap items-center gap-x-3">Overview</h2>

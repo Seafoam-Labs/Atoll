@@ -152,6 +152,33 @@ public class StatusDashboardServiceTests
     }
 
     [Test]
+    public async Task GetAsync_counts_seeded_packages_without_enumerating_names()
+    {
+        var service = CreateService(IndexWithPackages(Meta("one")), packageService: new CountingPackageService(7));
+
+        var model = await service.GetAsync();
+
+        Assert.That(model.SeededPackages, Is.EqualTo(7));
+    }
+
+    [Test]
+    public async Task GetAsync_caches_the_assembled_model_for_repeated_reads()
+    {
+        var counting = new CountingPackageService(3);
+        var service = CreateService(IndexWithPackages(Meta("one")), packageService: counting);
+
+        var first = await service.GetAsync();
+        var second = await service.GetAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(first, second), Is.True);
+            Assert.That(counting.CountCalls, Is.EqualTo(1));
+            Assert.That(second.AssembledUtc, Is.EqualTo(first.AssembledUtc));
+        });
+    }
+
+    [Test]
     public void GetAsync_propagates_cancellation()
     {
         var service = CreateService(IndexWithPackages(Meta("one")));
@@ -164,15 +191,61 @@ public class StatusDashboardServiceTests
     [Test]
     public void GetAsync_propagates_repository_failures()
     {
-        var service = CreateService(IndexWithPackages(), packageService: new ThrowingListService());
+        var service = CreateService(IndexWithPackages(), packageService: new ThrowingPackageService());
 
         Assert.ThrowsAsync<InvalidOperationException>(() => service.GetAsync());
     }
 
-    private sealed class ThrowingListService : IPackageService
+    private sealed class CountingPackageService(int seededCount) : IPackageService
+    {
+        public int CountCalls;
+
+        public Task<IReadOnlyList<string>> ListAsync()
+            => throw new NotSupportedException("the status dashboard must use CountAsync, not ListAsync");
+
+        public Task<int> CountAsync()
+        {
+            CountCalls++;
+            return Task.FromResult(seededCount);
+        }
+
+        public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<PackageFiles> GetAsync(string packageName, string? commitSha = null)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName)
+            => throw new NotSupportedException();
+
+        public Task DeleteAsync(string packageName) => throw new NotSupportedException();
+
+        public Task SyncFromStorageAsync(string packageName) => throw new NotSupportedException();
+
+        public Task SyncToStorageAsync(string packageName) => throw new NotSupportedException();
+
+        public Task SeedFromAurAsync(string packageName) => throw new NotSupportedException();
+
+        public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
+            => throw new NotSupportedException();
+
+        public Task<bool> AppendRevisionFromUpstreamAsync(
+            string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public string? GetRepositoryPath(string packageName) => throw new NotSupportedException();
+
+        public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class ThrowingPackageService : IPackageService
     {
         public Task<IReadOnlyList<string>> ListAsync()
             => Task.FromException<IReadOnlyList<string>>(new InvalidOperationException("boom"));
+
+        public Task<int> CountAsync()
+            => Task.FromException<int>(new InvalidOperationException("boom"));
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => throw new NotSupportedException();

@@ -23,6 +23,9 @@ public class DirectSeedWorkerTests
             return Task.FromResult(result);
         }
 
+        public Task<int> CountAsync()
+            => Task.FromResult(seededNames.Count + SeedCalls.Count);
+
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => Task.FromResult(seededNames.Contains(packageName) || SeedCalls.Contains(packageName));
 
@@ -53,7 +56,7 @@ public class DirectSeedWorkerTests
             string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public string? GetRepositoryPath(string packageName) => throw new NotSupportedException();
+        public string GetRepositoryPath(string packageName) => throw new NotSupportedException();
 
         public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
             => throw new NotSupportedException();
@@ -64,6 +67,9 @@ public class DirectSeedWorkerTests
     {
         public Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
             => Task.FromResult(existing);
+
+        public Task<long> CountAsync(CancellationToken ct = default)
+            => Task.FromResult((long)existing.Count);
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => throw new NotSupportedException();
@@ -251,6 +257,8 @@ public class DirectSeedWorkerTests
     {
         public Task<IReadOnlyList<string>> ListAsync() => Task.FromResult<IReadOnlyList<string>>([]);
 
+        public Task<int> CountAsync() => Task.FromResult(0);
+
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => Task.FromResult(false);
 
@@ -279,7 +287,7 @@ public class DirectSeedWorkerTests
             string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public string? GetRepositoryPath(string packageName) => throw new NotSupportedException();
+        public string GetRepositoryPath(string packageName) => throw new NotSupportedException();
 
         public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
             => throw new NotSupportedException();

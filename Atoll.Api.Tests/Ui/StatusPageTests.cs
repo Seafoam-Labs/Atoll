@@ -91,7 +91,7 @@ public class StatusPageTests
             Assert.That(body, Does.Contain("Security scanner"));
             Assert.That(body, Does.Contain("cumulative"));
             Assert.That(body, Does.Contain("href=\"/metrics\""));
-            Assert.That(body, Does.Contain("Last rendered"));
+            Assert.That(body, Does.Contain("Data assembled"));
             Assert.That(body, Does.Contain("Never"));
         });
     }
@@ -99,7 +99,7 @@ public class StatusPageTests
     [Test]
     public async Task StatusPageShowsBypassedBannerWhenSecurityDisabled()
     {
-        _factory.Dispose();
+        await _factory.DisposeAsync();
         _client.Dispose();
         _factory = new SecurityTestFactory { SecurityEnabled = false };
         _client = _factory.CreateClient();
@@ -119,7 +119,7 @@ public class StatusPageTests
     [Test]
     public async Task StatusPageShowsNotLoadedYetWithEmptyIndex()
     {
-        _factory.Dispose();
+        await _factory.DisposeAsync();
         _client.Dispose();
         _factory = new SecurityTestFactory { LoadSampleIndex = false };
         _client = _factory.CreateClient();

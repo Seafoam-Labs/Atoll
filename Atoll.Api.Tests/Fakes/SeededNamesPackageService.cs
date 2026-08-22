@@ -9,6 +9,11 @@ internal sealed class SeededNamesPackageService(IReadOnlyList<string> seededName
         return Task.FromResult(seededNames);
     }
 
+    public Task<int> CountAsync()
+    {
+        return Task.FromResult(seededNames.Count);
+    }
+
     public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
         => throw new NotSupportedException();
 

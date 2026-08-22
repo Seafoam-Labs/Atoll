@@ -4,6 +4,8 @@ public interface IPackageRepository
 {
     Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default);
 
+    Task<long> CountAsync(CancellationToken ct = default);
+
     Task<bool> ExistsAsync(string packageName, CancellationToken ct = default);
 
     Task<PackageDocument?> GetHeadAsync(string packageName, CancellationToken ct = default);

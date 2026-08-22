@@ -244,7 +244,11 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             new CreateIndexModel<PackageSecurityScanDocument>(
                 keys.Ascending(x => x.PackageName).Ascending(x => x.IsHead)),
             new CreateIndexModel<PackageSecurityScanDocument>(
-                keys.Ascending(x => x.PackageName))
+                keys.Ascending(x => x.PackageName)),
+            // Covers the status dashboard's head-status aggregation (match on IsHead,
+            // group by Status) without touching non-head revision scans.
+            new CreateIndexModel<PackageSecurityScanDocument>(
+                keys.Ascending(x => x.IsHead).Ascending(x => x.Status))
         ]);
     }
 }
