@@ -13,7 +13,7 @@ output "repository_url" {
   value       = data.aws_ecr_repository.app.repository_url
 }
 
-output "api_gateway_url" {
-  description = "The URL of the API Gateway"
-  value       = aws_apigatewayv2_stage.main.invoke_url
+output "application_url" {
+  description = "The public URL of the Atoll API (ALB DNS name)"
+  value       = "http://${aws_lb.main.dns_name}"
 }

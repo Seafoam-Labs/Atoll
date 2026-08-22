@@ -37,11 +37,11 @@ resource "aws_security_group" "ecs_sg" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description     = "Allow API Gateway VPC link traffic to the API port"
+    description     = "Allow ALB traffic to the API port"
     from_port       = var.container_port
     to_port         = var.container_port
     protocol        = "tcp"
-    security_groups = [aws_security_group.api_gw_sg.id]
+    security_groups = [aws_security_group.alb_sg.id]
   }
 
   egress {
@@ -56,9 +56,9 @@ resource "aws_security_group" "ecs_sg" {
   }
 }
 
-resource "aws_security_group" "api_gw_sg" {
-  name        = "${var.project_name}-api-gw-sg"
-  description = "Allow inbound traffic for API Gateway"
+resource "aws_security_group" "alb_sg" {
+  name        = "${var.project_name}-alb-sg"
+  description = "Allow inbound HTTP/HTTPS traffic to the ALB"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
@@ -85,7 +85,7 @@ resource "aws_security_group" "api_gw_sg" {
   }
 
   tags = {
-    Name = "${var.project_name}-api-gw-sg"
+    Name = "${var.project_name}-alb-sg"
   }
 }
 
@@ -175,69 +175,61 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
-resource "aws_service_discovery_private_dns_namespace" "main" {
-  name        = "${var.project_name}.local"
-  description = "Private DNS namespace for ECS tasks"
-  vpc         = data.aws_vpc.default.id
-}
+# Application Load Balancer. Unlike the HTTP API Gateway it replaces, an ALB
+# transparently proxies the HTTP `Upgrade: websocket` handshake, so Blazor
+# Server's SignalR circuit runs over a real WebSocket instead of falling back
+# to long polling.
+resource "aws_lb" "main" {
+  name               = "${var.project_name}-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = data.aws_subnets.default.ids
 
-resource "aws_service_discovery_service" "main" {
-  name = var.project_name
+  # Blazor keeps a long-lived, mostly-idle WebSocket open per circuit; a
+  # generous idle timeout avoids tearing down live-but-quiet connections.
+  idle_timeout = 300
 
-  dns_config {
-    namespace_id = aws_service_discovery_private_dns_namespace.main.id
-
-    dns_records {
-      ttl  = 10
-      type = "SRV"
-    }
-
-    routing_policy = "MULTIVALUE"
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
+  tags = {
+    Name = "${var.project_name}-alb"
   }
 }
 
-resource "aws_apigatewayv2_api" "main" {
-  name          = "${var.project_name}-api"
-  protocol_type = "HTTP"
+resource "aws_lb_target_group" "main" {
+  name        = "${var.project_name}-tg"
+  port        = var.container_port
+  protocol    = "HTTP"
+  vpc_id      = data.aws_vpc.default.id
+  target_type = "ip" # Fargate awsvpc tasks register by IP, not instance
+
+  health_check {
+    path                = "/health"
+    matcher             = "200"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+
+  # Pin each client to the task that owns its Blazor circuit so the WebSocket
+  # and its preceding negotiate request land on the same instance once the
+  # service scales beyond one task.
+  stickiness {
+    type            = "lb_cookie"
+    enabled         = true
+    cookie_duration = 86400
+  }
 }
 
-resource "aws_apigatewayv2_vpc_link" "main" {
-  name               = "${var.project_name}-vpc-link"
-  security_group_ids = [aws_security_group.api_gw_sg.id]
-  subnet_ids         = data.aws_subnets.default.ids
-}
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
 
-resource "aws_apigatewayv2_integration" "main" {
-  api_id             = aws_apigatewayv2_api.main.id
-  integration_type   = "HTTP_PROXY"
-  integration_uri    = aws_service_discovery_service.main.arn
-  integration_method = "ANY"
-
-  connection_type        = "VPC_LINK"
-  connection_id          = aws_apigatewayv2_vpc_link.main.id
-  payload_format_version = "1.0"
-}
-
-resource "aws_apigatewayv2_route" "main" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "ANY /{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.main.id}"
-}
-
-resource "aws_apigatewayv2_route" "default" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "$default"
-  target    = "integrations/${aws_apigatewayv2_integration.main.id}"
-}
-
-resource "aws_apigatewayv2_stage" "main" {
-  api_id      = aws_apigatewayv2_api.main.id
-  name        = "$default"
-  auto_deploy = true
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main.arn
+  }
 }
 
 resource "aws_ecs_service" "main" {
@@ -253,9 +245,15 @@ resource "aws_ecs_service" "main" {
     assign_public_ip = true
   }
 
-  service_registries {
-    registry_arn   = aws_service_discovery_service.main.arn
-    container_name = var.project_name
-    container_port = var.container_port
+  load_balancer {
+    target_group_arn = aws_lb_target_group.main.arn
+    container_name   = var.project_name
+    container_port   = var.container_port
   }
+
+  # Let the app finish booting (seed/index warm-up) before the ALB starts
+  # counting failed health checks against it.
+  health_check_grace_period_seconds = 120
+
+  depends_on = [aws_lb_listener.http]
 }

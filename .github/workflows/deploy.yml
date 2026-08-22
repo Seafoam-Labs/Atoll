@@ -188,5 +188,5 @@ jobs:
             echo "## Atoll deployment"
             echo ""
             echo "- Image: \`${{ steps.ecr.outputs.registry }}/atoll-api:${{ github.sha }}\`"
-            echo "- API Gateway URL: $(terraform output -raw api_gateway_url)"
+            echo "- Application URL: $(terraform output -raw application_url)"
           } >> "$GITHUB_STEP_SUMMARY"

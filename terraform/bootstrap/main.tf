@@ -240,6 +240,15 @@ resource "aws_iam_policy" "github_deploy" {
         Resource = "*"
       },
       {
+        Sid      = "LoadBalancing"
+        Effect   = "Allow"
+        Action   = ["elasticloadbalancing:*"]
+        Resource = "*"
+      },
+      {
+        # Retained so `terraform apply` can tear down the old HTTP API Gateway
+        # (and its VPC link) that the ALB replaced. Safe to drop once the
+        # gateway resources are gone from state everywhere.
         Sid    = "ApiGateway"
         Effect = "Allow"
         Action = ["apigateway:*"]
@@ -360,15 +369,14 @@ resource "aws_iam_policy" "github_deploy" {
           # the RDS service-linked role. IAM has no docdb.amazonaws.com SLR
           # template, so that principal cannot be used here.
           "arn:aws:iam::${local.account_id}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
-          # Pre-created in the account; kept allowlisted in case the VPC
-          # link provisioning flow needs it downstream.
+          # The ALB relies on the Elastic Load Balancing service-linked role.
           "arn:aws:iam::${local.account_id}:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
           # API Gateway VPC links need the API Gateway service-linked role.
           # Its service principal is ops.apigateway.amazonaws.com — CloudTrail
           # shows CreateVpcLink attempting to create exactly this role.
           "arn:aws:iam::${local.account_id}:role/aws-service-role/ops.apigateway.amazonaws.com/AWSServiceRoleForAPIGateway",
-          # ECS uses this role to register/deregister tasks in Cloud Map
-          # (the ECS service below uses service_registries).
+          # ECS uses this role to register/deregister task IPs with the ALB
+          # target group (the service below uses a load_balancer block).
           "arn:aws:iam::${local.account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
         ]
         Condition = {
