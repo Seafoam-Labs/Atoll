@@ -10,8 +10,8 @@
 
 <h1>Packages</h1>
 
-<div class="flex flex-wrap gap-3 mt-4 mb-2">
-    <form class="flex min-w-0 flex-1 gap-2 max-w-135"
+<div class="flex flex-col gap-3 mt-4 mb-2 lg:flex-row lg:flex-wrap lg:items-start">
+    <form class="flex min-w-0 gap-2 w-full lg:flex-1 lg:max-w-135"
           @onsubmit="ReloadNow" @onsubmit:preventDefault>
         <div class="grid min-w-0 flex-1 grid-cols-1">
             <input type="search"
@@ -28,25 +28,27 @@
         <button type="submit" class="btn btn-primary shrink-0">Search</button>
     </form>
 
-    <select class="field max-w-42.5" @bind="_mode" @bind:after="ReloadNow" aria-label="Search by">
-        <option value="@CatalogSearchMode.Name">Name / description</option>
-        <option value="@CatalogSearchMode.Words">Words</option>
-        <option value="@CatalogSearchMode.Provides">Provides</option>
-    </select>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:flex-1 lg:flex-wrap">
+        <select class="field col-span-2 sm:col-span-1 lg:max-w-42.5" @bind="_mode" @bind:after="ReloadNow" aria-label="Search by">
+            <option value="@CatalogSearchMode.Name">Name / description</option>
+            <option value="@CatalogSearchMode.Words">Words</option>
+            <option value="@CatalogSearchMode.Provides">Provides</option>
+        </select>
 
-    <select class="field max-w-42.5" @bind="_seededFilter" @bind:after="ReloadNow" aria-label="Seeded filter">
-        <option value="@CatalogSeededFilter.All">All packages</option>
-        <option value="@CatalogSeededFilter.Seeded">Seeded</option>
-        <option value="@CatalogSeededFilter.IndexOnly">Index only</option>
-    </select>
+        <select class="field lg:max-w-42.5" @bind="_seededFilter" @bind:after="ReloadNow" aria-label="Seeded filter">
+            <option value="@CatalogSeededFilter.All">All packages</option>
+            <option value="@CatalogSeededFilter.Seeded">Seeded</option>
+            <option value="@CatalogSeededFilter.IndexOnly">Index only</option>
+        </select>
 
-    <select class="field max-w-42.5" @bind="_securityFilter" @bind:after="ReloadNow" aria-label="Security filter">
-        <option value="@CatalogSecurityFilter.Any">Any security state</option>
-        <option value="@CatalogSecurityFilter.Verified">Verified</option>
-        <option value="@CatalogSecurityFilter.Flagged">Flagged</option>
-        <option value="@CatalogSecurityFilter.Pending">Pending</option>
-        <option value="@CatalogSecurityFilter.Error">Error</option>
-    </select>
+        <select class="field lg:max-w-42.5" @bind="_securityFilter" @bind:after="ReloadNow" aria-label="Security filter">
+            <option value="@CatalogSecurityFilter.Any">Any security state</option>
+            <option value="@CatalogSecurityFilter.Verified">Verified</option>
+            <option value="@CatalogSecurityFilter.Flagged">Flagged</option>
+            <option value="@CatalogSecurityFilter.Pending">Pending</option>
+            <option value="@CatalogSecurityFilter.Error">Error</option>
+        </select>
+    </div>
 </div>
 
 <div class="text-ink-soft text-sm mb-4">
@@ -93,7 +95,7 @@ else if (_result is not null)
                 <table class="pkg-table min-w-full">
                     <thead>
                     <tr>
-                        <th scope="col" class="w-64">
+                        <th scope="col" class="w-40 sm:w-64">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.NameAsc, CatalogSort.NameDesc))">
                                 Name
                                 @if (_sort == CatalogSort.NameAsc)
@@ -106,9 +108,9 @@ else if (_result is not null)
                                 }
                             </button>
                         </th>
-                        <th scope="col" class="whitespace-nowrap">Version</th>
+                        <th scope="col" class="hidden whitespace-nowrap md:table-cell">Version</th>
                         <th scope="col">Description</th>
-                        <th scope="col">
+                        <th scope="col" class="hidden sm:table-cell">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.VotesDesc, CatalogSort.VotesAsc))">
                                 Votes
                                 @if (_sort == CatalogSort.VotesDesc)
@@ -121,7 +123,7 @@ else if (_result is not null)
                                 }
                             </button>
                         </th>
-                        <th scope="col">
+                        <th scope="col" class="hidden lg:table-cell">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc))">
                                 Popularity
                                 @if (_sort == CatalogSort.PopularityDesc)
@@ -134,7 +136,7 @@ else if (_result is not null)
                                 }
                             </button>
                         </th>
-                        <th scope="col">
+                        <th scope="col" class="hidden md:table-cell">
                             <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc))">
                                 Last modified
                                 @if (_sort == CatalogSort.LastModifiedDesc)
@@ -154,8 +156,8 @@ else if (_result is not null)
                     {
                         var package = row.Package;
                         <tr>
-                            <td class="w-64">
-                                <div class="flex flex-col gap-1 max-w-[16rem]">
+                            <td class="w-40 sm:w-64">
+                                <div class="flex flex-col gap-1 max-w-[10rem] sm:max-w-[16rem]">
                                     <a href="@($"/package/{package.Name}")" class="truncate font-semibold text-ink" title="@package.Name">@package.Name</a>
                                     @if (!string.Equals(package.PackageBase, package.Name, StringComparison.Ordinal))
                                     {
@@ -176,11 +178,11 @@ else if (_result is not null)
                                     }
                                 </div>
                             </td>
-                            <td class="whitespace-nowrap font-mono">@package.Version</td>
+                            <td class="hidden whitespace-nowrap font-mono md:table-cell">@package.Version</td>
                             <td>@package.Description</td>
-                            <td class="whitespace-nowrap font-mono">@package.NumVotes</td>
-                            <td class="whitespace-nowrap font-mono">@package.Popularity.ToString("0.000000")</td>
-                            <td class="whitespace-nowrap font-mono text-[13px]">@UiFormatting.FormatUnix(package.LastModified)</td>
+                            <td class="hidden whitespace-nowrap font-mono sm:table-cell">@package.NumVotes</td>
+                            <td class="hidden whitespace-nowrap font-mono lg:table-cell">@package.Popularity.ToString("0.000000")</td>
+                            <td class="hidden whitespace-nowrap font-mono text-[13px] md:table-cell">@UiFormatting.FormatUnix(package.LastModified)</td>
                         </tr>
                     }
                     </tbody>
