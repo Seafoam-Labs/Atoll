@@ -179,6 +179,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | MongoDB for package storage | Flexible schema; embedded revision metadata avoids joins | Revision file content is normalized into `package-revisions`, so the 16 MiB cap applies per snapshot; content reads take an extra indexed find; appends write two documents without transactions (write ordering keeps readers consistent) | Active |
 | Shell out to `git upload-pack` | Reuses the complete and reliable Git transfer implementation | Requires `git` installed in the container; subprocess overhead per request | Active |
 | Atomic `PackageIndexStore` snapshot swap | Lock-free reads; consistent view per request | Full index rebuild on each refresh; 2× peak memory while both snapshots are live. Incremental updates evaluated and rejected: rebuild cost is negligible at ~116k packages per 10-minute cycle. | Active |
+| `PackageCatalogService` top-K selection + default-view cache | The Blazor catalog page (`/`) enumerates all ~85k indexed packages per request; a bounded max-heap keeps only the best `RenderCap` (500) rows instead of fully sorting and discarding the rest, and the common empty-query/no-filter view is cached per sort (keyed by index/snapshot instance, so it self-invalidates on refresh or `InvalidateSnapshot`) | Cuts the default page load from ~85 ms / 7.6 MB to a cache hit; does not remove the ~20–25 ms floor from enumerating and substring-scanning the full index on every call (cold/filtered queries) | Active |
 | No authentication | Keeps the API simple for trusted private deployments | Unauthenticated callers can seed **and delete** packages; must sit behind a reverse proxy / firewall if exposed | Active |
 
 Security notes not covered by the ADRs: options are validated on startup via Data Annotations (`[Required]`, `[Range]`,
@@ -214,6 +215,10 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
   revisions.
 - Evaluate content-addressed deduplication or GridFS/chunked storage for revision snapshots larger than MongoDB's 16 MiB
   document limit;
+- `PackageCatalogService` still enumerates and substring-scans the entire in-memory index on every uncached call
+  (~20–25 ms at ~85k packages, even for a single-hit query) - a real substring/prefix index would be needed to
+  remove this floor. See `tailwind.md` (2026-08-22 status note) for the measurement harness and what was already
+  fixed (top-K selection, default-view cache).
 
 ## References
 

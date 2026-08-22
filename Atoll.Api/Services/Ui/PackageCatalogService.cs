@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Search;
@@ -61,6 +62,7 @@ public sealed class PackageCatalogService(
     private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(30);
 
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
+    private readonly ConcurrentDictionary<CatalogSort, DefaultViewCacheEntry> _defaultViewCache = new();
     private SeededSnapshot _snapshot = SeededSnapshot.Empty;
 
     /// <summary>Drops the cached seeded/head-status snapshot so the next search re-reads it.
@@ -78,7 +80,26 @@ public sealed class PackageCatalogService(
         CatalogSort sort,
         CancellationToken ct = default)
     {
-        var packages = indexStore.Current.ByNames.Values;
+        var index = indexStore.Current;
+        var isUnfiltered = seededFilter is CatalogSeededFilter.All && securityFilter is CatalogSecurityFilter.Any;
+        var isDefaultView = isUnfiltered && string.IsNullOrWhiteSpace(query);
+
+        // The default view (empty query, no filters) is identical for every user between index
+        // refreshes and snapshot refreshes, so cache it per sort; a new index or snapshot instance
+        // (via PackageIndexStore.Replace / InvalidateSnapshot) naturally busts the cache.
+        if (isDefaultView)
+        {
+            var snapshot = await GetSeededSnapshotAsync(ct);
+            if (_defaultViewCache.TryGetValue(sort, out var cached) &&
+                ReferenceEquals(cached.Index, index) && ReferenceEquals(cached.Snapshot, snapshot))
+                return cached.Result;
+
+            var result = SearchUnfiltered(index.ByNames.Values, snapshot, PackageComparer(sort));
+            _defaultViewCache[sort] = new DefaultViewCacheEntry(index, snapshot, result);
+            return result;
+        }
+
+        var packages = index.ByNames.Values;
 
         var matches = mode switch
         {
@@ -93,30 +114,39 @@ public sealed class PackageCatalogService(
         // Seeded/security state is irrelevant when both filters are no-ops, so skip building a
         // CatalogRow (and the snapshot lookups it needs) for every match and only keep the
         // best RenderCap packages by sort key; rows are materialized only for the winners.
-        if (seededFilter is CatalogSeededFilter.All && securityFilter is CatalogSecurityFilter.Any)
+        if (isUnfiltered)
         {
-            var topPackages = new BoundedTopK<AurPackageMetadata>(RenderCap, packageComparer);
-            var total = 0;
-
-            foreach (var package in matches)
-            {
-                total++;
-                topPackages.Offer(package);
-            }
-
             var snapshot = await GetSeededSnapshotAsync(ct);
-            var rendered = topPackages.ExtractSorted()
-                .Select(package => new CatalogRow(
-                    package,
-                    snapshot.SeededNames.Contains(package.Name),
-                    snapshot.HeadStatuses.GetValueOrDefault(package.Name)))
-                .ToList();
-
-            return new CatalogResult(rendered, total, total > RenderCap);
+            return SearchUnfiltered(matches, snapshot, packageComparer);
         }
 
         return await SearchFilteredAsync(matches, seededFilter, securityFilter, packageComparer, ct);
     }
+
+    private static CatalogResult SearchUnfiltered(
+        IEnumerable<AurPackageMetadata> matches,
+        SeededSnapshot snapshot,
+        IComparer<AurPackageMetadata> packageComparer)
+    {
+        var topPackages = new BoundedTopK<AurPackageMetadata>(RenderCap, packageComparer);
+        var total = 0;
+
+        foreach (var package in matches)
+        {
+            total++;
+            topPackages.Offer(package);
+        }
+
+        var rendered = topPackages.ExtractSorted()
+            .Select(package => new CatalogRow(
+                package,
+                snapshot.SeededNames.Contains(package.Name),
+                snapshot.HeadStatuses.GetValueOrDefault(package.Name)))
+            .ToList();
+
+        return new CatalogResult(rendered, total, total > RenderCap);
+    }
+
 
     private async Task<CatalogResult> SearchFilteredAsync(
         IEnumerable<AurPackageMetadata> matches,
@@ -312,4 +342,7 @@ public sealed class PackageCatalogService(
             FetchedAt != DateTimeOffset.MinValue
             && DateTimeOffset.UtcNow - FetchedAt < SnapshotTtl;
     }
+
+    // Keyed by object identity: a new index or snapshot instance implicitly invalidates the entry.
+    private sealed record DefaultViewCacheEntry(SearchIndexData Index, SeededSnapshot Snapshot, CatalogResult Result);
 }
