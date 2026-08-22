@@ -56,7 +56,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
             [
                 .. _scans.Values
                     .Where(s => s.IsHead)
-                    .Select(s => new HeadScanStatus(s.PackageName, s.Status, s.Findings.Count, s.ScannedAt))
+                    .Select(s => new HeadScanStatus(s.PackageName, s.Status))
             ];
             return Task.FromResult(result);
         }

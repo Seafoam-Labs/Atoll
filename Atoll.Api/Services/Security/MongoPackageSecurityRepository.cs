@@ -52,14 +52,10 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
     {
         var projected = await _scans
             .Find(x => x.IsHead)
-            .Project(x => new { x.PackageName, x.Status, FindingCount = x.Findings.Count, x.ScannedAt })
+            .Project(x => new { x.PackageName, x.Status })
             .ToListAsync(ct);
 
-        return
-        [
-            .. projected
-                .Select(x => new HeadScanStatus(x.PackageName, x.Status, x.FindingCount, x.ScannedAt))
-        ];
+        return [.. projected.Select(x => new HeadScanStatus(x.PackageName, x.Status))];
     }
 
     public async Task<HeadScanStatusCounts> CountHeadStatusesAsync(CancellationToken ct = default)
