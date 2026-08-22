@@ -53,9 +53,9 @@ public static class UiFormatting
     {
         return reasonCode switch
         {
-            SecurityAccessReasonCodes.Flagged => "— the scan found critical/high severity issues, so content and Git access are gated.",
-            SecurityAccessReasonCodes.Error => "— the scan failed, so content and Git access stay blocked until a successful re-scan.",
-            _ => "— the head revision is queued for scanning or being scanned right now."
+            SecurityAccessReasonCodes.Flagged => "- the scan found critical/high severity issues, so content and Git access are gated.",
+            SecurityAccessReasonCodes.Error => "- the scan failed, so content and Git access stay blocked until a successful re-scan.",
+            _ => "- the head revision is queued for scanning or being scanned right now."
         };
     }
 
@@ -63,10 +63,10 @@ public static class UiFormatting
     {
         return status switch
         {
-            SecurityStatus.Verified => "no high/critical red flags — content is served.",
-            SecurityStatus.Flagged => "critical/high findings — content and Git access are gated.",
-            SecurityStatus.Pending => "scan queued or in progress — content is blocked until it completes.",
-            SecurityStatus.Error => "the scan failed — content stays blocked until a successful re-scan.",
+            SecurityStatus.Verified => "no high/critical red flags - content is served.",
+            SecurityStatus.Flagged => "critical/high findings - content and Git access are gated.",
+            SecurityStatus.Pending => "scan queued or in progress - content is blocked until it completes.",
+            SecurityStatus.Error => "the scan failed - content stays blocked until a successful re-scan.",
             _ => ""
         };
     }
@@ -124,7 +124,7 @@ public static class UiFormatting
     public static string FormatUnix(long unixSeconds, string format = "yyyy-MM-dd")
     {
         return unixSeconds <= 0
-            ? "—"
+            ? "-"
             : DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString(format);
     }
 }

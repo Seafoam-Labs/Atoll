@@ -1,6 +1,6 @@
 /*
- * Atoll stylesheet — Tailwind CSS v4 source. Compiled to wwwroot/app.min.css
- * (gitignored) by the BuildTailwindCss target in Atoll.Api.csproj — see
+ * Atoll stylesheet - Tailwind CSS v4 source. Compiled to wwwroot/app.min.css
+ * (gitignored) by the BuildTailwindCss target in Atoll.Api.csproj - see
  * tailwind.md for the UI plan and the build prerequisites.
  *
  * One-off layout lives as Tailwind utilities in the markup; this layer keeps
@@ -16,12 +16,12 @@
 @source "../Components/**/*.razor";
 
 @theme {
-    /* brand — "atoll" cyan */
+    /* brand - "atoll" cyan */
     --color-atoll: #22d3ee;
     --color-atoll-light: #67e8f9;
     --color-atoll-dark: #0891b2;
 
-    /* surfaces & ink — the page background is named `canvas`, not `base`,
+    /* surfaces & ink - the page background is named `canvas`, not `base`,
        so `text-base` keeps its Tailwind font-size meaning. */
     --color-canvas: #0b1220;
     --color-surface: #111a2c;
@@ -43,7 +43,7 @@
     --color-sev-low: #38bdf8;
     --color-sev-info: #94a3b8;
 
-    /* fonts — private/offline deployments, so no external font CDN;
+    /* fonts - private/offline deployments, so no external font CDN;
        self-hosting woff2 files is an optional later change. */
     --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
@@ -117,7 +117,7 @@
         @apply outline-2 -outline-offset-2 outline-atoll;
     }
 
-    /* appearance: none + data-URI chevron — the native select arrow cannot
+    /* appearance: none + data-URI chevron - the native select arrow cannot
        be inset from the right edge by padding. */
     select.field {
         -webkit-appearance: none;
@@ -242,7 +242,7 @@
         @apply text-atoll-light font-mono text-sm;
     }
 
-    /* Sort buttons — scoped selectors because the `arrow` span is emitted
+    /* Sort buttons - scoped selectors because the `arrow` span is emitted
        from C# in the catalog page; @utility cannot express this scoping. */
     .pkg-table button.sort {
         font: inherit;
@@ -272,7 +272,7 @@
     }
 
     .meta > div {
-        /* raw declaration first — placed after the @apply it would
+        /* raw declaration first - placed after the @apply it would
            out-cascade the max-sm: overrides */
         grid-template-columns: minmax(9rem, max-content) 1fr;
         @apply grid gap-4 py-2 max-sm:grid-cols-1 max-sm:gap-1;
@@ -298,7 +298,7 @@
     .tabs .tab {
         font: inherit;
         /* -mb-px overlaps the active underline with the container border;
-           no border-none — it flips --tw-border-style and hides border-b-2
+           no border-none - it flips --tw-border-style and hides border-b-2
            (preflight already zeroes button borders). */
         @apply inline-flex items-center cursor-pointer bg-transparent text-ink-soft text-sm leading-5 font-medium whitespace-nowrap py-3 px-1
             -mb-px border-b-2 border-b-transparent transition-colors duration-150;

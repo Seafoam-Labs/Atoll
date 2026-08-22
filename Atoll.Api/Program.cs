@@ -97,8 +97,10 @@ var refreshEnabled = builder.Configuration.GetSection("Atoll:Refresh").Get<Refre
 var securityEnabled = builder.Configuration.GetSection("Atoll:Security").Get<SecurityOptions>()?.Enabled ?? true;
 
 builder.Services.AddSingleton(new BulkSeedStatusStore(bulkEnabled));
+builder.Services.AddSingleton(new DirectSeedStatusStore(seedMode == SeedMode.Direct));
 builder.Services.AddSingleton(new RefreshStatusStore(refreshEnabled));
 builder.Services.AddSingleton(new SecurityScanStatusStore(securityEnabled));
+builder.Services.AddSingleton<StatusDashboardService>();
 
 if (bulkEnabled || refreshEnabled)
     builder.Services.AddSingleton<IAurMirror>(sp =>

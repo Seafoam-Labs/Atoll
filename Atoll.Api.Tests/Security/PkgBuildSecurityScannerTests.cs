@@ -411,6 +411,6 @@ public class PkgBuildSecurityScannerTests
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
         Assert.That(result.Findings, Has.Count.EqualTo(4));
         Assert.That(result.Findings, Is.All.Matches<SecurityFinding>(f =>
-            f.RuleId == "command-substitution" && f.Severity == FindingSeverity.Medium));
+            f is { RuleId: "command-substitution", Severity: FindingSeverity.Medium }));
     }
 }

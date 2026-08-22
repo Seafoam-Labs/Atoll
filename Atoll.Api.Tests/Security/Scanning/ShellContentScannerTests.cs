@@ -173,7 +173,7 @@ public class ShellContentScannerTests
     public void Hidden_character_is_flagged_as_critical()
     {
         var findings = Scan("echo rm\u200Brf");
-        Assert.That(findings.Any(f => f.RuleId == "hidden-character" && f.Severity == FindingSeverity.Critical), Is.True);
+        Assert.That(findings.Any(f => f is { RuleId: "hidden-character", Severity: FindingSeverity.Critical }), Is.True);
     }
 
     [Test]

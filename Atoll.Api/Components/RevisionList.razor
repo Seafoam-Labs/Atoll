@@ -6,7 +6,7 @@
             <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <a class="font-mono text-sm text-atoll" href="@($"/package/{Name}?rev={rev.Sha}")">
-                        @UiFormatting.Truncate(rev.Sha)<span class="sr-only"> — pin the page to this revision</span>
+                        @UiFormatting.Truncate(rev.Sha)<span class="sr-only"> - pin the page to this revision</span>
                     </a>
                     @if (rev.IsHead)
                     {

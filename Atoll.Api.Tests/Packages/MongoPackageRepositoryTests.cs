@@ -190,7 +190,7 @@ public class MongoPackageRepositoryTests
 
         await Append("shelly", NewRevisionContent("shelly", "rev-b", "commit b"), maxRevisions);
         await Append("shelly", NewRevisionContent("shelly", "rev-c", "commit c"), maxRevisions);
-        // rev-a is now evicted; append rev-b again — content hashes legitimately reappear, so
+        // rev-a is now evicted; append rev-b again - content hashes legitimately reappear, so
         // the freshly upserted document must not be deleted by the eviction sweep.
         await Append("shelly", NewRevisionContent("shelly", "rev-b", "commit b"), maxRevisions);
 

@@ -2,7 +2,7 @@
 @inject PackageDetailsService Details
 @inject IOptions<UiOptions> Ui
 
-<PageTitle>@Name — @Ui.Value.BrandName</PageTitle>
+<PageTitle>@Name - @Ui.Value.BrandName</PageTitle>
 
 @if (!_loaded)
 {
@@ -28,7 +28,7 @@ else
     {
         <div class="status-banner status-banner-pending mb-5">
             <strong>Revision not found</strong>
-            <span class="text-ink-soft"> — no revision <code>@Rev</code> exists for this package; showing the head revision instead.</span>
+            <span class="text-ink-soft"> - no revision <code>@Rev</code> exists for this package; showing the head revision instead.</span>
         </div>
     }
     else if (!_details.SelectedIsHead && _details.IsSeeded)
@@ -56,7 +56,7 @@ else
         <div class="mb-5">
             <GitCloneBlock Name="@meta.Name" ExternalBaseUrl="@Ui.Value.ExternalBaseUrl"/>
             <div class="text-ink-faint text-[13px] mt-2">
-                Served Git SHAs are synthesized by Atoll when it commits stored revisions — they do not match
+                Served Git SHAs are synthesized by Atoll when it commits stored revisions - they do not match
                 upstream AUR. <code>/packages/@meta.Name/versions</code> SHAs are authoritative.
             </div>
         </div>
@@ -67,12 +67,12 @@ else
             <h2 class="mt-0">Metadata</h2>
             <dl class="meta mb-0">
                 <div><dt>Package base</dt><dd class="font-mono">@meta.PackageBase</dd></div>
-                <div><dt>Maintainer</dt><dd>@(meta.Maintainer ?? "—")</dd></div>
+                <div><dt>Maintainer</dt><dd>@(meta.Maintainer ?? "-")</dd></div>
                 @if (meta.CoMaintainers.Count > 0)
                 {
                     <div><dt>Co-maintainers</dt><dd>@string.Join(", ", meta.CoMaintainers)</dd></div>
                 }
-                <div><dt>Submitter</dt><dd>@(meta.Submitter ?? "—")</dd></div>
+                <div><dt>Submitter</dt><dd>@(meta.Submitter ?? "-")</dd></div>
                 <div><dt>Votes</dt><dd class="font-mono">@meta.NumVotes</dd></div>
                 <div><dt>Popularity</dt><dd class="font-mono">@meta.Popularity.ToString("0.000000")</dd></div>
                 <div><dt>First submitted</dt><dd class="font-mono">@UiFormatting.FormatUnix(meta.FirstSubmitted, "yyyy-MM-dd HH:mm")</dd></div>
@@ -96,7 +96,7 @@ else
             @if (!_details.IsSeeded)
             {
                 <p class="mb-0 text-ink-soft text-sm">
-                    This package is not seeded yet — Atoll stores no content and has no scan state for it.
+                    This package is not seeded yet - Atoll stores no content and has no scan state for it.
                     Seeding pulls the files from the AUR and runs the static security scan.
                 </p>
             }
@@ -106,7 +106,7 @@ else
                 {
                     <div class="status-banner @UiFormatting.BannerClass(selectedScan.Status) mb-4">
                         <strong>@selectedScan.Status</strong>
-                        <span class="text-ink-soft"> — @UiFormatting.StatusSummary(selectedScan.Status)</span>
+                        <span class="text-ink-soft"> - @UiFormatting.StatusSummary(selectedScan.Status)</span>
                         <div class="text-ink-faint text-xs mt-1 flex flex-wrap gap-x-4 gap-y-1">
                             <span>
                                 revision <code>@UiFormatting.Truncate(_details.SelectedRevisionId)</code>@(_details.SelectedIsHead ? "" : " (not head)")
@@ -120,7 +120,7 @@ else
                 {
                     <div class="status-banner status-banner-pending mb-4">
                         <strong>Pending</strong>
-                        <span class="text-ink-soft"> — no scan document for revision
+                        <span class="text-ink-soft"> - no scan document for revision
                             <code>@UiFormatting.Truncate(_details.SelectedRevisionId)</code> yet; it will be picked up by the scanner.</span>
                     </div>
                 }
@@ -149,7 +149,7 @@ else
                                     }
                                 </td>
                                 <td><span class="badge @UiFormatting.BadgeClass(scan.Status)">@scan.Status.ToString().ToLowerInvariant()</span></td>
-                                <td class="font-mono text-[13px]">@(scan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                                <td class="font-mono text-[13px]">@(scan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
                                 <td class="font-mono">@scan.Findings.Count</td>
                             </tr>
                         }
@@ -182,7 +182,7 @@ else
 
                 <p class="text-ink-faint text-[13px] mt-4 mb-0">
                     Findings below High severity are retained for review but do not block serving.
-                    Verified means no obvious red flags from static analysis — never a guarantee that a package is safe.
+                    Verified means no obvious red flags from static analysis - never a guarantee that a package is safe.
                 </p>
             }
         </section>

@@ -6,7 +6,7 @@
 @inject IOptions<UiOptions> Ui
 @inject ILogger<Index> Logger
 
-<PageTitle>Packages — @Ui.Value.BrandName</PageTitle>
+<PageTitle>Packages - @Ui.Value.BrandName</PageTitle>
 
 <h1>Packages</h1>
 
@@ -205,7 +205,7 @@ else if (_result is not null)
     @if (_result.IsTruncated)
     {
         <div class="text-ink-faint text-[13px] mt-2">
-            Showing the first @PackageCatalogService.RenderCap of @_result.TotalMatches results — refine your search to see the rest.
+            Showing the first @PackageCatalogService.RenderCap of @_result.TotalMatches results - refine your search to see the rest.
         </div>
     }
 }

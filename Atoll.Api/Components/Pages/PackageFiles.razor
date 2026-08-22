@@ -2,7 +2,7 @@
 @inject PackageDetailsService Details
 @inject IOptions<UiOptions> Ui
 
-<PageTitle>Files — @Name — @Ui.Value.BrandName</PageTitle>
+<PageTitle>Files - @Name - @Ui.Value.BrandName</PageTitle>
 
 @if (!_loaded)
 {
@@ -24,7 +24,7 @@ else
     {
         <div class="status-banner status-banner-pending mb-5">
             <strong>Revision not found</strong>
-            <span class="text-ink-soft"> — no revision <code>@Rev</code> exists for this package; showing the head revision instead.</span>
+            <span class="text-ink-soft"> - no revision <code>@Rev</code> exists for this package; showing the head revision instead.</span>
         </div>
     }
 
@@ -38,7 +38,7 @@ else
             </svg>
             <h2 class="mt-2 mb-0 text-sm font-semibold text-ink">No files stored</h2>
             <p class="mt-1 mb-0 text-sm text-ink-soft">
-                This package is not seeded — Atoll stores no sources for it. Seed it from the
+                This package is not seeded - Atoll stores no sources for it. Seed it from the
                 overview page to pull the files from the AUR.
             </p>
             <div class="mt-6">
@@ -84,7 +84,7 @@ else
                     {
                         <div class="status-banner status-banner-pending">
                             <strong>File not found</strong>
-                            <span class="text-ink-soft"> — <code>@_files.SelectedPath</code> is not part of this revision. Pick a file from the tree.</span>
+                            <span class="text-ink-soft"> - <code>@_files.SelectedPath</code> is not part of this revision. Pick a file from the tree.</span>
                         </div>
                     }
                     else if (_files.SelectedPath is null)
@@ -97,7 +97,7 @@ else
                             </svg>
                             <h2 class="mt-2 mb-0 text-sm font-semibold text-ink">Pick a file to preview it</h2>
                             <p class="mt-1 mb-0 text-sm text-ink-soft">
-                                Choose a file from the tree — the selection is kept in the URL, so views are shareable.
+                                Choose a file from the tree - the selection is kept in the URL, so views are shareable.
                             </p>
                         </div>
                     }

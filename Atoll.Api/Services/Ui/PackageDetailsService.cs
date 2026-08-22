@@ -228,7 +228,7 @@ public sealed class PackageDetailsService(
 
     /// <summary>
     ///     Binary heuristic: stored content is UTF-8–decoded, and NUL bytes survive that decoding while
-    ///     invalid sequences collapse to U+FFFD — so NUL in the leading probe means binary payload.
+    ///     invalid sequences collapse to U+FFFD - so NUL in the leading probe means binary payload.
     /// </summary>
     private static bool LooksBinary(string content)
     {

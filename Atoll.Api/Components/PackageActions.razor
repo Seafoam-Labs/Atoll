@@ -59,7 +59,7 @@
         }
         catch (PackageConflictException)
         {
-            // Seeded elsewhere while we were looking — refresh to show the seeded state.
+            // Seeded elsewhere while we were looking - refresh to show the seeded state.
             Catalog.InvalidateSnapshot();
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }

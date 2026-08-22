@@ -1,4 +1,4 @@
-/* Blazor circuit-state machinery only — all visual styling lives as Tailwind
+/* Blazor circuit-state machinery only - all visual styling lives as Tailwind
    utilities in ReconnectModal.razor. These rules toggle visibility per state
    and keep the rejoining ring animation, which can't be expressed in utilities. */
 .components-reconnect-first-attempt-visible,

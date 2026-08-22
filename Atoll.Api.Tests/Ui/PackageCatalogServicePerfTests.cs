@@ -12,7 +12,7 @@ namespace Atoll.Api.Tests.Ui;
 /// Steady-state cost probe for <see cref="PackageCatalogService.SearchAsync"/> at a realistic
 /// index scale (~85k AUR packages). The first SearchAsync call also populates
 /// the 30s seeded/head snapshot; warmup iterations absorb it, so measured calls reflect what
-/// every page load, sort toggle, or filter change costs — not the periodic repository read.
+/// every page load, sort toggle, or filter change costs - not the periodic repository read.
 ///
 /// Log-only measurements: run with
 /// <c>dotnet test --filter PackageCatalogServicePerfTests --logger "console;verbosity=detailed"</c>
