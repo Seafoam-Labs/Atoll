@@ -155,6 +155,13 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "ASPNETCORE_URLS"
           value = "http://+:8080"
+        },
+        {
+          # Host-injected forwarded-headers middleware: honor X-Forwarded-For /
+          # X-Forwarded-Proto from the ALB so the app sees real client IPs and
+          # https scheme.
+          name  = "ASPNETCORE_FORWARDEDHEADERS_ENABLED"
+          value = "true"
         }
       ]
       secrets = [
