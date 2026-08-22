@@ -158,9 +158,23 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
 
+      # ECR tags are immutable, so re-pushing an existing SHA fails. On a
+      # manual workflow_dispatch redeploy of an already-built commit the image
+      # is already there, so detect that and skip the build/push below.
+      - name: Check whether image already exists in ECR
+        id: image
+        run: |
+          if aws ecr describe-images --repository-name atoll-api --image-ids imageTag=${{ github.sha }} >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: docker/setup-buildx-action@v3
+        if: steps.image.outputs.exists == 'false'
 
       - uses: docker/build-push-action@v6
+        if: steps.image.outputs.exists == 'false'
         with:
           context: .
           file: Atoll.Api/Dockerfile
@@ -181,6 +195,17 @@ jobs:
 
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve -var "image_tag=${{ github.sha }}"
+
+      # A manual redeploy usually reuses the existing image tag, so the task
+      # definition is unchanged and ECS would not roll on its own. Force a new
+      # deployment so the running tasks are actually replaced.
+      - name: Force new ECS deployment on manual redeploy
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          aws ecs update-service \
+            --cluster "$(terraform output -raw ecs_cluster_name)" \
+            --service "$(terraform output -raw ecs_service_name)" \
+            --force-new-deployment
 
       - name: Publish endpoints
         run: |
