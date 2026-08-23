@@ -128,12 +128,13 @@ else
                 @if (_details.Scans.Count > 0)
                 {
                     <h3>Revision scans</h3>
+                    <div class="overflow-x-auto">
                     <table class="pkg-table">
                         <thead>
                         <tr>
                             <th scope="col">Revision</th>
                             <th scope="col">Status</th>
-                            <th scope="col">Scanned</th>
+                            <th scope="col" class="max-sm:hidden">Scanned</th>
                             <th scope="col">Findings</th>
                         </tr>
                         </thead>
@@ -141,20 +142,21 @@ else
                         @foreach (var scan in _details.Scans)
                         {
                             <tr>
-                                <td class="font-mono">
+                                <td class="font-mono flex flex-wrap gap-1">
                                     <a href="@($"/package/{Name}?rev={scan.RevisionId}")">@UiFormatting.Truncate(scan.RevisionId)</a>
                                     @if (scan.IsHead)
                                     {
-                                        <span class="badge badge-seeded ml-2">head</span>
+                                        <span class="badge badge-seeded">head</span>
                                     }
                                 </td>
                                 <td><span class="badge @UiFormatting.BadgeClass(scan.Status)">@scan.Status.ToString().ToLowerInvariant()</span></td>
-                                <td class="font-mono text-[13px]">@(scan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                                <td class="font-mono text-[13px] max-sm:hidden">@(scan.ScannedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
                                 <td class="font-mono">@scan.Findings.Count</td>
                             </tr>
                         }
                         </tbody>
                     </table>
+                    </div>
                 }
 
                 @if (selectedScan is { Findings.Count: > 0 })
