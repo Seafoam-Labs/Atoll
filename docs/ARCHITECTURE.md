@@ -76,7 +76,7 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   in [Package seeding and refresh](SYNC.md).
 - **PackageSearchService** serves all search queries from the immutable in-memory snapshot with no database round-trips.
 - **Blazor Web UI:** Razor components under `Components/` provide a rich web UI. `PackageCatalogService` powers the
-  interactive package catalog with top-K max-heap selection and snapshot caching; `PackageDetailsService` assembles
+  interactive package catalog with per-sort cached sorted views and snapshot caching; `PackageDetailsService` assembles
   package metadata, relations, file views, and security verdicts; `StatusDashboardService` consolidates worker status,
   sync metrics, and exclusions for the status dashboard.
 - **GitTransferService** shells out to `git upload-pack` to serve clone/fetch requests. Bare repositories under
@@ -197,7 +197,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | MongoDB for package storage | Flexible schema; embedded revision metadata avoids joins | Revision file content is normalized into `package-revisions`, so the 16 MiB cap applies per snapshot; content reads take an extra indexed find; appends write two documents without transactions (write ordering keeps readers consistent) | Active |
 | Shell out to `git upload-pack` | Reuses the complete and reliable Git transfer implementation | Requires `git` installed in the container; subprocess overhead per request | Active |
 | Atomic `PackageIndexStore` snapshot swap | Lock-free reads; consistent view per request | Full index rebuild on each refresh; 2× peak memory while both snapshots are live. Incremental updates evaluated and rejected: rebuild cost is negligible at ~116k packages per 10-minute cycle. | Active |
-| `PackageCatalogService` top-K selection with server-side pagination | The Blazor catalog page (`/`) enumerates all ~85k indexed packages per request; a bounded max-heap keeps only the best `PageSize`×page rows instead of fully sorting and discarding the rest, and the page renders 50 rows at a time (`?page=N` is part of the URL state) | Keeps each page render small (~50 rows) without a database; the default-view cache that used to sit on top was removed as pagination already caps what is rendered. Every call still pays the ~20–25 ms floor from enumerating and substring-scanning the full index (deep pages materialize a proportionally larger top-K) | Active |
+| `PackageCatalogService` sorted-view cache with server-side pagination | The Blazor catalog page (`/`) paginates the full ~85k–118k-package index; each (index generation, sort) pair is sorted once into a cached array - dropped automatically when `PackageIndexStore.Replace` swaps the snapshot - after which paging is an O(PageSize) slice, and query/filter evaluation streams over the pre-sorted array, materializing rows only for the rendered page (measured: default view and page navigation ~0.01 ms warm, ~4 KB alloc/call) | First search per sort pays O(N log N) and one array of references per cached sort (~0.9 MB at 118k packages). Substring queries and seeded/security filters still scan every package (~15–25 ms floor) since matching is `Contains`-based; the catalog URL (`q`, `page`, `mode`, `seeded`, `security`, `sort`) is the single source of truth, so back/forward and deep links cover the full filter state | Active |
 | In-app response compression (Brotli + Gzip) | Compresses dynamic SSR/HTML payloads (e.g. catalog rows on `/`) and API responses to reduce transfer size ~5× without extra infra | Minimal CPU overhead (mitigated by `CompressionLevel.Fastest`). Security: ASP.NET Core disables compression over HTTPS by default (`EnableForHttps = false`) to protect against CRIME/BREACH side-channel attacks; safe for Atoll's HTTP-to-Kestrel architecture. | Active |
 | No authentication | Keeps the API simple for trusted private deployments | Unauthenticated callers can seed **and delete** packages; must sit behind a reverse proxy / firewall if exposed | Active |
 
@@ -234,10 +234,10 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
   revisions.
 - Evaluate content-addressed deduplication or GridFS/chunked storage for revision snapshots larger than MongoDB's 16 MiB
   document limit.
-- `PackageCatalogService` still enumerates and substring-scans the entire in-memory index on every call
-  (~20–25 ms at ~85k packages, even for a single-hit query) - a real substring/prefix index would be needed to
-  remove this floor. See `tailwind.md` (2026-08-22 status note) for the measurement harness and what was already
-  fixed (top-K selection; the default-view cache was later removed when pagination landed).
+- `PackageCatalogService` substring queries and seeded/security filters still scan the full sorted view on every call
+  (~15–25 ms at ~85k packages, even for a single-hit query) - a real substring/prefix index would be needed to remove
+  this floor. Empty-query default views bypass the scan via the per-sort cached sorted views (2026-08-23; replaced the
+  earlier top-K heap - see `tailwind.md` for the measurement harness).
 
 ## References
 

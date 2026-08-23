@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
@@ -65,8 +67,13 @@ public sealed class PackageCatalogService(
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
     private SeededSnapshot _snapshot = SeededSnapshot.Empty;
 
-    /// <summary>Drops the cached seeded/head-status snapshot so the next search re-reads it.
-    /// Call after seed/rescan actions so the catalog reflects new state immediately.</summary>
+    // Sorted package arrays cached per (index instance, sort). PackageIndexStore.Replace swaps the
+    // whole SearchIndexData, and ConditionalWeakTable keys on that instance, so a generation's
+    // views are dropped automatically once the replaced index is no longer referenced.
+    private readonly ConditionalWeakTable<SearchIndexData, ConcurrentDictionary<CatalogSort, AurPackageMetadata[]>>
+        _sortedViews = new();
+
+    /// <summary>Invalidates the cached seeded/head-status snapshot.</summary>
     public void InvalidateSnapshot()
     {
         Volatile.Write(ref _snapshot, _snapshot with { FetchedAt = DateTimeOffset.MinValue });
@@ -84,113 +91,95 @@ public sealed class PackageCatalogService(
         if (page < 1) page = 1;
 
         var index = indexStore.Current;
-        var isUnfiltered = seededFilter is CatalogSeededFilter.All && securityFilter is CatalogSecurityFilter.Any;
+        var sorted = GetSortedPackages(index, sort);
+        var matches = BuildPredicate(mode, query);
+        var snapshot = await GetSeededSnapshotAsync(ct);
 
-        var packages = index.ByNames.Values;
+        var result = CollectPage(sorted, matches, seededFilter, securityFilter, snapshot, page);
 
-        var matches = mode switch
-        {
-            CatalogSearchMode.Name => FilterByName(packages, query),
-            CatalogSearchMode.Words => FilterByWords(packages, query),
-            CatalogSearchMode.Provides => FilterByProvides(packages, query),
-            _ => packages
-        };
-
-        var packageComparer = PackageComparer(sort);
-
-        // Seeded/security state is irrelevant when both filters are no-ops, so skip building a
-        // CatalogRow (and the snapshot lookups it needs) for every match and only keep the
-        // page-worth of best packages by sort key; rows are materialized only for the winners.
-        if (isUnfiltered)
-        {
-            var snapshot = await GetSeededSnapshotAsync(ct);
-            return SearchUnfiltered(matches, snapshot, packageComparer, page);
-        }
-
-        return await SearchFilteredAsync(matches, seededFilter, securityFilter, packageComparer, page, ct);
+        // Clamp out-of-range pages to the last valid page.
+        return page > result.TotalPages
+            ? CollectPage(sorted, matches, seededFilter, securityFilter, snapshot, result.TotalPages)
+            : result;
     }
 
-    private static CatalogResult SearchUnfiltered(
-        IEnumerable<AurPackageMetadata> matches,
-        SeededSnapshot snapshot,
-        IComparer<AurPackageMetadata> packageComparer,
-        int page)
-    {
-        var topPackages = new BoundedTopK<AurPackageMetadata>(page * PageSize, packageComparer);
-        var total = 0;
-
-        foreach (var package in matches)
-        {
-            total++;
-            topPackages.Offer(package);
-        }
-
-        var rendered = topPackages.ExtractSorted()
-            .Skip((page - 1) * PageSize)
-            .Take(PageSize)
-            .Select(package => new CatalogRow(
-                package,
-                snapshot.SeededNames.Contains(package.Name),
-                snapshot.HeadStatuses.GetValueOrDefault(package.Name)))
-            .ToList();
-
-        return new CatalogResult(rendered, total, page, PageSize, TotalPages(total));
-    }
-
-
-    private async Task<CatalogResult> SearchFilteredAsync(
-        IEnumerable<AurPackageMetadata> matches,
+    private static CatalogResult CollectPage(
+        AurPackageMetadata[] sorted,
+        Func<AurPackageMetadata, bool>? matches,
         CatalogSeededFilter seededFilter,
         CatalogSecurityFilter securityFilter,
-        IComparer<AurPackageMetadata> packageComparer,
-        int page,
-        CancellationToken ct)
+        SeededSnapshot snapshot,
+        int page)
     {
-        var snapshot = await GetSeededSnapshotAsync(ct);
-        var rowComparer = Comparer<CatalogRow>.Create((a, b) => packageComparer.Compare(a.Package, b.Package));
-        var topRows = new BoundedTopK<CatalogRow>(page * PageSize, rowComparer);
-        var total = 0;
+        var needsRowFilters =
+            seededFilter is not CatalogSeededFilter.All || securityFilter is not CatalogSecurityFilter.Any;
+        var start = (long)(page - 1) * PageSize;
 
-        foreach (var package in matches)
+        List<AurPackageMetadata>? window = null;
+        int total;
+
+        // Fast path: direct slice for unfiltered views.
+        if (matches is null && !needsRowFilters)
         {
-            var row = new CatalogRow(
-                package,
-                snapshot.SeededNames.Contains(package.Name),
-                snapshot.HeadStatuses.GetValueOrDefault(package.Name));
+            total = sorted.Length;
+            var begin = (int)Math.Min(start, total);
+            var end = (int)Math.Min(start + PageSize, total);
+            window = new List<AurPackageMetadata>(end - begin);
+            for (var i = begin; i < end; i++)
+                window.Add(sorted[i]);
+        }
+        else
+        {
+            total = 0;
+            foreach (var package in sorted)
+            {
+                if (matches is not null && !matches(package)) continue;
+                if (needsRowFilters && !MatchesRowFilters(package, seededFilter, securityFilter, snapshot)) continue;
 
-            if (!MatchesSeededFilter(row, seededFilter)) continue;
-            if (!MatchesSecurityFilter(row, securityFilter)) continue;
-
-            total++;
-            topRows.Offer(row);
+                if (total >= start && total < start + PageSize)
+                    (window ??= new List<AurPackageMetadata>(PageSize)).Add(package);
+                total++;
+            }
         }
 
-        var rendered = topRows.ExtractSorted()
-            .Skip((page - 1) * PageSize)
-            .Take(PageSize)
-            .ToList();
-        return new CatalogResult(rendered, total, page, PageSize, TotalPages(total));
+        var rows = new List<CatalogRow>(window?.Count ?? 0);
+        if (window is not null)
+        {
+            foreach (var package in window)
+            {
+                rows.Add(new CatalogRow(
+                    package,
+                    snapshot.SeededNames.Contains(package.Name),
+                    snapshot.HeadStatuses.GetValueOrDefault(package.Name)));
+            }
+        }
+
+        return new CatalogResult(rows, total, page, PageSize, TotalPages(total));
+    }
+
+    private static bool MatchesRowFilters(
+        AurPackageMetadata package,
+        CatalogSeededFilter seededFilter,
+        CatalogSecurityFilter securityFilter,
+        SeededSnapshot snapshot)
+    {
+        var isSeeded = snapshot.SeededNames.Contains(package.Name);
+
+        var passesSeeded = seededFilter switch
+        {
+            CatalogSeededFilter.IndexOnly => !isSeeded,
+            CatalogSeededFilter.Seeded => isSeeded,
+            _ => true
+        };
+        if (!passesSeeded) return false;
+
+        if (securityFilter is CatalogSecurityFilter.Any) return true;
+
+        return isSeeded
+               && snapshot.HeadStatuses.GetValueOrDefault(package.Name)?.Status == ToSecurityStatus(securityFilter);
     }
 
     private static int TotalPages(int total) => Math.Max(1, (total + PageSize - 1) / PageSize);
-
-    private static bool MatchesSeededFilter(CatalogRow row, CatalogSeededFilter filter)
-    {
-        return filter switch
-        {
-            CatalogSeededFilter.IndexOnly => !row.IsSeeded,
-            CatalogSeededFilter.Seeded => row.IsSeeded,
-            _ => true
-        };
-    }
-
-    private static bool MatchesSecurityFilter(CatalogRow row, CatalogSecurityFilter filter)
-    {
-        // Scan state exists only for seeded packages; the security filter narrows to that subset.
-        if (filter is CatalogSecurityFilter.Any) return true;
-
-        return row.IsSeeded && row.Head?.Status == ToSecurityStatus(filter);
-    }
 
     private static SecurityStatus ToSecurityStatus(CatalogSecurityFilter filter)
     {
@@ -204,92 +193,74 @@ public sealed class PackageCatalogService(
         };
     }
 
-    private static IEnumerable<AurPackageMetadata> FilterByName(
-        IEnumerable<AurPackageMetadata> packages, string? query)
+    private AurPackageMetadata[] GetSortedPackages(SearchIndexData index, CatalogSort sort)
     {
-        if (string.IsNullOrWhiteSpace(query)) return packages;
+        var bySort = _sortedViews.GetValue(
+            index, static _ => new ConcurrentDictionary<CatalogSort, AurPackageMetadata[]>());
 
-        return packages.Where(package =>
-            package.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            package.Description.Contains(query, StringComparison.OrdinalIgnoreCase));
+        // Benign race: concurrent sorts produce identical arrays.
+        return bySort.GetOrAdd(
+            sort,
+            static (s, values) =>
+            {
+                var packages = values.ToArray();
+                Array.Sort(packages, PackageComparer(s));
+                return packages;
+            },
+            index.ByNames.Values);
     }
 
-    private static IEnumerable<AurPackageMetadata> FilterByWords(
-        IEnumerable<AurPackageMetadata> packages, string? query)
+    private static Func<AurPackageMetadata, bool>? BuildPredicate(CatalogSearchMode mode, string? query)
     {
-        if (string.IsNullOrWhiteSpace(query)) return packages;
+        if (string.IsNullOrWhiteSpace(query)) return null;
 
-        var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        return tokens.Length == 0
-            ? packages
-            : packages.Where(package => tokens.All(token => MatchesWord(package, token)));
-    }
-
-    private static bool MatchesWord(AurPackageMetadata package, string token)
-    {
-        return package.Name.Contains(token, StringComparison.OrdinalIgnoreCase)
-               || package.Description.Contains(token, StringComparison.OrdinalIgnoreCase)
-               || package.Provides.Any(provides => provides.Contains(token, StringComparison.OrdinalIgnoreCase))
-               || package.Keywords.Any(keyword => keyword.Contains(token, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static IEnumerable<AurPackageMetadata> FilterByProvides(
-        IEnumerable<AurPackageMetadata> packages, string? query)
-    {
-        if (string.IsNullOrWhiteSpace(query)) return packages;
-
-        return packages.Where(package =>
-            package.Provides.Any(provides => provides.Contains(query, StringComparison.OrdinalIgnoreCase)));
-    }
-
-    private static IComparer<AurPackageMetadata> PackageComparer(CatalogSort sort)
-    {
-        return sort switch
+        return mode switch
         {
-            CatalogSort.NameAsc => Comparer<AurPackageMetadata>.Create(
-                (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase)),
-            CatalogSort.NameDesc => Comparer<AurPackageMetadata>.Create(
-                (a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase)),
-            CatalogSort.VotesAsc => Comparer<AurPackageMetadata>.Create((a, b) => a.NumVotes.CompareTo(b.NumVotes)),
-            CatalogSort.VotesDesc => Comparer<AurPackageMetadata>.Create((a, b) => b.NumVotes.CompareTo(a.NumVotes)),
-            CatalogSort.PopularityAsc => Comparer<AurPackageMetadata>.Create((a, b) => a.Popularity.CompareTo(b.Popularity)),
-            CatalogSort.PopularityDesc => Comparer<AurPackageMetadata>.Create((a, b) => b.Popularity.CompareTo(a.Popularity)),
-            CatalogSort.LastModifiedAsc => Comparer<AurPackageMetadata>.Create((a, b) => a.LastModified.CompareTo(b.LastModified)),
-            CatalogSort.LastModifiedDesc => Comparer<AurPackageMetadata>.Create((a, b) => b.LastModified.CompareTo(a.LastModified)),
-            _ => Comparer<AurPackageMetadata>.Create(
-                (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase))
+            CatalogSearchMode.Name => package =>
+                package.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                package.Description.Contains(query, StringComparison.OrdinalIgnoreCase),
+            CatalogSearchMode.Words => BuildWordsPredicate(query),
+            CatalogSearchMode.Provides => package =>
+                package.Provides.Any(provides => provides.Contains(query, StringComparison.OrdinalIgnoreCase)),
+            _ => null
         };
     }
 
-    /// <summary>Keeps only the best <c>capacity</c> items seen so far, per <paramref name="comparer"/>,
-    /// using a bounded max-heap so the running cost is O(N log capacity) instead of a full O(N log N) sort.</summary>
-    private sealed class BoundedTopK<T>(int capacity, IComparer<T> comparer)
+    private static Func<AurPackageMetadata, bool> BuildWordsPredicate(string query)
     {
-        // Reversed comparer: the heap's min (its Peek) is the worst item per the caller's comparer,
-        // so it's the one to evict when a better candidate arrives.
-        private readonly PriorityQueue<T, T> _heap = new(Comparer<T>.Create((a, b) => -comparer.Compare(a, b)));
+        var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        public void Offer(T item)
+        return package => tokens.All(token =>
+            package.Name.Contains(token, StringComparison.OrdinalIgnoreCase)
+            || package.Description.Contains(token, StringComparison.OrdinalIgnoreCase)
+            || package.Provides.Any(provides => provides.Contains(token, StringComparison.OrdinalIgnoreCase))
+            || package.Keywords.Any(keyword => keyword.Contains(token, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static readonly Comparison<AurPackageMetadata> ByName =
+        (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+
+    private static IComparer<AurPackageMetadata> PackageComparer(CatalogSort sort)
+    {
+        // Array.Sort is unstable; tie-break on name for deterministic paging.
+        return sort switch
         {
-            if (_heap.Count < capacity)
-            {
-                _heap.Enqueue(item, item);
-                return;
-            }
-
-            if (comparer.Compare(item, _heap.Peek()) < 0)
-                _heap.EnqueueDequeue(item, item);
-        }
-
-        public List<T> ExtractSorted()
-        {
-            var list = new List<T>(_heap.Count);
-            while (_heap.TryDequeue(out var item, out _))
-                list.Add(item);
-            list.Sort(comparer);
-            return list;
-        }
+            CatalogSort.NameAsc => Comparer<AurPackageMetadata>.Create(ByName),
+            CatalogSort.NameDesc => Comparer<AurPackageMetadata>.Create((a, b) => ByName(b, a)),
+            CatalogSort.VotesAsc => Comparer<AurPackageMetadata>.Create(
+                (a, b) => a.NumVotes.CompareTo(b.NumVotes) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.VotesDesc => Comparer<AurPackageMetadata>.Create(
+                (a, b) => b.NumVotes.CompareTo(a.NumVotes) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.PopularityAsc => Comparer<AurPackageMetadata>.Create(
+                (a, b) => a.Popularity.CompareTo(b.Popularity) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.PopularityDesc => Comparer<AurPackageMetadata>.Create(
+                (a, b) => b.Popularity.CompareTo(a.Popularity) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.LastModifiedAsc => Comparer<AurPackageMetadata>.Create(
+                (a, b) => a.LastModified.CompareTo(b.LastModified) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.LastModifiedDesc => Comparer<AurPackageMetadata>.Create(
+                (a, b) => b.LastModified.CompareTo(a.LastModified) is var c && c != 0 ? c : ByName(a, b)),
+            _ => Comparer<AurPackageMetadata>.Create(ByName)
+        };
     }
 
     private async Task<SeededSnapshot> GetSeededSnapshotAsync(CancellationToken ct)

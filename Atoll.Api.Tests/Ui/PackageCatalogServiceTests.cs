@@ -162,6 +162,40 @@ public class PackageCatalogServiceTests
     }
 
     [Test]
+    public async Task NonNameSortsBreakTiesByNameForStablePaging()
+    {
+        // All packages share the same votes/popularity/mtime, so the name tie-break is the only
+        // thing keeping page boundaries deterministic across the cached sorted view.
+        var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
+        for (var i = 0; i < PackageCatalogService.PageSize + 1; i++)
+        {
+            var name = $"pkg-{i:0000}";
+            names[name] = CreateMetadata(name);
+        }
+
+        var store = new PackageIndexStore();
+        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
+
+        var service = new PackageCatalogService(
+            store, new SeededNamesPackageService([]), _securityRepository);
+
+        var page1 = await service.SearchAsync(
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 1);
+        var page2 = await service.SearchAsync(
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 2);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page1.Rows.Select(row => row.Package.Name),
+                Is.EqualTo(ExpectedNames(0, PackageCatalogService.PageSize)));
+            Assert.That(page2.Rows.Select(row => row.Package.Name),
+                Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize, 1)));
+        });
+    }
+
+    [Test]
     public async Task ResultsArePaginatedInPageSizeChunk()
     {
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
@@ -201,7 +235,10 @@ public class PackageCatalogServiceTests
                 Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize, PackageCatalogService.PageSize)));
             Assert.That(page3.Rows.Select(row => row.Package.Name),
                 Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize * 2, 1)));
-            Assert.That(page4.Rows, Is.Empty);
+            // Pages past the end clamp to the last page so stale deep links land on real content.
+            Assert.That(page4.Page, Is.EqualTo(3));
+            Assert.That(page4.Rows.Select(row => row.Package.Name),
+                Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize * 2, 1)));
         });
     }
 
@@ -223,6 +260,32 @@ public class PackageCatalogServiceTests
 
         Assert.That(result.Page, Is.EqualTo(1));
         Assert.That(result.Rows, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task SearchesReflectIndexReplacement()
+    {
+        var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
+        names["pkg-a"] = CreateMetadata("pkg-a");
+
+        var store = new PackageIndexStore();
+        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
+
+        var service = new PackageCatalogService(
+            store, new SeededNamesPackageService([]), _securityRepository);
+
+        var before = await service.SearchAsync(
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        Assert.That(before.Rows.Select(row => row.Package.Name), Is.EqualTo(["pkg-a"]));
+
+        names["pkg-b"] = CreateMetadata("pkg-b");
+        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
+
+        var after = await service.SearchAsync(
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        Assert.That(after.Rows.Select(row => row.Package.Name), Is.EqualTo(["pkg-a", "pkg-b"]));
     }
 
     private static string[] ExpectedNames(int start, int count)

@@ -101,134 +101,141 @@
 }
 else if (_result is not null)
 {
-    <div class="flow-root">
-        <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6">
-            <div class="inline-block min-w-full py-2 align-middle sm:px-6">
-                <table class="pkg-table min-w-full">
-                    <thead>
-                    <tr>
-                        <th scope="col" class="w-40 sm:w-64">
-                            <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.NameAsc, CatalogSort.NameDesc))">
-                                Name
-                                @if (_sort == CatalogSort.NameAsc)
-                                {
-                                    <span class="arrow">▼</span>
-                                }
-                                else if (_sort == CatalogSort.NameDesc)
-                                {
-                                    <span class="arrow">▲</span>
-                                }
-                            </button>
-                        </th>
-                        <th scope="col" class="hidden whitespace-nowrap md:table-cell">Version</th>
-                        <th scope="col">Description</th>
-                        <th scope="col" class="hidden sm:table-cell">
-                            <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.VotesDesc, CatalogSort.VotesAsc))">
-                                Votes
-                                @if (_sort == CatalogSort.VotesDesc)
-                                {
-                                    <span class="arrow">▼</span>
-                                }
-                                else if (_sort == CatalogSort.VotesAsc)
-                                {
-                                    <span class="arrow">▲</span>
-                                }
-                            </button>
-                        </th>
-                        <th scope="col" class="hidden lg:table-cell">
-                            <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc))">
-                                Popularity
-                                @if (_sort == CatalogSort.PopularityDesc)
-                                {
-                                    <span class="arrow">▼</span>
-                                }
-                                else if (_sort == CatalogSort.PopularityAsc)
-                                {
-                                    <span class="arrow">▲</span>
-                                }
-                            </button>
-                        </th>
-                        <th scope="col" class="hidden md:table-cell">
-                            <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc))">
-                                Last modified
-                                @if (_sort == CatalogSort.LastModifiedDesc)
-                                {
-                                    <span class="arrow">▼</span>
-                                }
-                                else if (_sort == CatalogSort.LastModifiedAsc)
-                                {
-                                    <span class="arrow">▲</span>
-                                }
-                            </button>
-                        </th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var row in _result.Rows)
-                    {
-                        var package = row.Package;
+    if (_loading)
+    {
+        <div class="fixed inset-x-0 top-0 z-50 h-0.5 bg-atoll animate-pulse" aria-hidden="true"></div>
+    }
+    <div class="transition-opacity duration-150 @(_loading ? "opacity-50 pointer-events-none" : "")"
+         aria-busy="@(_loading ? "true" : null)">
+        <div class="flow-root">
+            <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6">
+                <div class="inline-block min-w-full py-2 align-middle sm:px-6">
+                    <table class="pkg-table min-w-full">
+                        <thead>
                         <tr>
-                            <td class="w-40 sm:w-64">
-                                <div class="flex flex-col gap-1 max-w-[10rem] sm:max-w-[16rem]">
-                                    <a href="@($"/package/{package.Name}")" class="truncate font-semibold text-ink" title="@package.Name">@package.Name</a>
-                                    @if (!string.Equals(package.PackageBase, package.Name, StringComparison.Ordinal))
+                            <th scope="col" class="w-40 sm:w-64">
+                                <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.NameAsc, CatalogSort.NameDesc))">
+                                    Name
+                                    @if (_sort == CatalogSort.NameAsc)
                                     {
-                                        <div class="text-ink-faint text-[13px] truncate -mt-1" title="base: @package.PackageBase">base: @package.PackageBase</div>
+                                        <span class="arrow">▼</span>
                                     }
-                                    @if (row.IsSeeded || row.Head is not null)
+                                    else if (_sort == CatalogSort.NameDesc)
                                     {
-                                        <div class="flex flex-wrap gap-1 -ml-1">
-                                            @if (row.IsSeeded)
-                                            {
-                                                <span class="badge badge-seeded">seeded</span>
-                                            }
-                                            @if (row.Head is not null)
-                                            {
-                                                <span class="badge @UiFormatting.BadgeClass(row.Head.Status)">@row.Head.Status.ToString().ToLowerInvariant()</span>
-                                            }
-                                        </div>
+                                        <span class="arrow">▲</span>
                                     }
-                                </div>
-                            </td>
-                            <td class="hidden whitespace-nowrap font-mono md:table-cell">@package.Version</td>
-                            <td>@package.Description</td>
-                            <td class="hidden whitespace-nowrap font-mono sm:table-cell">@package.NumVotes</td>
-                            <td class="hidden whitespace-nowrap font-mono lg:table-cell">@package.Popularity.ToString("0.000000")</td>
-                            <td class="hidden whitespace-nowrap font-mono text-[13px] md:table-cell">@UiFormatting.FormatUnix(package.LastModified)</td>
+                                </button>
+                            </th>
+                            <th scope="col" class="hidden whitespace-nowrap md:table-cell">Version</th>
+                            <th scope="col">Description</th>
+                            <th scope="col" class="hidden sm:table-cell">
+                                <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.VotesDesc, CatalogSort.VotesAsc))">
+                                    Votes
+                                    @if (_sort == CatalogSort.VotesDesc)
+                                    {
+                                        <span class="arrow">▼</span>
+                                    }
+                                    else if (_sort == CatalogSort.VotesAsc)
+                                    {
+                                        <span class="arrow">▲</span>
+                                    }
+                                </button>
+                            </th>
+                            <th scope="col" class="hidden lg:table-cell">
+                                <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc))">
+                                    Popularity
+                                    @if (_sort == CatalogSort.PopularityDesc)
+                                    {
+                                        <span class="arrow">▼</span>
+                                    }
+                                    else if (_sort == CatalogSort.PopularityAsc)
+                                    {
+                                        <span class="arrow">▲</span>
+                                    }
+                                </button>
+                            </th>
+                            <th scope="col" class="hidden md:table-cell">
+                                <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc))">
+                                    Last modified
+                                    @if (_sort == CatalogSort.LastModifiedDesc)
+                                    {
+                                        <span class="arrow">▼</span>
+                                    }
+                                    else if (_sort == CatalogSort.LastModifiedAsc)
+                                    {
+                                        <span class="arrow">▲</span>
+                                    }
+                                </button>
+                            </th>
                         </tr>
-                    }
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                        @foreach (var row in _result.Rows)
+                        {
+                            var package = row.Package;
+                            <tr>
+                                <td class="w-40 sm:w-64">
+                                    <div class="flex flex-col gap-1 max-w-[10rem] sm:max-w-[16rem]">
+                                        <a href="@($"/package/{package.Name}")" class="truncate font-semibold text-ink" title="@package.Name">@package.Name</a>
+                                        @if (!string.Equals(package.PackageBase, package.Name, StringComparison.Ordinal))
+                                        {
+                                            <div class="text-ink-faint text-[13px] truncate -mt-1" title="base: @package.PackageBase">base: @package.PackageBase</div>
+                                        }
+                                        @if (row.IsSeeded || row.Head is not null)
+                                        {
+                                            <div class="flex flex-wrap gap-1 -ml-1">
+                                                @if (row.IsSeeded)
+                                                {
+                                                    <span class="badge badge-seeded">seeded</span>
+                                                }
+                                                @if (row.Head is not null)
+                                                {
+                                                    <span class="badge @UiFormatting.BadgeClass(row.Head.Status)">@row.Head.Status.ToString().ToLowerInvariant()</span>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="hidden whitespace-nowrap font-mono md:table-cell">@package.Version</td>
+                                <td>@package.Description</td>
+                                <td class="hidden whitespace-nowrap font-mono sm:table-cell">@package.NumVotes</td>
+                                <td class="hidden whitespace-nowrap font-mono lg:table-cell">@package.Popularity.ToString("0.000000")</td>
+                                <td class="hidden whitespace-nowrap font-mono text-[13px] md:table-cell">@UiFormatting.FormatUnix(package.LastModified)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
+        <nav class="mt-3 flex items-center justify-between gap-3 text-sm text-ink-soft" aria-label="Pagination">
+            @{
+                var first = (_result.Page - 1) * _result.PageSize + 1;
+                var last = Math.Min(_result.Page * _result.PageSize, _result.TotalMatches);
+            }
+            <span>Page @_result.Page of @_result.TotalPages · showing @first-@last of @_result.TotalMatches</span>
+            <div class="flex items-center gap-2">
+                <button type="button" class="btn" disabled="@(_result.Page <= 1)"
+                        @onclick="@(() => GoToPage(_result.Page - 1))">‹ Prev</button>
+                <div class="hidden items-center gap-1 sm:flex">
+                    @foreach (var p in PageWindow())
+                    {
+                        if (p is null)
+                        {
+                            <span class="px-1" aria-hidden="true">…</span>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn" aria-current="@(p == _result.Page ? "page" : null)"
+                                    @onclick="@(() => GoToPage(p.Value))">@p</button>
+                        }
+                    }
+                </div>
+                <button type="button" class="btn" disabled="@(_result.Page >= _result.TotalPages)"
+                        @onclick="@(() => GoToPage(_result.Page + 1))">Next ›</button>
+            </div>
+        </nav>
     </div>
-    <nav class="mt-3 flex items-center justify-between gap-3 text-sm text-ink-soft" aria-label="Pagination">
-        @{
-            var first = (_result.Page - 1) * _result.PageSize + 1;
-            var last = Math.Min(_result.Page * _result.PageSize, _result.TotalMatches);
-        }
-        <span>Page @_result.Page of @_result.TotalPages · showing @first-@last of @_result.TotalMatches</span>
-        <div class="flex items-center gap-2">
-            <button type="button" class="btn" disabled="@(_result.Page <= 1)"
-                    @onclick="@(() => GoToPage(_result.Page - 1))">‹ Prev</button>
-            <div class="hidden items-center gap-1 sm:flex">
-                @foreach (var p in PageWindow())
-                {
-                    if (p is null)
-                    {
-                        <span class="px-1" aria-hidden="true">…</span>
-                    }
-                    else
-                    {
-                        <button type="button" class="btn" aria-current="@(p == _result.Page ? "page" : null)"
-                                @onclick="@(() => GoToPage(p.Value))">@p</button>
-                    }
-                }
-            </div>
-            <button type="button" class="btn" disabled="@(_result.Page >= _result.TotalPages)"
-                    @onclick="@(() => GoToPage(_result.Page + 1))">Next ›</button>
-        </div>
-    </nav>
 }
 
 @code {
@@ -243,34 +250,42 @@ else if (_result is not null)
     private string? _error;
     private int _searchVersion;
     private bool _parametersInitialized;
-
     private int _page = 1;
+    private CatalogState _appliedState = CatalogState.Default;
 
     [SupplyParameterFromQuery(Name = "q")] private string? QueryParam { get; set; }
 
     [SupplyParameterFromQuery(Name = "page")] private int? PageParam { get; set; }
 
+    [SupplyParameterFromQuery(Name = "mode")] private string? ModeParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "seeded")] private string? SeededParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "security")] private string? SecurityParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "sort")] private string? SortParam { get; set; }
+
+    // Query parameters are the single source of truth; navigation triggers all loads.
     protected override async Task OnParametersSetAsync()
     {
-        var query = QueryParam ?? "";
-        var page = Math.Max(1, PageParam ?? 1);
-        var stateChanged = !_parametersInitialized ||
-                           !string.Equals(_appliedQuery, query, StringComparison.Ordinal) ||
-                           _page != page;
+        var state = CatalogState.FromQuery(QueryParam, PageParam, ModeParam, SeededParam, SecurityParam, SortParam);
+        var stateChanged = !_parametersInitialized || state != _appliedState;
         _parametersInitialized = true;
 
-        if (stateChanged)
-        {
-            _query = query;
-            _page = page;
-            await ReloadAsync();
-        }
+        if (!stateChanged) return;
+
+        _appliedState = state;
+        _query = state.Query;
+        _page = state.Page;
+        _mode = state.Mode;
+        _seededFilter = state.Seeded;
+        _securityFilter = state.Security;
+        _sort = state.Sort;
+
+        await ReloadAsync();
     }
 
-    private void OnQueryInput(ChangeEventArgs e)
-    {
-        _query = e.Value?.ToString() ?? "";
-    }
+    private void OnQueryInput(ChangeEventArgs e) => _query = e.Value?.ToString() ?? "";
 
     private void ToggleSort(CatalogSort primary, CatalogSort secondary)
     {
@@ -280,7 +295,7 @@ else if (_result is not null)
 
     private void ClearFilters()
     {
-        _query = _appliedQuery = "";
+        _query = "";
         _mode = CatalogSearchMode.Name;
         _seededFilter = CatalogSeededFilter.All;
         _securityFilter = CatalogSecurityFilter.Any;
@@ -288,20 +303,24 @@ else if (_result is not null)
         ReloadNow();
     }
 
-    private void ReloadNow()
+    private void ReloadNow() => ApplyCurrent(page: 1);
+
+    private void GoToPage(int page) => ApplyCurrent(Math.Max(1, page));
+
+    private void ApplyCurrent(int page)
     {
-        // A fresh query, filter or sort change always restarts from the first page.
-        _page = 1;
-        _ = ReloadAsync();
+        var state = new CatalogState(_query, page, _mode, _seededFilter, _securityFilter, _sort);
+        var uri = state.ToUri(Nav);
+        if (uri == Nav.Uri)
+        {
+            // If the URL didn't change (e.g. retrying after failure), reload directly.
+            _ = ReloadAsync();
+            return;
+        }
+
+        Nav.NavigateTo(uri, forceLoad: false);
     }
 
-    private void GoToPage(int page)
-    {
-        _page = page;
-        _ = ReloadAsync();
-    }
-
-    /// First page, last page, and the pages adjacent to the current one, with nulls marking ellipsis gaps.
     private IEnumerable<int?> PageWindow()
     {
         var total = _result!.TotalPages;
@@ -325,32 +344,16 @@ else if (_result is not null)
         var version = Interlocked.Increment(ref _searchVersion);
         _loading = true;
         _appliedQuery = _query;
-
-        var q = string.IsNullOrWhiteSpace(_query) ? null : _query;
-        var parameters = new Dictionary<string, object?>
-        {
-            ["q"] = q,
-            ["page"] = _page > 1 ? _page : null,
-        };
-        var uri = Nav.GetUriWithQueryParameters(parameters);
-        if (uri != Nav.Uri)
-        {
-            Nav.NavigateTo(uri, forceLoad: false);
-        }
+        // Paint loading state immediately before synchronous search/filter work.
+        await InvokeAsync(StateHasChanged);
 
         try
         {
             var result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort, _page);
             if (version != _searchVersion) return;
 
-            if (_page > result.TotalPages)
-            {
-                _page = result.TotalPages;
-                result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort, _page);
-                if (version != _searchVersion) return;
-            }
-
             _result = result;
+            _page = result.Page;
             _error = null;
         }
         catch (Exception ex)
@@ -366,4 +369,68 @@ else if (_result is not null)
         }
     }
 
+    private readonly record struct CatalogState(
+        string Query,
+        int Page,
+        CatalogSearchMode Mode,
+        CatalogSeededFilter Seeded,
+        CatalogSecurityFilter Security,
+        CatalogSort Sort)
+    {
+        public static CatalogState Default { get; } = new(
+            "", 1, CatalogSearchMode.Name, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSort.NameAsc);
+
+        public static CatalogState FromQuery(
+            string? q,
+            int? page,
+            string? mode,
+            string? seeded,
+            string? security,
+            string? sort) => new(
+                q ?? "",
+                Math.Max(1, page ?? 1),
+                Parse(mode, CatalogSearchMode.Name),
+                Parse(seeded, CatalogSeededFilter.All),
+                Parse(security, CatalogSecurityFilter.Any),
+                Parse(sort, CatalogSort.NameAsc));
+
+        public string ToUri(NavigationManager nav)
+        {
+            return nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+            {
+                ["q"] = string.IsNullOrWhiteSpace(Query) ? null : Query,
+                ["page"] = Page > 1 ? Page : null,
+                ["mode"] = Mode == CatalogSearchMode.Name ? null : Kebab(Mode),
+                ["seeded"] = Seeded == CatalogSeededFilter.All ? null : Kebab(Seeded),
+                ["security"] = Security == CatalogSecurityFilter.Any ? null : Kebab(Security),
+                ["sort"] = Sort == CatalogSort.NameAsc ? null : Kebab(Sort)
+            });
+        }
+
+        private static T Parse<T>(string? value, T fallback) where T : struct, Enum
+        {
+            var text = value?.Replace("-", "");
+            return text is not null
+                   && Enum.TryParse<T>(text, ignoreCase: true, out var parsed)
+                   && Enum.IsDefined(parsed)
+                ? parsed
+                : fallback;
+        }
+
+        // e.g. VotesDesc -> votes-desc
+        private static string Kebab<T>(T value) where T : struct, Enum
+        {
+            var name = value.ToString();
+            var chars = new char[name.Length * 2];
+            var length = 0;
+            foreach (var ch in name)
+            {
+                if (char.IsUpper(ch) && length > 0)
+                    chars[length++] = '-';
+                chars[length++] = char.ToLowerInvariant(ch);
+            }
+
+            return new string(chars, 0, length);
+        }
+    }
 }

@@ -94,11 +94,18 @@ public class PackageCatalogServicePerfTests
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.NameAsc, expectedTotal: PackageCount);
 
+        // Steady-state pagination: the NameAsc sorted view is warm from the scenario above,
+        // so this is what every page click costs once a sort has been materialized.
+        await RunScenarioAsync("page navigation (empty q, NameAsc, page 7)",
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.NameAsc, expectedTotal: PackageCount, page: 7);
+
         await RunScenarioAsync("sort toggle (empty q, VotesDesc)",
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.VotesDesc, expectedTotal: PackageCount);
 
-        // Only ~1k rows survive the seeded filter, but rows are still built for every match first.
+        // Only ~1k rows survive the seeded filter; row state is still probed per match,
+        // but rows are materialized only for the rendered page.
         await RunScenarioAsync("seeded filter (empty q, Seeded, VotesDesc)",
             null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.VotesDesc, expectedTotal: SeededCount);
@@ -119,13 +126,14 @@ public class PackageCatalogServicePerfTests
         CatalogSecurityFilter securityFilter,
         CatalogSearchMode mode,
         CatalogSort sort,
-        int? expectedTotal)
+        int? expectedTotal,
+        int page = 1)
     {
         CatalogResult? last = null;
 
         var watch = Stopwatch.StartNew();
         var measurement = await MeasureAsync(async () =>
-            last = await _service.SearchAsync(query, seededFilter, securityFilter, mode, sort));
+            last = await _service.SearchAsync(query, seededFilter, securityFilter, mode, sort, page));
         watch.Stop();
 
         TestContext.Out.WriteLine(
