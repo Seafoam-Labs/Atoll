@@ -240,18 +240,19 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
-    public void Local_source_file_with_invalid_utf8_is_flagged_as_binary()
+    public void Local_source_file_with_only_invalid_utf8_is_retained_medium()
     {
         // A lone continuation byte (0x80) is not valid UTF-8 and decodes to the
-        // replacement character (U+FFFD), which the scanner treats as binary.
+        // replacement character (U+FFFD). With no NUL or control characters present the
+        // file is treated as text in an unrecognized encoding: retained, non-blocking.
         var invalid = Encoding.UTF8.GetString([0x41, 0x80, 0x42]);
 
         var result = Scan(("blob", invalid));
 
         var finding = result.Findings.Single(f => f.RuleId == "local-binary");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(finding.Message, Does.Contain("binary"));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("unrecognized encoding"));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
     }
 
     [Test]
@@ -406,11 +407,97 @@ public class PkgBuildSecurityScannerTests
     [Test]
     public void Shelly_pkgbuild_is_verified_with_only_expected_command_substitution_findings()
     {
+        // The fourth historical finding - $(basename ...) inside the <<'SCRIPT' heredoc
+        // body - is suppressed: a quoted delimiter makes the body literal data.
         var result = Scan(("PKGBUILD", ShellyPkgbuild));
 
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-        Assert.That(result.Findings, Has.Count.EqualTo(4));
+        Assert.That(result.Findings, Has.Count.EqualTo(3));
         Assert.That(result.Findings, Is.All.Matches<SecurityFinding>(f =>
             f is { RuleId: "command-substitution", Severity: FindingSeverity.Medium }));
+    }
+
+    [Test]
+    public void Command_substitution_in_single_quoted_grep_argument_does_not_block()
+    {
+        var result = Scan(("PKGBUILD", "grep -F '$(BUILD_FLAGS)' config\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "command-substitution"), Is.False);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Quoted_echo_redirect_text_does_not_block()
+    {
+        var result = Scan(("PKGBUILD", "echo \" >> /etc/mkinitcpio.conf.\"\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "write-outside-build-root"), Is.False);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Quoted_escaped_tool_mention_does_not_block()
+    {
+        // The corpus false-positive class: echo'd instructions containing \$(sudo ...)
+        // used to escalate to Critical via escape stripping. The backslash prevents
+        // execution, so the tool name is display text and no longer flagged at all.
+        var result = Scan(("PKGBUILD", "echo \"then run: \\$(sudo whoami)\"\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Escaped_substitution_inside_double_quotes_is_retained_medium_but_not_critical()
+    {
+        // $( only appears after normalization drops the backslashes; it stays a
+        // non-blocking Medium finding instead of escalating to Critical.
+        var result = Scan(("PKGBUILD", "echo \"$\\(date\\)\"\n"));
+
+        var finding = result.Findings.Single(f => f.RuleId == "command-substitution");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Inert_media_source_files_are_medium_and_do_not_block()
+    {
+        var png = Encoding.UTF8.GetString([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, .. new byte[16]]);
+        var pdf = "%PDF-1.7\nstream\n\0\0binary\nendstream\n";
+        var font = Encoding.UTF8.GetString([0x00, 0x01, 0x00, 0x00, .. new byte[16]]);
+
+        var result = Scan(
+            ("icon.png", png),
+            ("manual.pdf", pdf),
+            ("font.ttf", font),
+            ("PKGBUILD", "pkgname=foo\n"));
+
+        var findings = result.Findings.Where(f => f.RuleId == "local-binary").ToList();
+        Assert.That(findings, Has.Count.EqualTo(3));
+        Assert.That(findings, Is.All.Matches<SecurityFinding>(f => f.Severity == FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Unrecognized_binary_source_files_remain_critical_and_block()
+    {
+        var result = Scan(("payload.bin", "abc\0def\n"));
+
+        var finding = result.Findings.Single(f => f.RuleId == "local-binary");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Non_utf8_text_files_are_medium_and_do_not_block()
+    {
+        // Only undecodable bytes (U+FFFD), no NUL/control characters: legacy encodings.
+        var legacy = Encoding.UTF8.GetString([0x41, 0x80, 0x42, 0x0A]);
+
+        var result = Scan(("notes.txt", legacy), ("PKGBUILD", "pkgname=foo\n"));
+
+        var finding = result.Findings.Single(f => f.RuleId == "local-binary");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
     }
 }

@@ -12,15 +12,19 @@ The application-level implementation is in:
 - `Atoll.Api/Services/Security/PkgBuildSecurityScanner.cs` — thin facade: iterates files, delegates to the
   components below, and reduces their findings into the final `ScanResult`.
 - `Atoll.Api/Services/Security/Scanning/ShellContentScanner.cs` — owns the rule set and the risky/privilege tool lists,
-  and runs the per-line scan loop (rule matching, tool detection, obfuscation escalation).
+  and runs the per-line scan loop (rule matching, tool detection, obfuscation escalation), quote-aware match
+  suppression, and heredoc body tracking.
 - `Atoll.Api/Services/Security/Scanning/ShellSyntax.cs` — shell-aware primitives shared across rules: comment
-  stripping, de-obfuscation normalization, quoted-region mask, tool-boundary matching, hidden-codepoint detection.
+  stripping, de-obfuscation normalization with a source map back to the original line, quote-region tracking,
+  tool-boundary matching, hidden-codepoint detection.
 - `Atoll.Api/Services/Security/Scanning/PkgBuildSourceUrlScanner.cs` — inspects `source=` declarations for suspicious
   archive/executable URLs (PKGBUILD only).
 - `Atoll.Api/Services/Security/Scanning/PackageBuildFileClassifier.cs` — decides which files are scannable
   (`PKGBUILD` plus script-like companion extensions).
-- `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — flags source files that are ELF executables
-  or contain binary bytes (applies to every file, not just script-like extensions).
+- `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — classifies source files that are ELF
+  executables or contain binary bytes: blocking `Critical` for ELF/unrecognized binaries, non-blocking `Medium` for
+  inert media, certificate/signature files, and unencodable text (applies to every file, not just script-like
+  extensions).
 - `Atoll.Api/Services/Security/PackageSecurityWorker.cs`
 - `Atoll.Api/Services/Security/MongoPackageSecurityRepository.cs`
 - `Atoll.Api/Services/Security/PackageSecurityAccess.cs`
@@ -83,9 +87,13 @@ only in `package-security-scans`.
 
 `PkgBuildSecurityScanner` is deterministic and side-effect free: the same input always yields the same findings, and it
 executes no code. Every file is first checked for binary content — ELF magic, NUL/control bytes, or undecodable UTF-8 —
-because a binary source file cannot be reviewed as text and may hide malicious code. Script-like files (the `PKGBUILD`
-plus companions `.sh`, `.bash`, `.install`, `.hook`, `.py`, `.pl`, `.rb`, `.service`, `.csh`, `.zsh`) are then scanned
-line by line for shell threats. Remaining non-script, non-binary files (patches, etc.) are ignored.
+because a binary source file cannot be reviewed as text and may hide malicious code. The severity depends on what the
+content looks like: ELF executables and unrecognized binaries stay `Critical` (blocking), while content that cannot
+execute on its own — recognized media/data magic bytes, certificate/signature files, and text whose only binary
+indicator is undecodable bytes — is emitted as a non-blocking `Medium` finding (see the `local-binary` notes below).
+Script-like files (the `PKGBUILD` plus companions `.sh`, `.bash`, `.install`, `.hook`, `.py`, `.pl`, `.rb`, `.service`,
+`.csh`, `.zsh`) are then scanned line by line for shell threats. Remaining non-script, non-binary files (patches, etc.)
+are ignored.
 
 Each script file is processed line by line. Shell comments are stripped first (honoring single- and double-quote state),
 then the line is **de-obfuscated** by collapsing quote-splitting (`c''u''rl` → `curl`) and dropping intra-word backslash
@@ -94,6 +102,25 @@ escapes. Every rule is matched against both the raw line and the de-obfuscated p
 - If a rule matches only on the de-obfuscated probe, the invocation was deliberately hidden and the finding is escalated
   to `Critical`.
 - If it matches on both, the rule's normal severity applies.
+
+Matching is quote-aware: the scanner tracks the shell quote region at every position of the line and drops matches
+that cannot execute.
+
+- `$(…)`, backticks and `${!…}` only expand outside single quotes, so matches inside single quotes — or behind a
+  backslash escape (`\$(…)`) — are dropped. Double-quoted expansions still execute and stay flagged.
+- Redirects and `tee` targets are dropped when the operator sits inside any quoted string or is backslash-escaped —
+  `echo " >> /etc/…"` is literal text, not a write.
+- Obfuscation escalation is gated on the same analysis: a match that only appears on the de-obfuscated probe and maps
+  entirely inside quoted regions of the raw line is an escape-stripping artifact (e.g. echo'd instructions containing
+  `\$(sudo …)`, where the backslash prevents execution) rather than hidden intent — it is dropped or kept at the
+  rule's normal severity instead of escalating to `Critical`. Genuine quote-split obfuscation outside quotes
+  (`s''u''d''o`) still escalates.
+
+Heredoc bodies are tracked across lines. A quoted delimiter (`<<'EOF'`, `<<"EOF"`, `<<\EOF`) makes the body literal
+data, so the non-blocking expansion rules (`command-substitution`, `variable-indirection`) are suppressed inside it.
+As a conservative guard, suppression is lifted when the declaration pipes the body into a shell or interpreter
+(`cat <<'EOF' | sh`), and blocking rules always stay active inside bodies. Unquoted-delimiter bodies expand and are
+scanned as ordinary lines.
 
 The current rules, with their default severities:
 
@@ -109,14 +136,25 @@ The current rules, with their default severities:
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
 | `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime). |
 | `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
-| `local-binary` | Critical | A source file that is an ELF executable or contains binary bytes (NUL, control, undecodable UTF-8). Whole-file check. |
+| `local-binary` | Critical (Medium for inert content) | A source file that is an ELF executable or contains binary bytes (NUL, control, undecodable UTF-8). Whole-file check; severity split by content, see below. |
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after), not
 as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
 
 `local-binary` is the one rule that is not a per-line shell check: it runs once per file on the whole content and
-applies to every file in the package regardless of extension. The remaining rules are shell-line rules and only run on
-scannable script files.
+applies to every file in the package regardless of extension. Its severity is split by content: ELF executables and
+unrecognized binaries are `Critical` and block the package, while content that cannot execute on its own is retained
+as non-blocking `Medium`:
+
+- Inert media recognized by magic bytes on the (UTF-8-decoded) content — PNG, JPEG, GIF, BMP, ICO, WebP,
+  TrueType/OpenType/WOFF/WOFF2 fonts, PDF. Content-based, so renaming `.exe` to `.png` does not help. Archives are
+  deliberately not allowlisted: they can carry executables.
+- Certificate/signature files by extension (`.sig`, `.asc`, `.gpg`, `.cer`, `.crt`, `.pem`) — inert data with no
+  reliable magic bytes. ELF content still takes precedence and stays `Critical`.
+- Text whose only binary indicator is undecodable UTF-8 (U+FFFD from legacy encodings), with no NUL or control
+  characters.
+
+The remaining rules are shell-line rules and only run on scannable script files.
 
 Adding or changing a shell rule is a one-line change to the `Rules` array in `ShellContentScanner` (or the
 `PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). The `local-binary` rule remains separate because it
@@ -297,8 +335,14 @@ the previous section resolving on its own after restart.
   treat `Verified` as a guarantee.
 - **Binary detection runs on UTF-8-decoded strings.** Package content reaches the scanner already decoded from UTF-8,
   so invalid byte sequences collapse to the replacement character (U+FFFD) instead of being inspected as raw bytes. This
-  is enough to catch ELF/NUL/control-byte content, but a legitimate text file containing a literal U+FFFD would also be
-  flagged. Byte-exact detection would require the seed paths (`MongoPackageService`, `AurMirror`) to surface raw bytes.
+  is enough to catch ELF/NUL/control-byte content, but a legitimate text file containing a literal U+FFFD is retained
+  as a non-blocking `Medium` finding (unencodable text). The inert-media magic matching works within the same
+  constraint — signatures are anchored on the bytes that survive decoding, which is precise for the allowlisted formats
+  but weaker than raw-byte matching. Byte-exact detection would require the seed paths (`MongoPackageService`,
+  `AurMirror`) to surface raw bytes.
+- **Heredoc prose can still block.** Quoted-delimiter heredoc bodies suppress only the non-blocking expansion rules;
+  `sudo`/redirect-looking prose inside them can still yield blocking `High` findings. Extending suppression to
+  blocking rules requires handling pipe-to-installer patterns (`cat <<EOF | sh`, `install < /dev/stdin`) safely first.
 - **No manual override.** There is no `ForceVerified` / `ForceBlocked` state for a package a maintainer has reviewed and
   wants to unblock (or block) regardless of scanner output.
 - **No source-host policy.** `suspicious-source-url` is a syntactic check only; there is no allow/deny list for source

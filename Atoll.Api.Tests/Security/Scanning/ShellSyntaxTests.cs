@@ -32,39 +32,58 @@ public class ShellSyntaxTests
     [Test]
     public void NormalizeForMatching_rejoins_empty_single_quote_obfuscation()
     {
-        Assert.That(ShellSyntax.NormalizeForMatching("c''u''rl example"), Is.EqualTo("curl example"));
+        Assert.That(ShellSyntax.NormalizeForMatching("c''u''rl example").Text, Is.EqualTo("curl example"));
     }
 
     [Test]
     public void NormalizeForMatching_rejoins_empty_double_quote_obfuscation()
     {
-        Assert.That(ShellSyntax.NormalizeForMatching("s\"\"u\"\"do whoami"), Is.EqualTo("sudo whoami"));
+        Assert.That(ShellSyntax.NormalizeForMatching("s\"\"u\"\"do whoami").Text, Is.EqualTo("sudo whoami"));
     }
 
     [Test]
     public void NormalizeForMatching_strips_backslash_escapes_in_front_of_non_whitespace()
     {
         // \$ outside quotes is just $ to the shell, so the de-obfuscator drops the backslash.
-        Assert.That(ShellSyntax.NormalizeForMatching("echo \\$HOME"), Is.EqualTo("echo $HOME"));
+        Assert.That(ShellSyntax.NormalizeForMatching("echo \\$HOME").Text, Is.EqualTo("echo $HOME"));
     }
 
     [Test]
     public void NormalizeForMatching_preserves_backslash_whitespace_escape()
     {
         // \<space> is a literal escaped space in shell - keep it intact so word boundaries survive.
-        Assert.That(ShellSyntax.NormalizeForMatching("echo\\ cat"), Is.EqualTo("echo\\ cat"));
+        Assert.That(ShellSyntax.NormalizeForMatching("echo\\ cat").Text, Is.EqualTo("echo\\ cat"));
     }
 
     [Test]
     public void NormalizeForMatching_preserves_double_backslash()
     {
-        Assert.That(ShellSyntax.NormalizeForMatching("echo \\\\"), Is.EqualTo("echo \\\\"));
+        Assert.That(ShellSyntax.NormalizeForMatching("echo \\\\").Text, Is.EqualTo("echo \\\\"));
     }
 
     [Test]
     public void NormalizeForMatching_combines_quote_and_escape_obfuscation()
     {
-        Assert.That(ShellSyntax.NormalizeForMatching("c''u\\rl example"), Is.EqualTo("curl example"));
+        Assert.That(ShellSyntax.NormalizeForMatching("c''u\\rl example").Text, Is.EqualTo("curl example"));
+    }
+
+    [Test]
+    public void NormalizeForMatching_source_indices_map_surviving_characters_back_to_the_original()
+    {
+        // c''u''rl -> curl; each normalized character keeps its original position.
+        var (text, sourceIndices) = ShellSyntax.NormalizeForMatching("c''u''rl");
+
+        Assert.That(text, Is.EqualTo("curl"));
+        Assert.That(sourceIndices, Is.EqualTo([0, 3, 6, 7]));
+    }
+
+    [Test]
+    public void NormalizeForMatching_source_indices_skip_dropped_escapes()
+    {
+        var (text, sourceIndices) = ShellSyntax.NormalizeForMatching("\\$(x)");
+
+        Assert.That(text, Is.EqualTo("$(x)"));
+        Assert.That(sourceIndices, Is.EqualTo([1, 2, 3, 4]));
     }
 
     [Test]
@@ -165,5 +184,116 @@ public class ShellSyntaxTests
     public void ContainsHiddenCharacter_returns_false_for_empty_string()
     {
         Assert.That(ShellSyntax.ContainsHiddenCharacter(""), Is.False);
+    }
+
+    [Test]
+    public void ComputeQuotePositions_tracks_single_quoted_regions()
+    {
+        var positions = ShellSyntax.ComputeQuotePositions("a='x' b");
+
+        Assert.That(positions[0].Region, Is.EqualTo(ShellSyntax.QuoteRegion.Normal));
+        Assert.That(positions[3].Region, Is.EqualTo(ShellSyntax.QuoteRegion.SingleQuoted), "content inside single quotes");
+        Assert.That(positions[6].Region, Is.EqualTo(ShellSyntax.QuoteRegion.Normal), "after the closing quote");
+    }
+
+    [Test]
+    public void ComputeQuotePositions_tracks_double_quoted_regions()
+    {
+        var positions = ShellSyntax.ComputeQuotePositions("echo \"a b\" x");
+
+        Assert.That(positions[6].Region, Is.EqualTo(ShellSyntax.QuoteRegion.DoubleQuoted));
+        Assert.That(positions[11].Region, Is.EqualTo(ShellSyntax.QuoteRegion.Normal), "after the closing quote");
+    }
+
+    [Test]
+    public void ComputeQuotePositions_tracks_command_substitution()
+    {
+        var positions = ShellSyntax.ComputeQuotePositions("$(cmd) x");
+
+        Assert.That(positions[0].Region, Is.EqualTo(ShellSyntax.QuoteRegion.Normal), "the '$' is read in the outer region");
+        Assert.That(positions[2].Region, Is.EqualTo(ShellSyntax.QuoteRegion.CommandSubstitution));
+        Assert.That(positions[7].Region, Is.EqualTo(ShellSyntax.QuoteRegion.Normal), "after the closing paren");
+    }
+
+    [Test]
+    public void ComputeQuotePositions_command_substitution_inside_double_quotes_is_not_quoted_content()
+    {
+        // "$(x)" executes: the substitution body must not be classified as quoted text.
+        var positions = ShellSyntax.ComputeQuotePositions("\"$(x)\"");
+
+        Assert.That(positions[1].Region, Is.EqualTo(ShellSyntax.QuoteRegion.DoubleQuoted), "the '$' itself");
+        Assert.That(positions[3].Region, Is.EqualTo(ShellSyntax.QuoteRegion.CommandSubstitution), "the body");
+    }
+
+    [Test]
+    public void ComputeQuotePositions_marks_backslash_escaped_characters()
+    {
+        var positions = ShellSyntax.ComputeQuotePositions("\\$(x)");
+
+        Assert.That(positions[1].Escaped, Is.True, "the escaped '$'");
+        Assert.That(positions[2].Escaped, Is.False);
+    }
+
+    [Test]
+    public void ComputeQuotePositions_backslash_is_not_an_escape_inside_single_quotes()
+    {
+        var positions = ShellSyntax.ComputeQuotePositions("'\\$'");
+
+        Assert.That(positions[2].Escaped, Is.False);
+        Assert.That(positions[2].Region, Is.EqualTo(ShellSyntax.QuoteRegion.SingleQuoted));
+    }
+
+    [Test]
+    public void IsEntirelyInQuotes_detects_match_created_inside_quotes_by_escape_stripping()
+    {
+        // The normalized $( only exists because the load-bearing backslash was dropped;
+        // it sits inside double quotes of the original line.
+        const string original = "echo \"\\$(date)\"";
+        var positions = ShellSyntax.ComputeQuotePositions(original);
+        var (normalized, sourceIndices) = ShellSyntax.NormalizeForMatching(original);
+        var matchIndex = normalized.IndexOf("$(", StringComparison.Ordinal);
+
+        Assert.That(ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, matchIndex, 2), Is.True);
+    }
+
+    [Test]
+    public void IsEntirelyInQuotes_rejects_unquoted_matches()
+    {
+        const string original = "s''u''d''o rm";
+        var positions = ShellSyntax.ComputeQuotePositions(original);
+        var (normalized, sourceIndices) = ShellSyntax.NormalizeForMatching(original);
+
+        Assert.That(normalized, Does.StartWith("sudo"));
+        Assert.That(ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, 0, 4), Is.False);
+    }
+
+    [Test]
+    public void IsEntirelyInQuotes_rejects_command_substitution_body_under_double_quotes()
+    {
+        // Code inside $(...) executes even under double quotes, so it is not "quoted text".
+        const string original = "echo \"$(c\\url x)\"";
+        var positions = ShellSyntax.ComputeQuotePositions(original);
+        var (normalized, sourceIndices) = ShellSyntax.NormalizeForMatching(original);
+        var matchIndex = normalized.IndexOf("curl", StringComparison.Ordinal);
+
+        Assert.That(ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, matchIndex, 4), Is.False);
+    }
+
+    [Test]
+    public void FindUnquotedTool_returns_invocation_index()
+    {
+        Assert.That(ShellSyntax.FindUnquotedTool("echo x; sudo whoami", "sudo"), Is.EqualTo(8));
+    }
+
+    [Test]
+    public void FindUnquotedTool_returns_minus_one_for_quoted_display_text()
+    {
+        Assert.That(ShellSyntax.FindUnquotedTool("echo 'sudo whoami'", "sudo"), Is.EqualTo(-1));
+    }
+
+    [Test]
+    public void FindUnquotedTool_returns_minus_one_when_absent()
+    {
+        Assert.That(ShellSyntax.FindUnquotedTool("echo hello", "sudo"), Is.EqualTo(-1));
     }
 }

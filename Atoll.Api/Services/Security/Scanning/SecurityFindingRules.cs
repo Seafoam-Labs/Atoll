@@ -9,6 +9,21 @@ internal static class SecurityFindingRules
         FindingSeverity.Critical,
         "Local source file '{0}' is {1} that cannot be reviewed as text - it may contain malicious code.");
 
+    // Same rule id as LocalBinary, retained for review but non-blocking: the content is
+    // recognized as inert by its magic bytes or file kind and cannot execute on its own.
+    public static readonly SecurityFindingRule LocalBinaryInertMedia = new(
+        "local-binary",
+        FindingSeverity.Medium,
+        "Local source file '{0}' is binary content that appears to be inert media or data - it cannot be reviewed as text, but it cannot execute on its own.");
+
+    // Same rule id as LocalBinary, retained for review but non-blocking: the only binary
+    // indicator is undecodable bytes (U+FFFD) - no NUL or control characters - so the file
+    // is treated as text in an unrecognized encoding rather than unreviewable binary.
+    public static readonly SecurityFindingRule LocalBinaryUnencodableText = new(
+        "local-binary",
+        FindingSeverity.Medium,
+        "Local source file '{0}' contains text in an unrecognized encoding - parts of it cannot be reviewed, but it contains no binary control characters.");
+
     public static readonly SecurityFindingRule SuspiciousSourceUrl = new(
         "suspicious-source-url",
         FindingSeverity.Medium,
