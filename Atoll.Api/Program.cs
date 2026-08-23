@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json.Serialization;
 using Atoll.Api;
 using Atoll.Api.Components;
@@ -13,6 +14,7 @@ using Atoll.Api.Services.Search.Refresh;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using OpenTelemetry;
@@ -43,6 +45,28 @@ builder.Services.Configure<JsonOptions>(options =>
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient();
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+    [
+        "image/svg+xml",
+        "application/xml",
+    ]);
+
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -135,6 +159,7 @@ builder.Services.AddHostedService<PackageIndexWorker>();
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseResponseCompression();
 
 // Re-execute 4xx/5xx responses with empty bodies as /not-found so browsers get
 // the styled page - the Blazor fallback alone renders nothing for unmatched paths.

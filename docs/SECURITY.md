@@ -310,3 +310,21 @@ the previous section resolving on its own after restart.
 - **Single-instance assumption.** The lease scheme supports multiple worker loops within one instance and is safe
   against crashes, but has not been validated for multiple API replicas. The broader single-instance assumption is noted
   in `ARCHITECTURE.md`.
+
+## Transport security & response compression
+
+Atoll enables in-app response compression (Brotli and Gzip) for dynamic HTML and API responses. When configuring
+response compression, keep the following security considerations in mind:
+
+- **HTTPS compression risks (CRIME / BREACH attacks):** Compressing dynamically generated responses over TLS can
+  introduce side-channel vulnerabilities such as CRIME and BREACH. If an attacker can inject chosen plaintext into an
+  HTTPS request and measure the exact encrypted response size, they may deduce secrets (such as session tokens or CSRF
+  tokens) reflected in the response body.
+- **Default configuration:** ASP.NET Core's response compression middleware deliberately disables compression for HTTPS
+  requests by default (`EnableForHttps = false`). In Atoll's standard deployment (ECS behind an ALB or reverse proxy),
+  the connection between the proxy and Kestrel is plain HTTP, so compression applies automatically without enabling
+  `EnableForHttps`.
+- **Mitigation and TLS termination:** If TLS is ever terminated directly inside Kestrel and `EnableForHttps` is set to
+  `true`, ensure all pages containing sensitive per-user secrets or tokens implement BREACH mitigations (such as
+  randomized padding or antiforgery token masking). Because Atoll serves public package catalog metadata and uses
+  ASP.NET Core antiforgery tokens, the residual risk in current private/internal mirror setups is low.

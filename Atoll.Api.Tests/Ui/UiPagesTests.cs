@@ -148,6 +148,30 @@ public class UiPagesTests
     }
 
     [Test]
+    public async Task RootPageCompressesResponseWithGzip()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/");
+        request.Headers.AcceptEncoding.ParseAdd("gzip");
+
+        using var response = await _client.SendAsync(request);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(response.Content.Headers.ContentEncoding, Contains.Item("gzip"));
+    }
+
+    [Test]
+    public async Task RootPageCompressesResponseWithBrotli()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/");
+        request.Headers.AcceptEncoding.ParseAdd("br");
+
+        using var response = await _client.SendAsync(request);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(response.Content.Headers.ContentEncoding, Contains.Item("br"));
+    }
+
+    [Test]
     public async Task RootPageDecoratesSeededRowsWithBadges()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
