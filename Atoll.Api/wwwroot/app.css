@@ -76,6 +76,11 @@
         @apply bg-atoll-dark text-white;
     }
 
+    /* FocusOnNavigate outline workaround */
+    h1:focus {
+        outline: none;
+    }
+
     h1,
     h2,
     h3,
