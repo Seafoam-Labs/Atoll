@@ -19,6 +19,10 @@ The application-level implementation is in:
   tool-boundary matching, hidden-codepoint detection.
 - `Atoll.Api/Services/Security/Scanning/PkgBuildSourceUrlScanner.cs` — inspects `source=` declarations for suspicious
   archive/executable URLs (PKGBUILD only).
+- `Atoll.Api/Services/Security/Scanning/HomographScanner.cs` — detects homograph spoofing in PKGBUILD metadata fields
+  (`pkgname`, `depends`, `makedepends`, `url`, `source`): hidden/invisible characters including combining marks,
+  Latin mixed with Cyrillic/Greek/Armenian, fullwidth ASCII lookalikes, and confusable-skeleton folding
+  (PKGBUILD only).
 - `Atoll.Api/Services/Security/Scanning/PackageBuildFileClassifier.cs` — decides which files are scannable
   (`PKGBUILD` plus script-like companion extensions).
 - `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — classifies source files that are ELF
@@ -33,10 +37,10 @@ The application-level implementation is in:
   `AddEndpointFilter<PackageSecurityFilter>()`)
 
 The `Scanning/` types are `internal static` and are covered by focused unit tests under
-`Atoll.Api.Tests/Security/Scanning/` (`ShellSyntaxTests`, `ShellContentScannerTests`, `PkgBuildSourceUrlScannerTests`,
-`PackageBuildFileClassifierTests`). The facade itself is covered end-to-end by
-`Atoll.Api.Tests/Security/PkgBuildSecurityScannerTests`, which doubles as a regression fixture (it pins the behavior
-of a real-world `shelly` PKGBUILD).
+`Atoll.Api.Tests/Security/Scanning/` (`ShellSyntaxTests`, `ShellContentScannerTests`, `HomographScannerTests`,
+`PkgBuildSourceUrlScannerTests`, `LocalSourceBinaryScannerTests`, `PackageBuildFileClassifierTests`). The facade
+itself is covered end-to-end by `Atoll.Api.Tests/Security/PkgBuildSecurityScannerTests`, which doubles as a regression
+fixture (it pins the behavior of a real-world `shelly` PKGBUILD).
 
 ## Scope and threat model
 
@@ -47,8 +51,12 @@ sandbox or a guarantee that a package is safe. Concretely it defends against:
 - Decoded or evaluated payloads run at build/install time (`base64 -d | bash`, `eval $(…)`).
 - Writes to system paths outside the build roots (`$pkgdir`/`$srcdir`), e.g. `> /etc/…`.
 - Privilege escalation (`sudo`, `doas`, `run0`, `su`, …).
-- Obfuscation intended to hide any of the above (quote-split tool names like `c''u''rl`, backslash-escaped tokens).
-- Homograph spoofing via hidden/invisible characters (zero-width, BOM, bidi overrides, control bytes).
+- Obfuscation intended to hide any of the above (quote-split tool names like `c''u''rl` and `c'u'rl`,
+  backslash-escaped tokens).
+- Homograph spoofing: hidden/invisible characters (zero-width, BOM, bidi overrides, control bytes) anywhere in script
+  content, and field-level checks on PKGBUILD metadata (`pkgname`, `depends`, `makedepends`, `url`, `source`) against
+  lookalike download hosts and typosquatted dependency names — invisible/combining characters, Latin mixed with
+  Cyrillic/Greek/Armenian, fullwidth ASCII, and ASCII-foldable confusables.
 - Suspicious source URLs pointing at raw executables/archives.
 - Local source files shipped as ELF executables or binary blobs, which cannot be reviewed as text.
 
@@ -96,8 +104,10 @@ Script-like files (the `PKGBUILD` plus companions `.sh`, `.bash`, `.install`, `.
 are ignored.
 
 Each script file is processed line by line. Shell comments are stripped first (honoring single- and double-quote state),
-then the line is **de-obfuscated** by collapsing quote-splitting (`c''u''rl` → `curl`) and dropping intra-word backslash
-escapes. Every rule is matched against both the raw line and the de-obfuscated probe:
+then the line is **de-obfuscated** by collapsing quote-splitting (`c''u''rl` → `curl`), stripping quotes that sit
+between two word characters (`c'u'rl` → `curl` — the shell's quote removal makes these part of the word), and dropping
+intra-word backslash escapes. Quotes at word edges are kept: `'npm'` stays a quoted string (display/argument text),
+not an invocation. Every rule is matched against both the raw line and the de-obfuscated probe:
 
 - If a rule matches only on the de-obfuscated probe, the invocation was deliberately hidden and the finding is escalated
   to `Critical`.
@@ -133,6 +143,7 @@ The current rules, with their default severities:
 | `write-outside-build-root` | High | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). |
 | `privilege-escalation` | High | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.) |
 | `hidden-character` | Critical | Zero-width chars (U+200B/C/D), BOM (U+FEFF), bidi overrides/isolates (U+202A–E, U+2066–9), C0/C1 control bytes. |
+| `homograph` | High | Spoofing in PKGBUILD metadata values (`pkgname`, `depends`, `makedepends`, `url`, `source`): invisible/combining characters, Latin mixed with Cyrillic/Greek/Armenian, fullwidth ASCII lookalikes (U+FF01–FF5E), and non-ASCII that folds to an ASCII skeleton. PKGBUILD only. |
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
 | `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime). |
 | `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
@@ -154,13 +165,23 @@ as non-blocking `Medium`:
 - Text whose only binary indicator is undecodable UTF-8 (U+FFFD from legacy encodings), with no NUL or control
   characters.
 
+`homograph` is the other non-shell rule: it runs only on the PKGBUILD and inspects the extracted values of the
+`pkgname`, `depends`, `makedepends`, `url`, and `source` assignments (including indented ones inside `package()`
+functions). Comments are stripped and quotes removed before checking, so non-ASCII prose after `#` never fires it.
+Four checks run in order and the first hit wins per line: hidden/invisible characters (the zero-width/bidi/control
+set plus format and combining marks — a mark like U+0670 prepended to a URL scheme is invisible yet changes the
+value — checked on the NFC-normalized value so decomposed accents are not mistaken for hidden marks), Latin mixed
+with Cyrillic/Greek/Armenian (other scripts such as CJK and Hangul are ignored: they cannot spoof ASCII and are
+legitimate in internationalized names), fullwidth ASCII lookalikes, and confusable-skeleton folding (a ~45-entry
+Cyrillic/Greek table without accented Latin letters). Free prose (`pkgdesc`, comments) is deliberately out of scope.
+
 The remaining rules are shell-line rules and only run on scannable script files.
 
 Adding or changing a shell rule is a one-line change to the `Rules` array in `ShellContentScanner` (or the
-`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). The `local-binary` rule remains separate because it
-is a whole-file check, not a shell-line rule. Rule ids are persisted verbatim in stored findings and exposed indirectly
-by `GET /packages/{name}/security` through `findingCount`, so renaming a rule does not corrupt data but changes the ids
-visible in historical documents.
+`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). The `local-binary` and `homograph` rules remain
+separate because they are whole-file and field-value checks respectively, not shell-line rules. Rule ids are persisted
+verbatim in stored findings and exposed indirectly by `GET /packages/{name}/security` through `findingCount`, so
+renaming a rule does not corrupt data but changes the ids visible in historical documents.
 
 ## Pipeline
 
@@ -343,6 +364,12 @@ the previous section resolving on its own after restart.
 - **Heredoc prose can still block.** Quoted-delimiter heredoc bodies suppress only the non-blocking expansion rules;
   `sudo`/redirect-looking prose inside them can still yield blocking `High` findings. Extending suppression to
   blocking rules requires handling pipe-to-installer patterns (`cat <<EOF | sh`, `install < /dev/stdin`) safely first.
+- **Homograph checks are field-scoped.** Only the extracted values of single-line `pkgname`/`depends`/`makedepends`/
+  `url`/`source` assignments are checked; arrays spanning multiple lines, other fields, and free prose are out of
+  scope. Legitimate internationalized names can still be flagged: Greek is an ASCII-lookalike-prone script, so a
+  Greek IDN (e.g. `π.duncano.de`) trips the mixed-script check — accepted knowingly, it is rare in the corpus.
+  Conversely, single-script spoofing that never mixes Latin and does not fold to ASCII (e.g. pure Cyrillic using
+  letters outside the confusables table) is not detected.
 - **No manual override.** There is no `ForceVerified` / `ForceBlocked` state for a package a maintainer has reviewed and
   wants to unblock (or block) regardless of scanner output.
 - **No source-host policy.** `suspicious-source-url` is a syntactic check only; there is no allow/deny list for source

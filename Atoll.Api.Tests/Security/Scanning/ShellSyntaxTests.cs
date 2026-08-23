@@ -68,6 +68,61 @@ public class ShellSyntaxTests
     }
 
     [Test]
+    public void NormalizeForMatching_strips_intra_word_single_quotes()
+    {
+        // The shell removes quotes between word characters via quote removal: c'u'rl is curl.
+        Assert.That(ShellSyntax.NormalizeForMatching("c'u'rl example").Text, Is.EqualTo("curl example"));
+    }
+
+    [Test]
+    public void NormalizeForMatching_strips_intra_word_double_quotes()
+    {
+        Assert.That(ShellSyntax.NormalizeForMatching("s\"u\"do whoami").Text, Is.EqualTo("sudo whoami"));
+    }
+
+    [Test]
+    public void NormalizeForMatching_keeps_quotes_at_word_edges()
+    {
+        // Edge quotes make the whole word a quoted string (display/argument text), so they
+        // must survive normalization: 'npm' is not an invocation of npm.
+        Assert.That(ShellSyntax.NormalizeForMatching("echo 'npm' install").Text, Is.EqualTo("echo 'npm' install"));
+        Assert.That(ShellSyntax.NormalizeForMatching("echo \"curl\" x").Text, Is.EqualTo("echo \"curl\" x"));
+    }
+
+    [Test]
+    public void NormalizeForMatching_keeps_quote_between_word_and_non_word_character()
+    {
+        Assert.That(ShellSyntax.NormalizeForMatching("echo done'!'").Text, Is.EqualTo("echo done'!'"));
+    }
+
+    [Test]
+    public void NormalizeForMatching_combines_intra_word_and_adjacent_pair_stripping()
+    {
+        Assert.That(ShellSyntax.NormalizeForMatching("cu'r''l example").Text, Is.EqualTo("curl example"));
+    }
+
+    [Test]
+    public void NormalizeForMatching_source_indices_survive_intra_word_quote_stripping()
+    {
+        var (text, sourceIndices) = ShellSyntax.NormalizeForMatching("c'u'rl");
+
+        Assert.That(text, Is.EqualTo("curl"));
+        Assert.That(sourceIndices, Is.EqualTo([0, 2, 4, 5]));
+    }
+
+    [TestCase("c'u'rl", true, Description = "intra-word quotes split the tool name")]
+    [TestCase("'curl'", false, Description = "edge quotes make it a quoted string")]
+    [TestCase("echo 'npm'", false, Description = "quoted argument is display text")]
+    [TestCase("c''u''rl", true, Description = "adjacent-pair obfuscation still works")]
+    public void MatchesUnquotedTool_after_normalization_detects_intra_word_obfuscation_only(string text, bool expected)
+    {
+        var normalized = ShellSyntax.NormalizeForMatching(text).Text;
+
+        Assert.That(ShellSyntax.MatchesUnquotedTool(normalized, "curl") ||
+                    ShellSyntax.MatchesUnquotedTool(normalized, "npm"), Is.EqualTo(expected));
+    }
+
+    [Test]
     public void NormalizeForMatching_source_indices_map_surviving_characters_back_to_the_original()
     {
         // c''u''rl -> curl; each normalized character keeps its original position.

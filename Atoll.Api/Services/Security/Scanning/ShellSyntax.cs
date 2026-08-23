@@ -52,6 +52,12 @@ internal static class ShellSyntax
                 case '\'' or '"' when i + 1 < line.Length && line[i + 1] == c:
                     i++;
                     continue;
+                // A quote with word characters on both sides is always removed by shell
+                // quote removal (c'u'rl -> curl), so dropping it reveals quote-split tool
+                // names. Edge quotes ('npm', "curl") are kept: they turn the word into a
+                // single quoted string, i.e. display text, not an invocation.
+                case '\'' or '"' when i > 0 && i + 1 < line.Length && IsWordChar(line[i - 1]) && IsWordChar(line[i + 1]):
+                    continue;
                 default:
                     normalized.Append(c);
                     sourceIndices[count++] = i;
@@ -60,6 +66,11 @@ internal static class ShellSyntax
         }
 
         return (normalized.ToString(), sourceIndices[..count]);
+    }
+
+    public static bool IsWordChar(char c)
+    {
+        return char.IsAsciiLetterOrDigit(c) || c == '_';
     }
 
     /// <summary>

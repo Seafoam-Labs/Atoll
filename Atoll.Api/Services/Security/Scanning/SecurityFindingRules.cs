@@ -78,4 +78,9 @@ internal static class SecurityFindingRules
         "risky-tool",
         FindingSeverity.Medium,
         "'{0}' is invoked - this fetches/executes external code outside pacman's control.");
+
+    public static readonly SecurityFindingRule Homograph = new(
+        "homograph",
+        FindingSeverity.High,
+        "A package metadata value contains suspicious non-ASCII characters - it may spoof a trusted name or hide content (homograph attack).");
 }

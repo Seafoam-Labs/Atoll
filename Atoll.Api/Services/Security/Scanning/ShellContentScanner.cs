@@ -333,7 +333,7 @@ internal static class ShellContentScanner
                 var absolute = offset + index;
                 var before = absolute == 0 ? ' ' : tail[absolute - 1];
                 var after = absolute + target.Length >= tail.Length ? ' ' : tail[absolute + target.Length];
-                if (!IsWordChar(before) && !IsWordChar(after))
+                if (!ShellSyntax.IsWordChar(before) && !ShellSyntax.IsWordChar(after))
                     return true;
 
                 offset = absolute + 1;
@@ -341,11 +341,6 @@ internal static class ShellContentScanner
         }
 
         return false;
-    }
-
-    private static bool IsWordChar(char c)
-    {
-        return char.IsAsciiLetterOrDigit(c) || c == '_';
     }
 
     private static SecurityFinding Finding(

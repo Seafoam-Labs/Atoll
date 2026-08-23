@@ -20,7 +20,10 @@ public sealed class PkgBuildSecurityScanner : IPackageSecurityScanner
             findings.AddRange(ShellContentScanner.Scan(content, path));
 
             if (PackageBuildFileClassifier.IsPkgbuild(path))
+            {
                 findings.AddRange(PkgBuildSourceUrlScanner.Scan(content, path));
+                findings.AddRange(HomographScanner.Scan(content, path));
+            }
         }
 
         var status = findings.Any(f => f.Severity is FindingSeverity.Critical or FindingSeverity.High)
