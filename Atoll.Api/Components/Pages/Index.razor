@@ -101,10 +101,10 @@
 }
 else if (_result is not null)
 {
-    if (_loading)
-    {
-        <div class="fixed inset-x-0 top-0 z-50 h-0.5 bg-atoll animate-pulse" aria-hidden="true"></div>
-    }
+    <div class="fixed inset-x-0 top-0 z-100 h-0.5 transition-opacity duration-300 @(_loading ? "opacity-100 delay-[250ms]" : "opacity-0")"
+         aria-hidden="true">
+        <div class="h-full w-full bg-atoll animate-pulse"></div>
+    </div>
     <div class="transition-opacity duration-150 @(_loading ? "opacity-50 pointer-events-none" : "")"
          aria-busy="@(_loading ? "true" : null)">
         <div class="flow-root">
