@@ -212,6 +212,25 @@
         @apply border-transparent text-canvas brightness-110;
     }
 
+    /* Compact page-number buttons for pagination strips. */
+    .page-btn {
+        @apply inline-flex items-center justify-center cursor-pointer min-w-9 px-2.5 py-2 rounded-md
+            text-sm font-semibold bg-surface text-ink border border-line transition-colors duration-150;
+    }
+
+    .page-btn:hover {
+        @apply border-atoll text-atoll;
+    }
+
+    .page-btn:focus-visible {
+        @apply outline-2 outline-offset-2 outline-atoll;
+    }
+
+    .page-btn[aria-current="page"] {
+        background: linear-gradient(135deg, var(--color-atoll), var(--color-atoll-dark));
+        @apply border-transparent text-canvas;
+    }
+
     /* ===== Chips ===== */
     .chip {
         @apply inline-block rounded-full bg-canvas border border-line text-ink-soft font-mono

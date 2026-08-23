@@ -202,12 +202,33 @@ else if (_result is not null)
             </div>
         </div>
     </div>
-    @if (_result.IsTruncated)
-    {
-        <div class="text-ink-faint text-[13px] mt-2">
-            Showing the first @PackageCatalogService.RenderCap of @_result.TotalMatches results - refine your search to see the rest.
+    <nav class="mt-3 flex items-center justify-between gap-3 text-sm text-ink-soft" aria-label="Pagination">
+        @{
+            var first = (_result.Page - 1) * _result.PageSize + 1;
+            var last = Math.Min(_result.Page * _result.PageSize, _result.TotalMatches);
+        }
+        <span>Page @_result.Page of @_result.TotalPages · showing @first-@last of @_result.TotalMatches</span>
+        <div class="flex items-center gap-2">
+            <button type="button" class="btn" disabled="@(_result.Page <= 1)"
+                    @onclick="@(() => GoToPage(_result.Page - 1))">‹ Prev</button>
+            <div class="hidden items-center gap-1 sm:flex">
+                @foreach (var p in PageWindow())
+                {
+                    if (p is null)
+                    {
+                        <span class="px-1" aria-hidden="true">…</span>
+                    }
+                    else
+                    {
+                        <button type="button" class="page-btn" aria-current="@(p == _result.Page ? "page" : null)"
+                                @onclick="@(() => GoToPage(p.Value))">@p</button>
+                    }
+                }
+            </div>
+            <button type="button" class="btn" disabled="@(_result.Page >= _result.TotalPages)"
+                    @onclick="@(() => GoToPage(_result.Page + 1))">Next ›</button>
         </div>
-    }
+    </nav>
 }
 
 @code {
@@ -225,13 +246,17 @@ else if (_result is not null)
     // URIs of navigations this component initiated but hasn't seen resolved yet.
     private readonly HashSet<string> _pendingSelfNavigations = new(StringComparer.Ordinal);
 
+    private int _page = 1;
+
     [SupplyParameterFromQuery(Name = "q")] private string? QueryParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")] private int? PageParam { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
         // Navigations we initiated ourselves come back through here. The input
-        // already holds the target query (or newer text, if the user kept typing
-        // while the navigation was in flight), so skip the sync instead of
+        // already holds the target query/page (or newer text, if the user kept
+        // typing while the navigation was in flight), so skip the sync instead of
         // clobbering it.
         if (_pendingSelfNavigations.Remove(Nav.Uri))
         {
@@ -239,13 +264,16 @@ else if (_result is not null)
         }
 
         var query = QueryParam ?? "";
-        var queryChanged = !_parametersInitialized ||
-                           !string.Equals(_query, query, StringComparison.Ordinal);
+        var page = Math.Max(1, PageParam ?? 1);
+        var stateChanged = !_parametersInitialized ||
+                           !string.Equals(_query, query, StringComparison.Ordinal) ||
+                           _page != page;
         _parametersInitialized = true;
 
-        if (queryChanged)
+        if (stateChanged)
         {
             _query = query;
+            _page = page;
             await ReloadAsync();
         }
     }
@@ -273,7 +301,34 @@ else if (_result is not null)
 
     private void ReloadNow()
     {
+        // A fresh query, filter or sort change always restarts from the first page.
+        _page = 1;
         _ = ReloadAsync();
+    }
+
+    private void GoToPage(int page)
+    {
+        _page = page;
+        _ = ReloadAsync();
+    }
+
+    /// First page, last page, and the pages adjacent to the current one, with nulls marking ellipsis gaps.
+    private IEnumerable<int?> PageWindow()
+    {
+        var total = _result!.TotalPages;
+        var pages = new SortedSet<int> { 1, total };
+        for (var p = _result.Page - 1; p <= _result.Page + 1; p++)
+        {
+            if (p >= 1 && p <= total) pages.Add(p);
+        }
+
+        int? previous = null;
+        foreach (var p in pages)
+        {
+            if (previous is not null && p - previous > 1) yield return null;
+            yield return p;
+            previous = p;
+        }
     }
 
     private async Task ReloadAsync()
@@ -283,7 +338,9 @@ else if (_result is not null)
         _appliedQuery = _query;
 
         var q = string.IsNullOrWhiteSpace(_query) ? null : _query;
-        var uri = Nav.GetUriWithQueryParameter("q", q);
+        var parameters = new Dictionary<string, object?> { ["q"] = q };
+        if (_page > 1) parameters["page"] = _page;
+        var uri = Nav.GetUriWithQueryParameters(parameters);
         if (uri != Nav.Uri)
         {
             _pendingSelfNavigations.Add(uri);
@@ -292,8 +349,17 @@ else if (_result is not null)
 
         try
         {
-            var result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort);
+            var result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort, _page);
             if (version != _searchVersion) return;
+
+            // A navigation may have demanded a page beyond the last one; drop back to the final page.
+            if (_page > result.TotalPages)
+            {
+                _page = result.TotalPages;
+                result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort, _page);
+                if (version != _searchVersion) return;
+            }
+
             _result = result;
             _error = null;
         }

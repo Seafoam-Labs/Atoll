@@ -42,7 +42,8 @@ public class PackageCatalogServiceTests
         Assert.That(result.Rows.Select(row => row.Package.Name),
             Is.EqualTo(["portable-kit", "portable-pro", "shelly-bin"]));
         Assert.That(result.TotalMatches, Is.EqualTo(3));
-        Assert.That(result.IsTruncated, Is.False);
+        Assert.That(result.Page, Is.EqualTo(1));
+        Assert.That(result.TotalPages, Is.EqualTo(1));
     }
 
     [Test]
@@ -161,10 +162,10 @@ public class PackageCatalogServiceTests
     }
 
     [Test]
-    public async Task ResultsBeyondRenderCapAreTruncated()
+    public async Task ResultsArePaginatedInPageSizeChunk()
     {
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
-        for (var i = 0; i <= PackageCatalogService.RenderCap; i++)
+        for (var i = 0; i <= PackageCatalogService.PageSize * 2; i++)
         {
             var name = $"pkg-{i:0000}";
             names[name] = CreateMetadata(name);
@@ -176,13 +177,57 @@ public class PackageCatalogServiceTests
         var service = new PackageCatalogService(
             store, new SeededNamesPackageService([]), _securityRepository);
 
+        var page1 = await service.SearchAsync(
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 1);
+        var page2 = await service.SearchAsync(
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 2);
+        var page3 = await service.SearchAsync(
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 3);
+        var page4 = await service.SearchAsync(
+            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 4);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page1.TotalMatches, Is.EqualTo(PackageCatalogService.PageSize * 2 + 1));
+            Assert.That(page1.TotalPages, Is.EqualTo(3));
+            Assert.That(page1.Page, Is.EqualTo(1));
+            Assert.That(page1.Rows.Select(row => row.Package.Name),
+                Is.EqualTo(ExpectedNames(0, PackageCatalogService.PageSize)));
+            Assert.That(page2.Rows.Select(row => row.Package.Name),
+                Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize, PackageCatalogService.PageSize)));
+            Assert.That(page3.Rows.Select(row => row.Package.Name),
+                Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize * 2, 1)));
+            Assert.That(page4.Rows, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task OutOfRangePagesAreClampedToFirstPage()
+    {
+        var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
+        names["pkg-a"] = CreateMetadata("pkg-a");
+
+        var store = new PackageIndexStore();
+        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
+
+        var service = new PackageCatalogService(
+            store, new SeededNamesPackageService([]), _securityRepository);
+
         var result = await service.SearchAsync(
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 0);
 
-        Assert.That(result.TotalMatches, Is.EqualTo(PackageCatalogService.RenderCap + 1));
-        Assert.That(result.Rows, Has.Count.EqualTo(PackageCatalogService.RenderCap));
-        Assert.That(result.IsTruncated, Is.True);
+        Assert.That(result.Page, Is.EqualTo(1));
+        Assert.That(result.Rows, Has.Count.EqualTo(1));
+    }
+
+    private static string[] ExpectedNames(int start, int count)
+    {
+        return Enumerable.Range(start, count).Select(i => $"pkg-{i:0000}").ToArray();
     }
 
     private static AurPackageMetadata CreateMetadata(string name)

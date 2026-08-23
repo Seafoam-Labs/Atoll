@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Search;
@@ -50,19 +49,20 @@ public sealed record CatalogRow(
 public sealed record CatalogResult(
     IReadOnlyList<CatalogRow> Rows,
     int TotalMatches,
-    bool IsTruncated);
+    int Page,
+    int PageSize,
+    int TotalPages);
 
 public sealed class PackageCatalogService(
     PackageIndexStore indexStore,
     IPackageService packageService,
     IPackageSecurityRepository securityRepository)
 {
-    public const int RenderCap = 500;
+    public const int PageSize = 50;
 
     private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(30);
 
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
-    private readonly ConcurrentDictionary<CatalogSort, DefaultViewCacheEntry> _defaultViewCache = new();
     private SeededSnapshot _snapshot = SeededSnapshot.Empty;
 
     /// <summary>Drops the cached seeded/head-status snapshot so the next search re-reads it.
@@ -78,26 +78,13 @@ public sealed class PackageCatalogService(
         CatalogSecurityFilter securityFilter,
         CatalogSearchMode mode,
         CatalogSort sort,
+        int page = 1,
         CancellationToken ct = default)
     {
+        if (page < 1) page = 1;
+
         var index = indexStore.Current;
         var isUnfiltered = seededFilter is CatalogSeededFilter.All && securityFilter is CatalogSecurityFilter.Any;
-        var isDefaultView = isUnfiltered && string.IsNullOrWhiteSpace(query);
-
-        // The default view (empty query, no filters) is identical for every user between index
-        // refreshes and snapshot refreshes, so cache it per sort; a new index or snapshot instance
-        // (via PackageIndexStore.Replace / InvalidateSnapshot) naturally busts the cache.
-        if (isDefaultView)
-        {
-            var snapshot = await GetSeededSnapshotAsync(ct);
-            if (_defaultViewCache.TryGetValue(sort, out var cached) &&
-                ReferenceEquals(cached.Index, index) && ReferenceEquals(cached.Snapshot, snapshot))
-                return cached.Result;
-
-            var result = SearchUnfiltered(index.ByNames.Values, snapshot, PackageComparer(sort));
-            _defaultViewCache[sort] = new DefaultViewCacheEntry(index, snapshot, result);
-            return result;
-        }
 
         var packages = index.ByNames.Values;
 
@@ -113,22 +100,23 @@ public sealed class PackageCatalogService(
 
         // Seeded/security state is irrelevant when both filters are no-ops, so skip building a
         // CatalogRow (and the snapshot lookups it needs) for every match and only keep the
-        // best RenderCap packages by sort key; rows are materialized only for the winners.
+        // page-worth of best packages by sort key; rows are materialized only for the winners.
         if (isUnfiltered)
         {
             var snapshot = await GetSeededSnapshotAsync(ct);
-            return SearchUnfiltered(matches, snapshot, packageComparer);
+            return SearchUnfiltered(matches, snapshot, packageComparer, page);
         }
 
-        return await SearchFilteredAsync(matches, seededFilter, securityFilter, packageComparer, ct);
+        return await SearchFilteredAsync(matches, seededFilter, securityFilter, packageComparer, page, ct);
     }
 
     private static CatalogResult SearchUnfiltered(
         IEnumerable<AurPackageMetadata> matches,
         SeededSnapshot snapshot,
-        IComparer<AurPackageMetadata> packageComparer)
+        IComparer<AurPackageMetadata> packageComparer,
+        int page)
     {
-        var topPackages = new BoundedTopK<AurPackageMetadata>(RenderCap, packageComparer);
+        var topPackages = new BoundedTopK<AurPackageMetadata>(page * PageSize, packageComparer);
         var total = 0;
 
         foreach (var package in matches)
@@ -138,13 +126,15 @@ public sealed class PackageCatalogService(
         }
 
         var rendered = topPackages.ExtractSorted()
+            .Skip((page - 1) * PageSize)
+            .Take(PageSize)
             .Select(package => new CatalogRow(
                 package,
                 snapshot.SeededNames.Contains(package.Name),
                 snapshot.HeadStatuses.GetValueOrDefault(package.Name)))
             .ToList();
 
-        return new CatalogResult(rendered, total, total > RenderCap);
+        return new CatalogResult(rendered, total, page, PageSize, TotalPages(total));
     }
 
 
@@ -153,11 +143,12 @@ public sealed class PackageCatalogService(
         CatalogSeededFilter seededFilter,
         CatalogSecurityFilter securityFilter,
         IComparer<AurPackageMetadata> packageComparer,
+        int page,
         CancellationToken ct)
     {
         var snapshot = await GetSeededSnapshotAsync(ct);
         var rowComparer = Comparer<CatalogRow>.Create((a, b) => packageComparer.Compare(a.Package, b.Package));
-        var topRows = new BoundedTopK<CatalogRow>(RenderCap, rowComparer);
+        var topRows = new BoundedTopK<CatalogRow>(page * PageSize, rowComparer);
         var total = 0;
 
         foreach (var package in matches)
@@ -174,9 +165,14 @@ public sealed class PackageCatalogService(
             topRows.Offer(row);
         }
 
-        var rendered = topRows.ExtractSorted();
-        return new CatalogResult(rendered, total, total > RenderCap);
+        var rendered = topRows.ExtractSorted()
+            .Skip((page - 1) * PageSize)
+            .Take(PageSize)
+            .ToList();
+        return new CatalogResult(rendered, total, page, PageSize, TotalPages(total));
     }
+
+    private static int TotalPages(int total) => Math.Max(1, (total + PageSize - 1) / PageSize);
 
     private static bool MatchesSeededFilter(CatalogRow row, CatalogSeededFilter filter)
     {
@@ -342,7 +338,4 @@ public sealed class PackageCatalogService(
             FetchedAt != DateTimeOffset.MinValue
             && DateTimeOffset.UtcNow - FetchedAt < SnapshotTtl;
     }
-
-    // Keyed by object identity: a new index or snapshot instance implicitly invalidates the entry.
-    private sealed record DefaultViewCacheEntry(SearchIndexData Index, SeededSnapshot Snapshot, CatalogResult Result);
 }

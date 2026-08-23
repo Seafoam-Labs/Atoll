@@ -87,7 +87,7 @@ public class PackageCatalogServicePerfTests
     {
         TestContext.Out.WriteLine(
             $"index={PackageCount:N0} packages, seeded={SeededCount:N0}, " +
-            $"render cap={PackageCatalogService.RenderCap}, iterations={Iterations}, .NET {Environment.Version}");
+            $"page size={PackageCatalogService.PageSize}, iterations={Iterations}, .NET {Environment.Version}");
 
         // Worst case and the actual default page view: empty query matches the whole index.
         await RunScenarioAsync("default page load (empty q, NameAsc)",
@@ -139,9 +139,11 @@ public class PackageCatalogServicePerfTests
                 Assert.That(last.TotalMatches, Is.EqualTo(total), $"unexpected match count for '{label}'");
 
             Assert.That(last.Rows.Count,
-                Is.EqualTo(Math.Min(last.TotalMatches, PackageCatalogService.RenderCap)),
+                Is.EqualTo(Math.Min(last.TotalMatches, PackageCatalogService.PageSize)),
                 $"rendered row count for '{label}'");
-            Assert.That(last.IsTruncated, Is.EqualTo(last.TotalMatches > PackageCatalogService.RenderCap));
+            Assert.That(last.TotalPages,
+                Is.EqualTo((last.TotalMatches + PackageCatalogService.PageSize - 1) / PackageCatalogService.PageSize),
+                $"total page count for '{label}'");
         });
     }
 

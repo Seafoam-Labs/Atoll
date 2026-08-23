@@ -148,6 +148,20 @@ public class UiPagesTests
     }
 
     [Test]
+    public async Task RootPageRendersPaginationFooter()
+    {
+        var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
+
+        Assert.That(body, Does.Contain("Page 1 of 1"));
+        Assert.That(body, Does.Contain("showing 1-3 of 3"));
+        Assert.That(body, Does.Contain("aria-label=\"Pagination\""));
+        // A single-page result disables both pagination buttons in the prerendered HTML.
+        Assert.That(body, Does.Contain("<button type=\"button\" class=\"btn\" disabled"));
+        // The page-number strip marks the active page for assistive tech.
+        Assert.That(body, Does.Contain("aria-current=\"page\""));
+    }
+
+    [Test]
     public async Task RootPageCompressesResponseWithGzip()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");

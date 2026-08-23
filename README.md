@@ -46,8 +46,8 @@ For the storage layout, retention limits, BSON-size handling, and cache consider
 
 Atoll includes a built-in Blazor web interface for interactive package exploration and system administration:
 
-- **Package Catalog (`/`)**: Fast, in-memory package catalog search with instant filtering (all, seeded, unseeded) and
-  sorting by votes, popularity, name, or last modified date.
+- **Package Catalog (`/`)**: Fast, in-memory package catalog search with instant filtering (all, seeded, unseeded),
+  sorting by votes, popularity, name, or last modified date, and paginated results (50 per page, `?page=N` in the URL).
 - **Package Details (`/package/{name}`)**: View package metadata, maintainers, upstream URLs, dependencies and
   relationships, clone instructions, and security scanning verdicts.
 - **File Browser (`/package/{name}/files`)**: Browse and inspect PKGBUILD, `.SRCINFO`, patches, and other source files
