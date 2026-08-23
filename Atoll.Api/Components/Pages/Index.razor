@@ -220,7 +220,7 @@ else if (_result is not null)
                     }
                     else
                     {
-                        <button type="button" class="page-btn" aria-current="@(p == _result.Page ? "page" : null)"
+                        <button type="button" class="btn" aria-current="@(p == _result.Page ? "page" : null)"
                                 @onclick="@(() => GoToPage(p.Value))">@p</button>
                     }
                 }

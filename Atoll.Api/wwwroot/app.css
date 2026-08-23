@@ -187,8 +187,8 @@
 
     /* ===== Buttons ===== */
     .btn {
-        @apply inline-flex items-center cursor-pointer gap-x-2 transition-colors duration-150
-            rounded-md py-2.5 px-3.5 text-sm leading-5 font-semibold bg-surface text-ink border border-line;
+        @apply inline-flex items-center justify-center cursor-pointer gap-x-2 transition-colors duration-150
+            rounded-md text-sm leading-4 font-semibold bg-surface text-ink border border-line min-w-9 px-3 py-2;
     }
 
     .btn:hover {
@@ -200,7 +200,7 @@
     }
 
     .btn:disabled {
-        @apply opacity-60 cursor-wait;
+        @apply opacity-60 cursor-not-allowed hover:text-ink hover:border-line hover:bg-surface;
     }
 
     .btn-primary {
@@ -212,21 +212,7 @@
         @apply border-transparent text-canvas brightness-110;
     }
 
-    /* Compact page-number buttons for pagination strips. */
-    .page-btn {
-        @apply inline-flex items-center justify-center cursor-pointer min-w-9 px-2.5 py-2 rounded-md
-            text-sm font-semibold bg-surface text-ink border border-line transition-colors duration-150;
-    }
-
-    .page-btn:hover {
-        @apply border-atoll text-atoll;
-    }
-
-    .page-btn:focus-visible {
-        @apply outline-2 outline-offset-2 outline-atoll;
-    }
-
-    .page-btn[aria-current="page"] {
+    .btn[aria-current="page"] {
         background: linear-gradient(135deg, var(--color-atoll), var(--color-atoll-dark));
         @apply border-transparent text-canvas;
     }
