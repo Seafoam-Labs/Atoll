@@ -243,8 +243,6 @@ else if (_result is not null)
     private string? _error;
     private int _searchVersion;
     private bool _parametersInitialized;
-    // URIs of navigations this component initiated but hasn't seen resolved yet.
-    private readonly HashSet<string> _pendingSelfNavigations = new(StringComparer.Ordinal);
 
     private int _page = 1;
 
@@ -254,19 +252,10 @@ else if (_result is not null)
 
     protected override async Task OnParametersSetAsync()
     {
-        // Navigations we initiated ourselves come back through here. The input
-        // already holds the target query/page (or newer text, if the user kept
-        // typing while the navigation was in flight), so skip the sync instead of
-        // clobbering it.
-        if (_pendingSelfNavigations.Remove(Nav.Uri))
-        {
-            return;
-        }
-
         var query = QueryParam ?? "";
         var page = Math.Max(1, PageParam ?? 1);
         var stateChanged = !_parametersInitialized ||
-                           !string.Equals(_query, query, StringComparison.Ordinal) ||
+                           !string.Equals(_appliedQuery, query, StringComparison.Ordinal) ||
                            _page != page;
         _parametersInitialized = true;
 
@@ -338,12 +327,14 @@ else if (_result is not null)
         _appliedQuery = _query;
 
         var q = string.IsNullOrWhiteSpace(_query) ? null : _query;
-        var parameters = new Dictionary<string, object?> { ["q"] = q };
-        if (_page > 1) parameters["page"] = _page;
+        var parameters = new Dictionary<string, object?>
+        {
+            ["q"] = q,
+            ["page"] = _page > 1 ? _page : null,
+        };
         var uri = Nav.GetUriWithQueryParameters(parameters);
         if (uri != Nav.Uri)
         {
-            _pendingSelfNavigations.Add(uri);
             Nav.NavigateTo(uri, forceLoad: false);
         }
 
@@ -352,7 +343,6 @@ else if (_result is not null)
             var result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort, _page);
             if (version != _searchVersion) return;
 
-            // A navigation may have demanded a page beyond the last one; drop back to the final page.
             if (_page > result.TotalPages)
             {
                 _page = result.TotalPages;
