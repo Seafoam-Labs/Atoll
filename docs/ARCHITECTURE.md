@@ -233,7 +233,7 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 - Expand scanner coverage, add source-host policy and manual overrides, and prevent Git from exposing flagged historical
   revisions.
 - Evaluate content-addressed deduplication or GridFS/chunked storage for revision snapshots larger than MongoDB's 16 MiB
-  document limit;
+  document limit.
 - `PackageCatalogService` still enumerates and substring-scans the entire in-memory index on every call
   (~20–25 ms at ~85k packages, even for a single-hit query) - a real substring/prefix index would be needed to
   remove this floor. See `tailwind.md` (2026-08-22 status note) for the measurement harness and what was already
@@ -244,5 +244,7 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 - AUR package metadata dump: `https://aur.archlinux.org/packages-meta-ext-v1.json.gz`
 - AUR RPC interface: `https://aur.archlinux.org/rpc`
 - Git Smart HTTP protocol: `https://git-scm.com/docs/http-protocol`
-- Local setup and quickstart: see `README.md`
-- Package seeding and refresh: see `docs/SYNC.md`
+- Local setup and quickstart: see [README](../README.md)
+- Package seeding and refresh: see [SYNC.md](SYNC.md)
+- Package security scanning: see [SECURITY.md](SECURITY.md)
+- Deployment guide: see [DEPLOYMENT.md](DEPLOYMENT.md)

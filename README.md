@@ -1,167 +1,93 @@
 # Atoll
 
-> Atoll - A ring-shaped coral reef; a community ecosystem for arch packages.
+> A ring-shaped coral reef; a community ecosystem for arch packages.
 
-Minimal API and web interface that mirrors Arch Linux AUR package metadata, manages package versions and history,
-provides fast package search endpoints, and includes a built-in Blazor web UI for browsing packages, inspecting files,
-and monitoring system status.
+Atoll is a self-hosted Arch Linux AUR mirror and package registry. It mirrors AUR metadata, stores package revision
+history, exposes searchable package metadata, and serves package content over Git Smart HTTP with a built-in Blazor UI.
 
-## Requirements
+## What this project includes
+
+- AUR metadata indexing and fast in-memory search
+- Package seeding, version history, and file browsing
+- Git-compatible clone/fetch access for seeded packages
+- Security-gated content access for refreshed or newly seeded revisions
+- Background workers for sync, refresh, and scanning
+- Local web UI for catalog, package details, file views, and status
+
+## Quick start
+
+### Requirements
 
 - .NET SDK 10
-- Docker (optional)
+- Docker (optional, for the bundled stack)
 
-## Run
+### Run locally
 
 ```bash
 dotnet run --project Atoll.Api
 ```
 
-- Web UI & API base URL: `http://localhost:5290`
-- OpenAPI URL: `http://localhost:5290/openapi/v1.json`
+Then open:
 
-## Docker
+- Web UI: <http://localhost:5290>
+- OpenAPI: <http://localhost:5290/openapi/v1.json>
+
+### Run with Docker
 
 ```bash
-# Uses port 8080
 docker compose up --build
 ```
 
-Besides the API and MongoDB, the compose file starts an observability stack
-([`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm): OpenTelemetry Collector,
-Prometheus, Loki, Tempo, and Grafana in one image). Atoll pushes metrics and logs to it over
-OTLP, and a provisioned `Atoll` dashboard (see `observability/grafana/`) is set as the Grafana
-home dashboard at `http://localhost:3000` (login: `admin`/`admin`).
+This starts the API, MongoDB, and the local observability stack. The UI and API are exposed on port `8080`, and Grafana
+is available at `http://localhost:3000` with the default login `admin` / `admin`.
 
-## Storage
+## Project layout
 
-MongoDB is Atoll's authoritative store for AUR metadata, package metadata, revision snapshots,
-and operational state. The in-memory search index and on-disk Git repositories are rebuildable
-caches. Configure collections under `Atoll:Mongo` in `appsettings.json`.
+- `Atoll.Api/` — ASP.NET Core application and Blazor UI
+- `docs/` — the canonical source for architecture, sync, security, and deployment details
+- `observability/` — Grafana dashboards and OTLP config
+- `terraform/` — AWS deployment and infrastructure definitions
 
-For the storage layout, retention limits, BSON-size handling, and cache considerations, see
-[Architecture](docs/ARCHITECTURE.md#state--storage).
+## Detailed documentation
 
-## Web UI
+For important, up-to-date implementation and operations details, use the docs in `docs/`:
 
-Atoll includes a built-in Blazor web interface for interactive package exploration and system administration:
-
-- **Package Catalog (`/`)**: Fast, in-memory package catalog search with instant filtering (all, seeded, unseeded),
-  sorting by votes, popularity, name, or last modified date, and paginated results (50 per page, `?page=N` in the URL).
-- **Package Details (`/package/{name}`)**: View package metadata, maintainers, upstream URLs, dependencies and
-  relationships, clone instructions, and security scanning verdicts.
-- **File Browser (`/package/{name}/files`)**: Browse and inspect PKGBUILD, `.SRCINFO`, patches, and other source files
-  directly in the browser across package revisions.
-- **Revision History (`/package/{name}/revisions`)**: Review version history, commit SHAs, and security scan finding
-  details for each revision.
-- **Status Dashboard (`/status`)**: Real-time overview of index sync status, automated seeding (Direct or Bulk)
-  progress, package refresh worker state, security scanning throughput/backlog, and excluded package bases.
-
-## Endpoints
-
-### Health
-
-- `GET /health`, `HEAD /health` - basic liveness check
-
-### Metrics
-
-- `GET /metrics` - OpenTelemetry metrics in Prometheus exposition format: custom `atoll_*` instruments (search,
-  index sizes, refresh, bulk seed, package refresh, security scan), plus ASP.NET Core, outbound HTTP client, and
-  .NET runtime metrics
-- Metrics and application logs are also exported over OTLP; the destination comes from the
-  `OTEL_EXPORTER_OTLP_*` environment variables (see `compose.yaml` for the bundled LGTM stack)
-
-### Search
-
-- `GET /search?query=<value>&by=name|words|provides` - package search
-
-**by** parameter:
-
-- `name`: search by package exact name
-- `words`: search by package words (Name, Description, Keywords)
-- `provides`: search by package provides
-
-### Packages
-
-- `GET /packages` - List all packages
-- `POST /packages/{name}/seed` - Seed package from AUR (returns `409 Conflict` if package already exists)
-- `GET /packages/{name}` - Get specific package (head revision)
-- `GET /packages/{name}/versions` - Get package versions
-- `GET /packages/{name}/versions/{sha}` - Get specific package version
-- `DELETE /packages/{name}` - Delete package
-
-### Git Smart HTTP
-
-Package repositories are exposed over the [Git Smart HTTP protocol](https://git-scm.com/docs/http-protocol), so any
-seeded package can be cloned directly:
-
-```bash
-git clone http://localhost:5290/packages/{name}.git
-```
-
-Underlying endpoints (used by the Git client itself, rarely called by hand):
-
-- `GET /packages/{name}.git/info/refs?service=git-upload-pack` - ref advertisement
-- `POST /packages/{name}.git/git-upload-pack` - upload-pack negotiation and pack transfer
-
-Only `git-upload-pack` (fetch/clone) is supported; `git-receive-pack` (push) is not.
-
-## Hosted Services
-
-Background services run automatically when the application starts.
-
-### Package Index Worker
-
-Downloads the AUR metadata dump, persists it to MongoDB, and rebuilds the in-memory search
-index. On startup it hydrates from MongoDB; an empty database produces an empty index until the
-first refresh. Configure the interval with `Atoll:DataSource:RefreshIntervalMinutes`.
-
-### Package Seed and Refresh Workers
-
-`Atoll:Seed:Mode` selects exactly one automated seed strategy: `Direct` (the default), `Bulk`,
-or `Off`. The optional refresh worker (`Atoll:Refresh:Enabled=true`) independently updates
-already-seeded packages. New revisions remain unavailable until security scanning completes.
-
-See [Package seeding and refresh](docs/SYNC.md) for mode selection, configuration, mirror-cache
-requirements, metrics, and verification. For Docker, set `Atoll__Seed__Mode` and use the
-corresponding example settings in `compose.yaml`.
+- [Architecture overview](docs/ARCHITECTURE.md) — system design, storage model, API surface, and architecture decisions
+- [Package seeding and refresh](docs/SYNC.md) — direct/bulk seeding, refresh behavior, config, and operational notes
+- [Package security scanning](docs/SECURITY.md) — threat model, scan rules, queueing, and content gating
+- [Deployment](docs/DEPLOYMENT.md) — AWS/GitHub Actions and Terraform setup
 
 ## Configuration
 
-Main settings are defined in `Atoll.Api/appsettings.json` and `Atoll.Api/AtollOptions.cs`.
-`compose.yaml` shows their environment-variable form. UI branding and links can be customized
-under `Atoll:Ui` (`BrandName`, `ExternalBaseUrl`, `GrafanaUrl`). Detailed worker and security settings are
-in [SYNC.md](docs/SYNC.md) and [SECURITY.md](docs/SECURITY.md), respectively.
+Main runtime configuration is in:
 
-## Deployment
+- `Atoll.Api/appsettings.json`
+- `Atoll.Api/AtollOptions.cs`
+- `compose.yaml`
 
-Atoll deploys to AWS (ECS Fargate, API Gateway, DocumentDB) through GitHub Actions using OIDC
-federation — no AWS credentials are stored in the repository. See [DEPLOYMENT.md](docs/DEPLOYMENT.md)
-for the one-time bootstrap steps and how the pipeline works.
+For most feature-specific configuration, prefer the linked docs over the README.
 
 ## Tests
 
-The test suite is split into tiers so fast unit/contract tests don't require Docker.
+Fast tests without Docker:
 
-- **Fast tier** (default): in-memory fakes and contract tests. No Docker needed.
+```bash
+dotnet test --filter "Category!=RequiresGit&Category!=RequiresMongo"
+```
 
-  ```bash
-  dotnet test --filter "Category!=RequiresGit&Category!=RequiresMongo"
-  ```
+Mongo-backed tests:
 
-- **Mongo tier**: exercises `MongoPackageRepository` and `AurMetadataRepository` against a real
-  MongoDB spun up with [Testcontainers](https://testcontainers.com/) (`mongo:8.3.7`, matching
-  `compose.yaml`). Requires a running Docker daemon; skips gracefully if unavailable.
+```bash
+dotnet test --filter "Category=RequiresMongo"
+```
 
-  ```bash
-  dotnet test --filter "Category=RequiresMongo"
-  ```
+Full suite:
 
-- **Full suite**: everything, including tests that need the real `git` CLI.
+```bash
+dotnet test
+```
 
-  ```bash
-  dotnet test
-  ```
+## Notes
 
-Each Mongo test uses its own database (`atoll-test-*`) and drops it on teardown, so tests are
-isolated from each other and from the app's runtime database.
+Atoll is intended for trusted private deployments. Search and metadata are public by design, but content access is gated
+and should not be exposed broadly without network controls.
