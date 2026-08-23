@@ -245,6 +245,7 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 - AUR RPC interface: `https://aur.archlinux.org/rpc`
 - Git Smart HTTP protocol: `https://git-scm.com/docs/http-protocol`
 - Local setup and quickstart: see [README](../README.md)
+- Development setup and local tooling: see [DEVELOPMENT.md](DEVELOPMENT.md)
 - Package seeding and refresh: see [SYNC.md](SYNC.md)
 - Package security scanning: see [SECURITY.md](SECURITY.md)
 - Deployment guide: see [DEPLOYMENT.md](DEPLOYMENT.md)

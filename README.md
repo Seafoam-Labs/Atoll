@@ -53,6 +53,7 @@ is available at `http://localhost:3000` with the default login `admin` / `admin`
 For important, up-to-date implementation and operations details, use the docs in `docs/`:
 
 - [Architecture overview](docs/ARCHITECTURE.md) — system design, storage model, API surface, and architecture decisions
+- [Development setup](docs/DEVELOPMENT.md) — local tooling: Tailwind CLI, Docker, Terraform, and test/build flags
 - [Package seeding and refresh](docs/SYNC.md) — direct/bulk seeding, refresh behavior, config, and operational notes
 - [Package security scanning](docs/SECURITY.md) — threat model, scan rules, queueing, and content gating
 - [Deployment](docs/DEPLOYMENT.md) — AWS/GitHub Actions and Terraform setup
