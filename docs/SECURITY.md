@@ -382,6 +382,38 @@ the previous section resolving on its own after restart.
   against crashes, but has not been validated for multiple API replicas. The broader single-instance assumption is noted
   in `ARCHITECTURE.md`.
 
+## Alignment with shelly-alpm
+
+Atoll's scanner shares lineage with the security validators of
+[shelly](https://github.com/Seafoam-Labs/Shelly-ALPM) (Zig Arch package manager): the risky/privilege tool lists were
+originally identical. The two enforce differently — shelly advises a human who approves the build, Atoll
+auto-blocks serving on High/Critical — so shelly's noisier rules must not be ported wholesale. This mapping is
+the reference for a future "shelly changed, catch up" task.
+
+**Provenance:** last full comparison against shelly commit `8988d056` (2026-08-21), executed 2026-08-23
+(analysis and per-phase corpus measurements in the working notes that produced it). Re-run the comparison when
+shelly's validators change meaningfully; the relevant files are `post_install_validator.zig`,
+`homograph_validator.zig`, `local_source_validator.zig`, and `parser/shell_scan.zig` (under
+`Shelly.PackageManager/src/pkgbuild/`). The tool lists are the likeliest drift point — they are plain arrays in
+`ShellContentScanner.cs` and trivially diff-able against shelly's.
+
+| Shelly validator/concept | Atoll counterpart | Divergence (intentional) |
+| --- | --- | --- |
+| `post_install_validator.zig` risky tools | `risky-tool` (Medium) | Atoll adds a quoted-region exemption (shelly's tests document quoted-string FPs it accepts as advisory) |
+| `post_install_validator.zig` privilege tools | `privilege-escalation` (High, Critical when obfuscated) | Same; plus quote exemption and obfuscation escalation |
+| Bare `eval` token → critical | `eval-indirection` (Critical) | Atoll requires a dynamic operand — avoids `grep eval` FPs |
+| Decode-to-shell | `decode-to-shell` (Critical) | Atoll superset (`openssl enc`, more shell targets) |
+| — | `network-to-shell` / `network-execution` | Atoll-only, shelly covers these only indirectly |
+| Command substitution / variable indirection (naive) | `command-substitution` / `variable-indirection` (Medium) | Atoll is quote-aware and heredoc-aware; shelly matches naive substrings |
+| — | `write-outside-build-root` (High) | Atoll-only |
+| `homograph_validator.zig` | `homograph` (High, `HomographScanner`) | Ported conceptually: same four checks, field-scoped to PKGBUILD metadata; CJK/Hangul excluded from the mixed-script check, no accented Latin in the confusables table (corpus-driven precision choices) |
+| `local_source_validator.zig` (ELF, first 64 bytes of `source=` files) | `local-binary` (Critical/Medium, `LocalSourceBinaryScanner`) | Atoll checks every file, whole content, with a magic-byte severity split for inert media |
+| Obfuscation normalization (edge + intra-word quotes) | `NormalizeForMatching` (intra-word quotes only) | Edge-quote stripping would re-introduce quoted-string FPs in Atoll's blocking model |
+| `shell_scan.zig` segmentation (`split_shell_segments`, heredocs) | `ShellSyntax` quoted masks + heredoc tracking in `ShellContentScanner` | Adopted for FP suppression; shelly's validators themselves don't suppress on it |
+| `suspicious-source-url`-style URL validation | `suspicious-source-url` (Medium) | Atoll's host-only extension matching is deliberate and test-pinned |
+| Install-script scope labels | — | Not adopted (nice-to-have) |
+| Review digest/TOCTOU, sandbox/Landlock | — | Not applicable: Atoll never executes or live-reviews content |
+
 ## Transport security & response compression
 
 Atoll enables in-app response compression (Brotli and Gzip) for dynamic HTML and API responses. When configuring
