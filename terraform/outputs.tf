@@ -14,6 +14,12 @@ output "repository_url" {
 }
 
 output "application_url" {
-  description = "The public URL of the Atoll API (ALB DNS name)"
-  value       = "http://${aws_lb.main.dns_name}"
+  description = "The public URL of the Atoll API (API Gateway custom domain)"
+  value       = "https://${var.api_domain_name}"
 }
+
+output "api_gateway_invoke_url" {
+  description = "Default execute-api URL of the HTTP API Gateway (useful for debugging)"
+  value       = aws_apigatewayv2_api.main.api_endpoint
+}
+
