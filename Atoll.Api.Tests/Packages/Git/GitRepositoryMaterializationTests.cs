@@ -1,7 +1,9 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -31,9 +33,10 @@ public class GitRepositoryMaterializationTests
         return path;
     }
 
-    private static (MongoPackageService service, string reposRoot) CreateService()
+    private static (MongoPackageService service, IPackageSecurityRepository security, string reposRoot) CreateService()
     {
         var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
         var reposRoot = CreateTempReposRoot();
         var options = Options.Create(new AtollOptions
         {
@@ -44,8 +47,8 @@ public class GitRepositoryMaterializationTests
             repo,
             new PackageIndexStore(),
             options,
-            new InMemoryPackageSecurityRepository(),
-            NullLogger<MongoPackageService>.Instance), reposRoot);
+            security,
+            NullLogger<MongoPackageService>.Instance), security, reposRoot);
     }
 
     [SetUp]
@@ -57,10 +60,11 @@ public class GitRepositoryMaterializationTests
     [Test]
     public async Task EnsureGitRepositoryAsync_creates_bare_repo_with_main_branch()
     {
-        var (service, reposRoot) = CreateService();
+        var (service, security, reposRoot) = CreateService();
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
             await service.EnsureGitRepositoryAsync("shelly");
 
             var gitDir = service.GetRepositoryPath("shelly")!;
@@ -81,10 +85,11 @@ public class GitRepositoryMaterializationTests
     [Test]
     public async Task EnsureGitRepositoryAsync_is_idempotent_when_head_unchanged()
     {
-        var (service, reposRoot) = CreateService();
+        var (service, security, reposRoot) = CreateService();
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
             await service.EnsureGitRepositoryAsync("shelly");
             var gitDir = service.GetRepositoryPath("shelly")!;
             var marker = Path.Combine(gitDir, ".atoll-head");
@@ -106,12 +111,13 @@ public class GitRepositoryMaterializationTests
     [Test]
     public async Task EnsureGitRepositoryAsync_produces_cloneable_repo_with_expected_files()
     {
-        var (service, reposRoot) = CreateService();
+        var (service, security, reposRoot) = CreateService();
         var cloneDir = Path.Combine(Path.GetTempPath(),
             $"atoll-clone-{Guid.NewGuid():N}");
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
             await service.EnsureGitRepositoryAsync("shelly");
             var gitDir = service.GetRepositoryPath("shelly")!;
 
@@ -139,7 +145,7 @@ public class GitRepositoryMaterializationTests
     [Test]
     public async Task EnsureGitRepositoryAsync_returns_silently_for_unknown_package()
     {
-        var (service, reposRoot) = CreateService();
+        var (service, _, reposRoot) = CreateService();
         try
         {
             Assert.DoesNotThrowAsync(async () =>
@@ -172,6 +178,107 @@ public class GitRepositoryMaterializationTests
         Assert.DoesNotThrowAsync(async () =>
             await service.EnsureGitRepositoryAsync("shelly"));
         Assert.That(service.GetRepositoryPath("shelly"), Is.Null);
+    }
+
+    [Test]
+    public async Task Flagged_revision_is_excluded_from_git_history_until_rescanned()
+    {
+        var (service, security, reposRoot) = CreateService();
+        var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
+        try
+        {
+            // Revision 1: clean and verified.
+            await service.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
+
+            // Revision 2 (new head): scan completes Flagged.
+            var revision2 = new Dictionary<string, string>
+            {
+                ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\nsource=(\"https://example.com/install.sh\")\n",
+                [".SRCINFO"] = "pkgname = shelly\n"
+            };
+            Assert.That(await service.AppendRevisionFromUpstreamAsync("shelly", revision2), Is.True);
+            var flaggedRevision = await security.CompleteScanAsync("shelly", SecurityStatus.Flagged,
+                new SecurityFinding("network-download", FindingSeverity.Critical, "test", "curl | sh", "PKGBUILD"));
+
+            await service.EnsureGitRepositoryAsync("shelly");
+            var (commits, pkgbuild) = await CloneAndInspectAsync(service, "shelly", cloneDir);
+            Assert.Multiple(() =>
+            {
+                Assert.That(commits, Is.EqualTo(1), "the flagged head revision must not be cloneable");
+                Assert.That(pkgbuild, Does.Contain("pkgver=1.0"), "clone must fall back to the last verified revision");
+            });
+
+            // Rescan the flagged head to Verified; the marker must change and the lazy
+            // rebuild must restore the revision to the cloneable history.
+            await security.MarkPendingAsync("shelly", flaggedRevision, true);
+            await security.MarkHeadVerifiedAsync("shelly");
+
+            await service.EnsureGitRepositoryAsync("shelly");
+            TryCleanup(cloneDir);
+            (commits, pkgbuild) = await CloneAndInspectAsync(service, "shelly", cloneDir);
+            Assert.Multiple(() =>
+            {
+                Assert.That(commits, Is.EqualTo(2), "a rescan to Verified must restore the revision to history");
+                Assert.That(pkgbuild, Does.Contain("pkgver=2.0"));
+            });
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+            TryCleanup(cloneDir);
+        }
+    }
+
+    [Test]
+    public async Task Flagged_ancestor_is_excluded_when_head_is_verified()
+    {
+        var (service, security, reposRoot) = CreateService();
+        var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
+        try
+        {
+            // Revision 1: scan completes Flagged.
+            await service.SeedFilesAsync("shelly", SampleFiles);
+            await security.CompleteScanAsync("shelly", SecurityStatus.Flagged,
+                new SecurityFinding("network-download", FindingSeverity.Critical, "test", "curl | sh", "PKGBUILD"));
+
+            // Revision 2 (new head): clean and verified.
+            var revision2 = new Dictionary<string, string>
+            {
+                ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
+                [".SRCINFO"] = "pkgname = shelly\n"
+            };
+            Assert.That(await service.AppendRevisionFromUpstreamAsync("shelly", revision2), Is.True);
+            await security.MarkHeadVerifiedAsync("shelly");
+
+            await service.EnsureGitRepositoryAsync("shelly");
+            var (commits, pkgbuild) = await CloneAndInspectAsync(service, "shelly", cloneDir);
+            Assert.Multiple(() =>
+            {
+                Assert.That(commits, Is.EqualTo(1),
+                    "a flagged ancestor must not be cloneable even when the head verifies");
+                Assert.That(pkgbuild, Does.Contain("pkgver=2.0"));
+            });
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+            TryCleanup(cloneDir);
+        }
+    }
+
+    private static async Task<(int Commits, string Pkgbuild)> CloneAndInspectAsync(
+        MongoPackageService service, string packageName, string cloneDir)
+    {
+        var gitDir = service.GetRepositoryPath(packageName)!;
+        string[] args = ["clone", "--quiet", gitDir, cloneDir];
+        await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, null, null, CancellationToken.None);
+
+        var count = (await GitClient.ExecuteAsync(cloneDir, ["rev-list", "--count", "HEAD"], null, null,
+            CancellationToken.None)).Trim();
+        var pkgbuild = await GitClient.ExecuteAsync(cloneDir, ["show", "HEAD:PKGBUILD"], null, null,
+            CancellationToken.None);
+        return (int.Parse(count), pkgbuild);
     }
 
     private static void TryCleanup(string? path)

@@ -39,6 +39,22 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         }
     }
 
+    public Task<IReadOnlyList<RevisionScanStatus>> ListStatusesForPackageAsync(
+        string packageName,
+        CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            IReadOnlyList<RevisionScanStatus> result =
+            [
+                .. _scans.Values
+                    .Where(s => s.PackageName == packageName)
+                    .Select(s => new RevisionScanStatus(s.RevisionId, s.Status))
+            ];
+            return Task.FromResult(result);
+        }
+    }
+
     public Task<IReadOnlyCollection<string>> ListPackageNamesAsync(CancellationToken ct = default)
     {
         lock (_gate)

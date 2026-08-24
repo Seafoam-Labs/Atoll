@@ -81,7 +81,9 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   sync metrics, and exclusions for the status dashboard.
 - **GitTransferService** shells out to `git upload-pack` to serve clone/fetch requests. Bare repositories under
   `data/repos/` are materialized lazily from MongoDB documents by `MongoPackageService.EnsureGitRepositoryAsync`
-  (commits are synthesized from stored revisions; a `.atoll-head` marker tracks the last materialized revision). Because
+  (commits are synthesized from stored revisions; a `.atoll-head` marker records the head revision plus every retained
+  revision id and its scan status, so any status/history change or security toggle invalidates it and a lazy rebuild
+  re-materializes on the next Git request; when security is enabled only `Verified` revisions are materialized). Because
   commits are synthesized rather than imported, **the SHAs served over Git do not match upstream AUR commit SHAs** - the
   SHAs returned by `/packages/{name}/versions` are the authoritative namespace.
 - **Package name semantics:** `{name}` in all `/packages/{name}` routes is the AUR **pkgname**. Seeding resolves the

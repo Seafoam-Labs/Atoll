@@ -123,8 +123,19 @@ public sealed class MongoPackageService(
         if (doc is null)
             return;
 
+        // The materialized Git history is a function of the retained revisions *and* their scan
+        // statuses: a rescan that flips a revision Verified <-> Flagged must change what a clone
+        // can check out, so both feed the up-to-date marker below.
+        var securityEnabled = _options.Security.Enabled;
+        Dictionary<string, SecurityStatus>? statuses = null;
+        if (securityEnabled)
+        {
+            statuses = (await securityRepository.ListStatusesForPackageAsync(packageName, ct))
+                .ToDictionary(s => s.RevisionId, s => s.Status, StringComparer.Ordinal);
+        }
+
         var marker = Path.Combine(path, ".atoll-head");
-        var headMarker = doc.HeadRevisionId;
+        var headMarker = ComputeHistoryMarker(doc, securityEnabled, statuses);
 
         if (IsUpToDate(path, marker, headMarker))
             return;
@@ -146,8 +157,17 @@ public sealed class MongoPackageService(
 
             var parent = string.Empty;
             var complete = true;
-            foreach (var revision in doc.Revisions.OrderBy(r => r.CreatedAt))
+            foreach (var revision in OrderedRevisions(doc))
             {
+                SecurityStatus? status = null;
+                if (statuses is not null && statuses.TryGetValue(revision.RevisionId, out var scanStatus))
+                    status = scanStatus;
+
+                // Non-verified revisions are excluded from the cloneable history; gaps in the
+                // commit chain are fine because Atoll synthesizes its own SHAs.
+                if (!IsRevisionServable(securityEnabled, status))
+                    continue;
+
                 var content = await repo.GetRevisionAsync(packageName, revision.RevisionId, ct);
                 if (content is null)
                 {
@@ -268,12 +288,52 @@ public sealed class MongoPackageService(
         return packageName;
     }
 
+    // The marker and the commit loop must enumerate revisions in the same order, or the
+    // up-to-date check would validate against a history different from the one materialized.
+    private static IOrderedEnumerable<PackageRevisionDocument> OrderedRevisions(PackageDocument doc)
+    {
+        return doc.Revisions.OrderBy(r => r.CreatedAt);
+    }
+
     private static bool IsUpToDate(string path, string marker, string headMarker)
     {
         return Directory.Exists(path)
                && File.Exists(Path.Combine(path, "HEAD"))
                && File.Exists(marker)
                && File.ReadAllText(marker) == headMarker;
+    }
+
+    /// <summary>
+    ///     A revision enters the synthesized Git history only when its scan is verified, or when
+    ///     security is disabled entirely. Pending, flagged, error, and never-scanned revisions
+    ///     stay reachable through the REST history API but are excluded from the cloneable history.
+    /// </summary>
+    internal static bool IsRevisionServable(bool securityEnabled, SecurityStatus? status)
+    {
+        return !securityEnabled || status == SecurityStatus.Verified;
+    }
+
+    /// <summary>
+    ///     Marker content for the materialized history: the head revision id plus every retained
+    ///     revision id in materialization order, each suffixed with its scan status when security
+    ///     is enabled. Any status flip (rescan), history change, or security toggle changes the
+    ///     marker, which lazily rebuilds the repository on the next Git request.
+    /// </summary>
+    internal static string ComputeHistoryMarker(
+        PackageDocument doc,
+        bool securityEnabled,
+        IReadOnlyDictionary<string, SecurityStatus>? statuses)
+    {
+        var builder = new StringBuilder();
+        builder.Append(doc.HeadRevisionId);
+        foreach (var revision in OrderedRevisions(doc))
+        {
+            builder.Append('\n').Append(revision.RevisionId);
+            if (securityEnabled && statuses is not null && statuses.TryGetValue(revision.RevisionId, out var status))
+                builder.Append(':').Append(status);
+        }
+
+        return builder.ToString();
     }
 
     private static async Task<string> WriteTreeAsync(

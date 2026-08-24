@@ -8,6 +8,8 @@ public interface IPackageSecurityRepository
 
     Task<IReadOnlyCollection<PackageSecurityScanDocument>> ListForPackageAsync(string packageName, CancellationToken ct = default);
 
+    Task<IReadOnlyList<RevisionScanStatus>> ListStatusesForPackageAsync(string packageName, CancellationToken ct = default);
+
     Task<IReadOnlyCollection<string>> ListPackageNamesAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<HeadScanStatus>> ListHeadStatusesAsync(CancellationToken ct = default);

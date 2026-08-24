@@ -233,9 +233,13 @@ extension code (one of the three above). No file content or finding detail is le
 gated on that revision's status; the head-content and Git routes use the head status. Version history and the security
 status endpoint remain ungated because they expose only metadata and scan summaries.
 
-> **Git limitation:** the Git Smart HTTP routes serve the whole repository, so they are gated on the head revision
-> only. A `Flagged` historical revision is still reachable via `git clone` followed by `git checkout <sha>` even though
-> the equivalent `GET /packages/{name}/versions/{sha}` request is blocked.
+> **Git materialization is scan-status aware:** when security is enabled, the bare repository is materialized from
+> `Verified` revisions only. A `Flagged`, `Pending`, or `Error` historical revision is excluded from the cloneable
+> Git history, so it cannot be reached via `git clone` followed by `git checkout <sha>` (the equivalent
+> `GET /packages/{name}/versions/{sha}` request is also blocked). The `.atoll-head` marker embeds every retained
+> revision id and its scan status, so any status change, history change, or toggling of security invalidates the
+> marker and triggers a lazy rebuild on the next Git request. The `/versions` endpoint remains the full-history,
+> metadata-only surface regardless of scan status.
 
 ## Configuration
 
@@ -374,10 +378,13 @@ the previous section resolving on its own after restart.
   wants to unblock (or block) regardless of scanner output.
 - **No source-host policy.** `suspicious-source-url` is a syntactic check only; there is no allow/deny list for source
   domains.
-- **Git routes are head-gated only.** The Git Smart HTTP routes serve the whole repository and are gated on the head
-  revision's status, so a `Flagged` historical revision remains reachable via `git clone` + `git checkout <sha>` even
-  though the equivalent `GET /packages/{name}/versions/{sha}` request is blocked. Closing this would require either
-  blocking clones when any retained revision is flagged, or filtering refs/objects during pack transfer.
+- **Git history is the verified subset only.** When security is enabled, only `Verified` revisions are materialized
+  into the bare repository, so a `Flagged` historical revision is not serveable over Git (`git clone` + `git checkout
+  <sha>` fails for it). The `.atoll-head` marker embeds retained revision ids and scan statuses; any status change or
+  history change invalidates it and triggers a lazy rebuild. `GET /packages/{name}/versions/{sha}` returns the same
+  verdict. The `/versions` endpoint still lists the full history (metadata only). A Verified -> Flagged flip makes the
+  old commit unreachable (dangling object on disk); unreachable objects are never advertised or fetchable, but a
+  periodic `git gc --prune` in the repositories directory reclaims the disk space.
 - **Single-instance assumption.** The lease scheme supports multiple worker loops within one instance and is safe
   against crashes, but has not been validated for multiple API replicas. The broader single-instance assumption is noted
   in `ARCHITECTURE.md`.

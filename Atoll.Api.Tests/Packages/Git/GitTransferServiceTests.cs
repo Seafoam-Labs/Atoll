@@ -2,7 +2,9 @@ using System.Text;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -25,9 +27,11 @@ public class GitTransferServiceTests
         return exitCode == 0;
     }
 
-    private static (GitTransferService git, MongoPackageService packages, string reposRoot) CreateServices()
+    private static (GitTransferService git, MongoPackageService packages, IPackageSecurityRepository security, string reposRoot)
+        CreateServices()
     {
         var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
         var reposRoot = Path.Combine(Path.GetTempPath(), $"atoll-transfer-{Guid.NewGuid():N}");
         Directory.CreateDirectory(reposRoot);
         var options = Options.Create(new AtollOptions
@@ -39,10 +43,10 @@ public class GitTransferServiceTests
             repo,
             new PackageIndexStore(),
             options,
-            new InMemoryPackageSecurityRepository(),
+            security,
             NullLogger<MongoPackageService>.Instance);
         var git = new GitTransferService(packages);
-        return (git, packages, reposRoot);
+        return (git, packages, security, reposRoot);
     }
 
     [SetUp]
@@ -54,7 +58,7 @@ public class GitTransferServiceTests
     [Test]
     public async Task AdvertiseRefsAsync_unknown_package_returns_NotFound()
     {
-        var (git, _, reposRoot) = CreateServices();
+        var (git, _, _, reposRoot) = CreateServices();
         try
         {
             using var output = new MemoryStream();
@@ -71,7 +75,7 @@ public class GitTransferServiceTests
     [Test]
     public async Task UploadPackAsync_unknown_package_returns_NotFound()
     {
-        var (git, _, reposRoot) = CreateServices();
+        var (git, _, _, reposRoot) = CreateServices();
         try
         {
             using var input = new MemoryStream();
@@ -88,10 +92,11 @@ public class GitTransferServiceTests
     [Test]
     public async Task AdvertiseRefsAsync_writes_pkt_line_prelude_and_refs()
     {
-        var (git, packages, reposRoot) = CreateServices();
+        var (git, packages, security, reposRoot) = CreateServices();
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
 
             using var output = new MemoryStream();
             var result = await git.AdvertiseRefsAsync("shelly", output, CancellationToken.None);
@@ -116,11 +121,12 @@ public class GitTransferServiceTests
     [Test]
     public async Task UploadPackAsync_serves_a_full_clone_to_a_local_client()
     {
-        var (git, packages, reposRoot) = CreateServices();
+        var (git, packages, security, reposRoot) = CreateServices();
         var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
 
             using var advOutput = new MemoryStream();
             await git.AdvertiseRefsAsync("shelly", advOutput, CancellationToken.None);
@@ -147,10 +153,11 @@ public class GitTransferServiceTests
     [Test]
     public async Task UploadPackAsync_stateless_rpc_responds_to_want_request()
     {
-        var (git, packages, reposRoot) = CreateServices();
+        var (git, packages, security, reposRoot) = CreateServices();
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
 
             using var adv = new MemoryStream();
             await git.AdvertiseRefsAsync("shelly", adv, CancellationToken.None);

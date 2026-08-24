@@ -42,6 +42,18 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<RevisionScanStatus>> ListStatusesForPackageAsync(
+        string packageName,
+        CancellationToken ct = default)
+    {
+        var projected = await _scans
+            .Find(x => x.PackageName == packageName)
+            .Project(x => new { x.RevisionId, x.Status })
+            .ToListAsync(ct);
+
+        return [.. projected.Select(x => new RevisionScanStatus(x.RevisionId, x.Status))];
+    }
+
     public async Task<IReadOnlyCollection<string>> ListPackageNamesAsync(CancellationToken ct = default)
     {
         var cursor = await _scans.DistinctAsync(x => x.PackageName, Builders<PackageSecurityScanDocument>.Filter.Empty, null, ct);
