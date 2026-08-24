@@ -190,7 +190,7 @@ resource "aws_ecs_task_definition" "app" {
 # ECS tasks, so Blazor Server's SignalR circuit runs over a real WebSocket
 # instead of falling back to long polling.
 resource "aws_lb" "main" {
-  name               = "${var.project_name}-alb"
+  name = "${var.project_name}-alb"
   # Fronted by an HTTP API Gateway (see apigw.tf); the ALB itself is only
   # reachable from inside the VPC via the API Gateway VPC Link.
   internal           = true
