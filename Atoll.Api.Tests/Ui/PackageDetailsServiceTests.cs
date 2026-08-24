@@ -138,7 +138,7 @@ public class PackageDetailsServiceTests
     }
 
     [Test]
-    public async Task GetFilesAsyncGatesBlockedRevisionsWithoutExposingEntries()
+    public async Task GetFilesAsyncServesFlaggedRevisionsForUiInspection()
     {
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "new", SecurityStatus.Verified, files: Files("pkgname=new\n"));
@@ -147,8 +147,8 @@ public class PackageDetailsServiceTests
 
         Assert.That(blocked!.Access.Allowed, Is.False);
         Assert.That(blocked.Access.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Flagged));
-        Assert.That(blocked.Entries, Is.Empty);
-        Assert.That(blocked.Content, Is.Null);
+        Assert.That(blocked.Entries.Select(entry => entry.Path), Is.EqualTo(["PKGBUILD"]));
+        Assert.That(blocked.Content, Is.EqualTo("pkgname=old\n"));
 
         var allowed = await _service.GetFilesAsync(Name, "rev-2", "PKGBUILD");
         Assert.That(allowed!.Access.Allowed, Is.True);

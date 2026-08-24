@@ -46,13 +46,14 @@ else
             </div>
         </div>
     }
-    else if (!_files.Access.Allowed)
-    {
-        <BlockedRevisionBanner Access="@_files.Access"/>
-    }
     else
     {
-        <div class="mb-4 text-sm text-ink-soft flex flex-wrap items-center gap-x-2">
+        @if (!_files.Access.Allowed)
+        {
+            <FlaggedRevisionBanner Access="@_files.Access"/>
+        }
+
+        <div class="my-4 text-sm text-ink-soft flex flex-wrap items-center gap-x-2">
             <span>revision</span>
             <code class="text-atoll-light">@UiFormatting.Truncate(_files.RevisionId)</code>
             <span class="text-ink-faint">@(_files.IsHead ? "(head)" : "(not head)")</span>

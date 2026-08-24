@@ -319,7 +319,7 @@ public class UiPagesTests
     }
 
     [Test]
-    public async Task FilesTabShowsGateBannerInsteadOfFilesForFlaggedRevision()
+    public async Task FilesTabShowsWarningBannerAndFilesForFlaggedRevision()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);
 
@@ -330,9 +330,9 @@ public class UiPagesTests
         Assert.Multiple(() =>
         {
             Assert.That(body, Does.Contain("Flagged"));
-            Assert.That(body, Does.Contain("stay hidden"));
-            Assert.That(body, Does.Not.Contain("file-tree"));
-            Assert.That(body, Does.Not.Contain("PKGBUILD"));
+            Assert.That(body, Does.Contain("remain blocked"));
+            Assert.That(body, Does.Contain("file-tree"));
+            Assert.That(body, Does.Contain("PKGBUILD"));
         });
     }
 

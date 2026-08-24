@@ -1,10 +1,11 @@
-@* Gate banner shown where a revision's content is blocked by its security scan. *@
+@* Warning banner shown above a flagged revision's files - browsing stays available so the offending content can be inspected. *@
 <div class="status-banner @UiFormatting.BannerClass(Access.ReasonCode)">
     <strong>@UiFormatting.BannerTitle(Access.ReasonCode)</strong>
     <span class="text-ink-soft"> @UiFormatting.BannerBody(Access.ReasonCode)</span>
     <div class="mt-1 text-xs text-ink-faint">
-        The file list and contents of this revision stay hidden until its scan completes with no
-        critical/high findings. Request a rescan from the package overview to re-queue it.
+        The files below stay readable so the findings can be inspected, but content and Git access via the
+        API remain blocked until a scan completes with no critical/high findings. Request a rescan from the
+        package overview to re-queue it.
     </div>
 </div>
 

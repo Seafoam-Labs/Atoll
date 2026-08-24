@@ -161,10 +161,8 @@ public sealed class PackageDetailsService(
         var isHead = string.Equals(revisionId, head.HeadRevisionId, StringComparison.Ordinal);
 
         var access = await securityAccess.CheckAsync(name, revisionId, ct);
-        if (!access.Allowed)
-            return new PackageFilesView(
-                name, revisionId, isHead, fellBack, access,
-                [], false, 0, null, null, 0, false, false, false);
+        // UI file browsing stays available for flagged revisions so users can inspect the offending
+        // content; only the REST content endpoints and Git serving are gated by PackageSecurityFilter.
 
         var revision = await packageRepository.GetRevisionAsync(name, revisionId, ct);
         if (revision is null || revision.Files.Count == 0)

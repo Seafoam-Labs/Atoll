@@ -233,6 +233,10 @@ extension code (one of the three above). No file content or finding detail is le
 gated on that revision's status; the head-content and Git routes use the head status. Version history and the security
 status endpoint remain ungated because they expose only metadata and scan summaries.
 
+**UI exception:** the Blazor Files tab (`PackageDetailsService.GetFilesAsync`) is deliberately *not* gated — it
+serves the file tree and contents of flagged revisions read-only, with a warning banner, so users can inspect the
+content that triggered the findings. Only the API/Git surfaces go through `PackageSecurityFilter`.
+
 > **Git materialization is scan-status aware:** when security is enabled, the bare repository is materialized from
 > `Verified` revisions only. A `Flagged`, `Pending`, or `Error` historical revision is excluded from the cloneable
 > Git history, so it cannot be reached via `git clone` followed by `git checkout <sha>` (the equivalent
