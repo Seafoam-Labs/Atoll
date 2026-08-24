@@ -257,6 +257,18 @@ resource "aws_iam_policy" "github_deploy" {
         ]
       },
       {
+        # The main stack looks up the ISSUED ACM certificate for the API
+        # Gateway custom domain name and references its ARN when creating
+        # the v2 domain name.
+        Sid    = "ReadAcmCertificates"
+        Effect = "Allow"
+        Action = [
+          "acm:ListCertificates",
+          "acm:DescribeCertificate",
+        ]
+        Resource = "*"
+      },
+      {
         Sid    = "DocumentDb"
         Effect = "Allow"
         Action = [

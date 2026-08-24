@@ -23,3 +23,9 @@ output "api_gateway_invoke_url" {
   value       = aws_apigatewayv2_api.main.api_endpoint
 }
 
+output "api_gateway_target_domain_name" {
+  description = "Regional target of the API Gateway custom domain; point the public CNAME for the domain here"
+  value       = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].target_domain_name
+}
+
+

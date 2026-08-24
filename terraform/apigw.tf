@@ -87,13 +87,37 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
-# The custom domain `atoll.seafoam-labs.org` is already registered in API
-# Gateway (managed out of band, together with its ACM certificate and the
-# public DNS record pointing at its regional target). This stack only needs
-# to attach an API mapping so requests to that domain reach this HTTP API's
-# $default stage.
+# The ISSUED ACM certificate for the custom domain (must live in the same
+# region as the domain name configuration, i.e. us-east-1).
+data "aws_acm_certificate" "api_domain" {
+  domain   = var.api_domain_name
+  statuses = ["ISSUED"]
+}
+
+# Custom domain in front of the HTTP API. The security policy must be
+# TLS_1_2: it is the only policy under which HTTP APIs can be mapped to a
+# custom domain name (legacy TLS_1_0 domains only accept REST APIs). If the
+# domain previously existed with the legacy policy, delete it out of band
+# first — the policy is fixed at creation time and cannot be converted in
+# place. After (re)creation, point the public CNAME for the domain at
+# `api_gateway_target_domain_name` (see outputs.tf).
+resource "aws_apigatewayv2_domain_name" "main" {
+  domain_name = var.api_domain_name
+
+  domain_name_configuration {
+    certificate_arn = data.aws_acm_certificate.api_domain.arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+
+  tags = {
+    Name = "${var.project_name}-api-domain"
+  }
+}
+
+# Maps every request for the custom domain to this HTTP API's $default stage.
 resource "aws_apigatewayv2_api_mapping" "main" {
   api_id      = aws_apigatewayv2_api.main.id
-  domain_name = var.api_domain_name
+  domain_name = aws_apigatewayv2_domain_name.main.domain_name
   stage       = aws_apigatewayv2_stage.default.id
 }
