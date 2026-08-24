@@ -52,3 +52,4 @@ variable "api_domain_name" {
   description = "Custom domain name registered in API Gateway that fronts the ALB"
   default     = "atoll.seafoam-labs.org"
 }
+
