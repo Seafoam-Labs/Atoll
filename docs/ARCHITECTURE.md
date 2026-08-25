@@ -239,7 +239,7 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 - `PackageCatalogService` substring queries and seeded/security filters still scan the full sorted view on every call
   (~15–25 ms at ~85k packages, even for a single-hit query) - a real substring/prefix index would be needed to remove
   this floor. Empty-query default views bypass the scan via the per-sort cached sorted views (2026-08-23; replaced the
-  earlier top-K heap - see `tailwind.md` for the measurement harness).
+  earlier top-K heap).
 
 ## References
 

@@ -68,6 +68,21 @@ Main runtime configuration is in:
 
 For most feature-specific configuration, prefer the linked docs over the README.
 
+### Environment variables
+
+Some important environment variables are listed below.
+
+| Variable | Values | Description |
+| --- | --- | --- |
+| `Atoll__Mongo__ConnectionString` | MongoDB connection string | Connection string for the MongoDB instance (e.g. `mongodb://localhost:27017`). |
+| `Atoll__Seed__Mode` | `Off`, `Direct`, `Bulk` | Controls how packages are seeded from AUR: disabled, direct fetch, or bulk import. See [SYNC.md](docs/SYNC.md). |
+| `Atoll__Refresh__Enabled` | `true`, `false` | Enables or disables background refresh of package metadata. |
+| `Atoll__Security__Enabled` | `true`, `false` | Enables or disables security scanning and content gating. See [SECURITY.md](docs/SECURITY.md). |
+| `Atoll__Mutations__Enabled` | `true`, `false` | Allows mutating operations. Set to `false` when exposing Atoll read-only on public networks. |
+
+Note: double underscores (`__`) are the standard .NET convention for nesting configuration sections, so
+`Atoll__Seed__Mode` maps to `Atoll:Seed:Mode` in `appsettings.json`.
+
 ## Tests
 
 Fast tests without Docker:
