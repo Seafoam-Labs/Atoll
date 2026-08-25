@@ -57,7 +57,7 @@ resource "aws_security_group" "ecs_sg" {
 }
 
 resource "aws_security_group" "alb_sg" {
-  name        = "${var.project_name}-alb-sg"
+  name_prefix = "${var.project_name}-alb-sg-"
   description = "Allow inbound HTTP traffic from the API Gateway VPC Link to the ALB"
   vpc_id      = data.aws_vpc.default.id
 
