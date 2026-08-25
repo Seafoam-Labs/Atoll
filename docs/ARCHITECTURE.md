@@ -11,7 +11,7 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   Local mutation endpoints are unauthenticated: trusted deployments may enable them, while publicly reachable instances
   must set `Atoll:Mutations:Enabled=false`. Git push (`git-receive-pack`) and authentication are currently out of scope.
 - **Success criteria:** Search queries served from memory in < 10 ms end-to-end; metadata index stays in sync with AUR
-  within the configured refresh interval (default 10 minutes). Seeded content is updated only when the optional
+  within the configured refresh interval (default 5 minutes). Seeded content is updated only when the optional
   package-refresh worker is enabled.
 
 ## Architecture Principles
@@ -39,59 +39,61 @@ history, provides fast in-memory search, and exposes each package as a cloneable
 ## Architecture
 
 ```txt
-[Git client / HTTP client / Web browser]
-           │
-           ▼
-  [ASP.NET Core Minimal API / Blazor]  (:8080 container / :5290 dev)
-           │
-     ┌─────┼──────────────────────────┬──────────────────────────┐
-     │     │                          │                          │
-     ▼     ▼                          ▼                          ▼
-[PackageSearchService]        [IPackageService /         [PackageDetailsService /
-(in-memory index)              IGitTransferService]       StatusDashboardService]
-     │                        (MongoDB; git subprocess)  (UI view models)
-     ▼                                │                          │
-[PackageIndexStore]                   ▼                          │
-     ▲                            [MongoDB]                      │
-     │ rebuild on refresh         (packages + aur-metadata       │
-[PackageIndexWorker (bg)]          collections) ─────────────────┘
-     │ fetches metadata every N minutes
-     ▼
-[AUR packages-meta-ext-v1.json.gz]
-
-[DirectSeedWorker (bg)]
-     │  clones missing packages from aur.archlinux.org, delay between seeds
-     ▼
-[MongoDB packages collection]
+                      [Git client / HTTP client / Web browser]
+                                         │
+                                         ▼
+                      [ASP.NET Core Minimal API / Blazor]
+                         (:8080 container / :5290 dev)
+                                         │
+     ┌────────────────────────┬──────────┴───────────┬────────────────────────┐
+     │                        │                      │                        │
+     ▼                        ▼                      ▼                        ▼
+[PackageSearchService]   [IPackageService]  [GitTransferService]    [PackageDetailsService /
+(in-memory index)        (MongoDB repos)    (git upload-pack)        StatusDashboardService]
+     │                        │                      │                        │
+     ▼                        │                      ▼                        │
+[PackageIndexStore]           │              [Bare Git Repos]                 │
+     ▲                        │              (data/repos/ cache)              │
+     │                        │                      │                        │
+     │                        └──────────┬───────────┘                        │
+     │                                   │                                    │
+     │                                   ▼                                    │
+     │                              [MongoDB]                                 │
+     │                        (authoritative state) ──────────────────────────┘
+     │                                   ▲
+     │                                   │ writes & leases
+     ├───────────────────────┬───────────┴───────────┬────────────────────────┐
+     │                       │                       │                        │
+[PackageIndexWorker]   [SeedWorker]        [RefreshWorker]          [SecurityWorker]
+(polls AUR metadata)   (Direct / Bulk)     (re-syncs upstream)      (static analysis)
+     │                       │                       │
+     ▼                       ▼                       ▼
+ [AUR Metadata]        [AUR / Mirror]      [GitHub AUR Mirror]
 ```
 
-- **PackageIndexWorker** periodically downloads the AUR dump, persists it to MongoDB, and atomically swaps the in-memory
-  `PackageIndexStore` snapshot. On startup it first rebuilds the index from the cached MongoDB metadata (if any) so
-  search is available before the first download.
-- **Seed worker:** `Seed:Mode` selects the direct, bulk, or disabled automated seeding strategy. Direct and bulk are
-  mutually exclusive; manual seeding remains available when automated seeding is off.
-- **PackageRefreshWorker:** the opt-in refresh worker updates already-seeded packages from upstream and appends a
-  revision only when its content changes. It shares bulk seeding's mirror cache when both are enabled.
-  Seeding and refresh mechanics, configuration, cache lifecycle, metrics, and operational verification are documented
-  in [Package seeding and refresh](SYNC.md).
-- **PackageSearchService** serves all search queries from the immutable in-memory snapshot with no database round-trips.
-- **Blazor Web UI:** Razor components under `Components/` provide a rich web UI. `PackageCatalogService` powers the
-  interactive package catalog with per-sort cached sorted views and snapshot caching; `PackageDetailsService` assembles
-  package metadata, relations, file views, and security verdicts; `StatusDashboardService` consolidates worker status,
-  sync metrics, and exclusions for the status dashboard.
-- **GitTransferService** shells out to `git upload-pack` to serve clone/fetch requests. Bare repositories under
-  `data/repos/` are materialized lazily from MongoDB documents by `MongoPackageService.EnsureGitRepositoryAsync`
-  (commits are synthesized from stored revisions; a `.atoll-head` marker records the head revision plus every retained
-  revision id and its scan status, so any status/history change or security toggle invalidates it and a lazy rebuild
-  re-materializes on the next Git request; when security is enabled only `Verified` revisions are materialized). Because
-  commits are synthesized rather than imported, **the SHAs served over Git do not match upstream AUR commit SHAs** - the
-  SHAs returned by `/packages/{name}/versions` are the authoritative namespace.
-- **Package name semantics:** `{name}` in all `/packages/{name}` routes is the AUR **pkgname**. Seeding resolves the
-  **pkgbase** from the in-memory AUR metadata index (`MongoPackageService.ResolvePackageBase`) before cloning
-  `aur.archlinux.org/{pkgbase}.git`, since AUR Git URLs are keyed by pkgbase - not pkgname. For split packages where
-  `pkgname != pkgbase` this mapping is required; for non-split packages or when the index is unavailable (cold start,
-  stale snapshot) it falls back to the pkgname, which is correct for non-split packages. Bulk fetching applies the same
-  pkgname → pkgbase mapping before matching mirror branches.
+- **PackageIndexWorker:** Periodically downloads the AUR metadata archive (`packages-meta-ext-v1.json.gz`) with
+  conditional `ETag`/`Last-Modified` headers, persists new snapshots to MongoDB, and atomically swaps the in-memory
+  `PackageIndexStore` snapshot. On startup, it primes the index from MongoDB so search is immediately available. When
+  `DataSource:PruneDeletedPackages` is enabled, it prunes seeded packages that disappeared upstream (>10% drops require
+  confirmation by a second snapshot).
+- **Seed workers (Direct / Bulk):** `Seed:Mode` controls automated seeding of missing packages. Direct mode clones
+  individual packages from AUR; Bulk mode batch-fetches branches from the GitHub AUR mirror into a local cache.
+- **PackageRefreshWorker:** Periodically checks already-seeded packages against upstream Git HEADs, appending new
+  revisions only when content changes. Shares the mirror cache with Bulk seeding.
+- **PackageSecurityWorker:** Scans newly seeded or refreshed revisions using deterministic static analysis, gating
+  content and Git access until verified.
+- **PackageSearchService:** Serves all search queries in-memory from `PackageIndexStore` snapshots with zero database
+  I/O.
+- **Blazor Web UI:** Razor components under `Components/` provide a fast, responsive UI:
+  - `PackageCatalogService`: Powers `/` with cached pre-sorted views, live filtering, and server-side pagination.
+  - `PackageDetailsService`: Assembles package metadata, relations, file trees, and security verdicts.
+  - `StatusDashboardService`: Aggregates worker statuses, sync metrics, and exclusions for `/status`.
+- **GitTransferService:** Serves Git clone/fetch requests via `git upload-pack`. Bare repositories under `data/repos/`
+  are lazily materialized from MongoDB on demand. Commits are synthesized deterministically from stored revisions, so
+  **commit SHAs served over Git match Atoll revision IDs, not upstream AUR commit SHAs**.
+- **Package name semantics:** `{name}` in routes is always the AUR **pkgname**. When interacting with Git mirrors or
+  AUR, Atoll maps `pkgname` to its parent **pkgbase** using the in-memory index
+  (`MongoPackageService.ResolvePackageBase`), correctly handling split packages.
 
 Request paths of note (everything else is standard Minimal API routing with `GlobalExceptionHandler` converting
 unhandled exceptions to RFC 9457 `ProblemDetails`):
@@ -108,33 +110,28 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 
 ## State & Storage
 
-- **MongoDB (authoritative):** `packages` stores metadata-only package documents: revision **metadata** (id,
-  timestamp, author, message) stays embedded, but revision file content lives in `package-revisions` — one document
-  per retained revision, keyed by `{packageName}:{revisionId}` (same composite-string convention as
-  `package-security-scans`) and indexed on `packageName` for cascade deletes. The head is served by reading its
-  revision document via `headRevisionId`; history length no longer affects package-document size. `packages` also
-  carries the refresh sync watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`, `lastSyncAttemptAt`,
-  `lastSyncSucceededAt`, `lastSyncError`); `aur-metadata` stores the full AUR package dump as typed documents;
-  `seed-exclusions` records pkgbases whose revision snapshot cannot fit in a MongoDB document (consulted by both
-  seeding and refresh); `package-security-scans` stores the security state and latest findings for each retained
-  package revision (keyed by `{packageName}:{revisionId}`; compound-indexed on `(status, leaseUntil)` for the scan
-  work queue and on `(packageName, isHead)` for head lookups). The `packages` collection is indexed on `packageName`
-  at startup so the head/exists/history/revision/delete lookups (which filter on `packageName`, not `_id`) are
-  index-served; the index is non-unique to tolerate pre-existing data even though `packageName` is effectively unique
-  in production. The security-state schema and lifecycle are documented in [Package security scanning](SECURITY.md).
-- **In-memory index (cache):** `PackageIndexStore` - immutable snapshot of `ByNames`, `ByWords`, `ByProvides`
-  dictionaries; rebuilt from MongoDB on startup and after each AUR refresh.
-- **On-disk Git repos (cache):** bare repositories under `data/repos/` (configurable via `Atoll:Git:RepositoriesPath`),
-  one per seeded package, materialized lazily from MongoDB.
-- **Limits:** `MaxRevisions` (default 10) caps retained history per package; revision file content is stored in
-  `package-revisions` (one document per revision), so history length no longer affects package-document size and the
-  16 MiB BSON limit applies per revision snapshot instead. `MaxFileBytes` (default 5 MB) rejects oversized individual
-  files at seed time. Every revision snapshot is BSON-size checked before insertion against MongoDB's fixed 16 MiB
-  limit. Oversized snapshots are recorded as pkgbase exclusions (consulted by both seeding and refresh) instead of
-  being retried indefinitely. This is a containment measure, not a way to store large packages.
-- **Disk growth:** unbounded. Seeding all ~116k AUR packages lazily materializes up to ~116k bare repos on disk with no
-  eviction, TTL, or sizing guidance (inode pressure is a real concern at that count). Automated seeding is on by
-  default; use `Seed:Mode=Off` when that behavior is not desired and plan capacity accordingly.
+- **MongoDB (authoritative):**
+  - `packages` — Root package documents. Stores metadata, embedded revision headers (ID, author, timestamp, message),
+    `headRevisionId` pointer, and refresh sync watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`,
+    `lastSyncAttemptAt`, `lastSyncSucceededAt`, `lastSyncError`). Indexed on `packageName` at startup.
+  - `package-revisions` — Normalized snapshot file content (one document per retained revision, keyed by
+    `{packageName}:{revisionId}`). History length does not bloat root package documents; snapshots are capped by
+    MongoDB's 16 MiB BSON limit.
+  - `package-security-scans` — Security state and findings per revision (keyed by `{packageName}:{revisionId}`).
+    Indexed on `(status, leaseUntil)` for the scanner work queue and `(packageName, isHead)` for head lookups.
+  - `seed-exclusions` — Records pkgbases whose revision content exceeds the 16 MiB document limit, preventing endless
+    retries during seed and refresh.
+  - `aur-metadata` — Raw AUR metadata dump snapshots.
+- **In-memory index (cache):** `PackageIndexStore` maintains an immutable snapshot of `ByNames`, `ByWords`, and
+  `ByProvides` lookup tables. Rebuilt on startup from MongoDB and swapped atomically on metadata refresh.
+- **On-disk Git repos (cache):** Bare repositories under `data/repos/` (configurable via `Atoll:Git:RepositoriesPath`),
+  lazily materialized from `package-revisions`. Re-materialized whenever the head revision or security status changes.
+- **Limits & containment:**
+  - `MaxRevisions` (default 10) caps retained revision history per package.
+  - `MaxFileBytes` (default 5 MB) rejects oversized files at seed time.
+  - 16 MiB BSON limit applies per revision document. Oversized packages are recorded in `seed-exclusions`.
+  - Disk growth for bare repos is unbounded (~116k bare repos if full AUR is seeded). Use `Seed:Mode=Off` or monitor
+    storage/inodes.
 
 ## API
 
@@ -164,7 +161,7 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | GET | `/packages/{name}` | Get head revision files |
 | GET | `/packages/{name}/versions` | Get revision history |
 | GET | `/packages/{name}/versions/{sha}` | Get specific revision files |
-| DELETE | `/packages/{name}` | Delete package (MongoDB document only - see note below). `403` when `Atoll:Mutations:Enabled=false` |
+| DELETE | `/packages/{name}` | Delete package data, security scans, and materialized Git repo. `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/packages/{name}/security` | Get per-revision security status (`?revision={sha}` for one revision) |
 | POST | `/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement |
@@ -180,9 +177,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | `/package/{name}/revisions` | Static SSR | Revision history list and static security analysis findings |
 | `/status` | Static SSR | Operational dashboard: index sync, workers, security scans, exclusions |
 
-> **Known issue:** `DELETE` removes the MongoDB document but leaves the bare repo on disk, so `git clone` keeps serving
-> the deleted package's content indefinitely. Fix by either deleting the directory or having `GitTransferService` verify
-> the MongoDB document exists first.
+`DELETE` removes the package and revision documents, security scan records, and the materialized bare Git repository.
+`GitTransferService` also verifies that the MongoDB package still exists before serving an on-disk repository.
 
 ### Security scanning
 
@@ -195,13 +191,13 @@ configuration, and limitations are documented in [Package security scanning](SEC
 
 | Decision | Rationale | Trade-offs | Status |
 | --- | --- | --- | --- |
-| In-memory search index (no Elasticsearch) | Fast reads; AUR metadata fits comfortably in RAM | Index must be rebuilt on restart; no ranked full-text scoring | Active |
-| MongoDB for package storage | Flexible schema; embedded revision metadata avoids joins | Revision file content is normalized into `package-revisions`, so the 16 MiB cap applies per snapshot; content reads take an extra indexed find; appends write two documents without transactions (write ordering keeps readers consistent) | Active |
-| Shell out to `git upload-pack` | Reuses the complete and reliable Git transfer implementation | Requires `git` installed in the container; subprocess overhead per request | Active |
-| Atomic `PackageIndexStore` snapshot swap | Lock-free reads; consistent view per request | Full index rebuild on each refresh; 2× peak memory while both snapshots are live. Incremental updates evaluated and rejected: rebuild cost is negligible at ~116k packages per 10-minute cycle. | Active |
-| `PackageCatalogService` sorted-view cache with server-side pagination | The Blazor catalog page (`/`) paginates the full ~85k–118k-package index; each (index generation, sort) pair is sorted once into a cached array - dropped automatically when `PackageIndexStore.Replace` swaps the snapshot - after which paging is an O(PageSize) slice, and query/filter evaluation streams over the pre-sorted array, materializing rows only for the rendered page (measured: default view and page navigation ~0.01 ms warm, ~4 KB alloc/call) | First search per sort pays O(N log N) and one array of references per cached sort (~0.9 MB at 118k packages). Substring queries and seeded/security filters still scan every package (~15–25 ms floor) since matching is `Contains`-based; the catalog URL (`q`, `page`, `mode`, `seeded`, `security`, `sort`) is the single source of truth, so back/forward and deep links cover the full filter state | Active |
-| In-app response compression (Brotli + Gzip) | Compresses dynamic SSR/HTML payloads (e.g. catalog rows on `/`) and API responses to reduce transfer size ~5× without extra infra | Minimal CPU overhead (mitigated by `CompressionLevel.Fastest`). Security: ASP.NET Core disables compression over HTTPS by default (`EnableForHttps = false`) to protect against CRIME/BREACH side-channel attacks; safe for Atoll's HTTP-to-Kestrel architecture. | Active |
-| No authentication | Keeps the API simple for trusted private deployments | Unauthenticated callers can seed, rescan, **and delete** packages; must sit behind a reverse proxy / firewall if exposed. Setting `Atoll:Mutations:Enabled=false` disables the manual seed/rescan/delete mutations (REST `403` + hidden UI buttons) so a public instance can still be exposed read-only | Active |
+| In-memory search index (no Elasticsearch) | Fast reads (< 10 ms); full AUR metadata fits easily in RAM (~100 MB). | Must rebuild on restart; no fuzzy scoring. | Active |
+| Normalized `package-revisions` storage | Avoids 16 MiB document growth as revisions accumulate; keeps `packages` documents lean. | Content reads take an extra indexed query; two-document writes on append without distributed transactions. | Active |
+| Subprocess execution for `git upload-pack` | Reuses complete and standard Git smart HTTP protocol implementation. | Requires `git` binary in container; small process-spawn overhead per Git fetch. | Active |
+| Atomic snapshot swap in `PackageIndexStore` | Lock-free, zero-contention reads; consistent view per query. | Full index rebuild on refresh; temporary 2× peak memory during rebuild. | Active |
+| Cached sorted views in `PackageCatalogService` | Fast UI pagination over 100k+ packages. Each `(generation, sort)` is pre-sorted once into an array reference. | First request per sort pays O(N log N). Substring queries still scan linearly (~15–25 ms). | Active |
+| Response compression (Brotli + Gzip) | Reduces dynamic SSR and API payload sizes ~5× without external infrastructure. | Minor CPU overhead (mitigated by `Fastest` level). Disabled over HTTPS by default to prevent BREACH attacks. | Active |
+| Open endpoints / Trusted network model | Keeps the API and Git clone surface simple and standard for self-hosted instances. | Anyone on the network can mutate data unless `Atoll:Mutations:Enabled=false` is set. | Active |
 
 Security notes not covered by the ADRs: options are validated on startup via Data Annotations (`[Required]`, `[Range]`,
 `[Url]`); raw stack traces are never returned to clients; `git-receive-pack` (push) is explicitly rejected with

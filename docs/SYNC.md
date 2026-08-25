@@ -4,6 +4,7 @@ This document describes how Atoll gets package content from AUR into MongoDB and
 
 - **Seeding** imports packages listed in the metadata index that are missing from the package repository.
 - **Periodic refresh** re-syncs already-seeded packages when upstream changes.
+- **Upstream reconciliation** removes seeded package names that disappear from a successfully parsed full AUR snapshot.
 
 It is intended for maintainers changing a seed or refresh worker or their shared Git transport, and for operators
 diagnosing a failed sync. System context lives in [Architecture Overview](ARCHITECTURE.md); the security gating applied
@@ -17,6 +18,8 @@ The application-level implementation is in:
 - `Atoll.Api/Services/Packages/Refresh/PackageRefreshWorker.cs`
 - `Atoll.Api/Services/Packages/Refresh/RefreshPlan.cs`
 - `Atoll.Api/Services/Packages/Mirror/AurMirror.cs`
+- `Atoll.Api/Services/Search/Refresh/PackageIndexUpdater.cs`
+- `Atoll.Api/Services/Search/Refresh/UpstreamPackageReconciler.cs`
 
 ## pkgname and pkgbase
 
@@ -31,6 +34,46 @@ pkgname:  libfoo ──┘
 
 Both bulk seeding and refresh resolve pkgname to pkgbase before discovery and fetching, then fan the fetched tree back
 out to each member pkgname individually.
+
+## Metadata polling and authoritative reconciliation
+
+### Why the metadata archive is the source of truth
+
+AUR exposes four change-detection surfaces; Atoll's sync design uses two of them as authorities and rejects the rest:
+
+| Surface | What it reports | Role in Atoll |
+| --- | --- | --- |
+| Metadata archive (`packages-meta-ext-v1.json.gz`, produced every ~5 minutes) | The complete package set with version and dependency metadata; supports `ETag`/`Last-Modified` conditional requests | Authoritative for **additions and removals**: the index rebuilds from it, and reconciliation only prunes against a successfully parsed complete snapshot |
+| AUR Git (`aur.archlinux.org/{pkgbase}.git`, via the GitHub mirror with a direct-AUR fallback) | The PKGBUILD commit tree of each package | Authoritative for **content updates**: Git HEAD/content is a stronger update signal than metadata `Version`/`LastModified` |
+| RPC (`/rpc/v5/info`) | Metadata for individually named packages (~200 names per request, 4,000 requests/day per IP). A name missing from a response no longer exists — but may have been renamed or merged, and a transient failure is indistinguishable from absence | Not used: the archive carries the same data without the rate limit, so a failed RPC never drives a deletion decision |
+| RSS (`/rss`) | Newest *submitted* packages only, in a bounded recent window | Not usable as a sync source: it reports neither updates nor removals |
+
+The ArchWiki recommends the archives over bulk RPC queries to reduce server load
+(<https://wiki.archlinux.org/title/Aurweb_RPC_interface>), which is why Atoll polls the archive at its ~5-minute
+production cadence with conditional requests rather than polling the RPC.
+
+### Polling and reconciliation behavior
+
+`PackageIndexWorker` polls `packages-meta-ext-v1.json.gz` at `Atoll:DataSource:RefreshIntervalMinutes` (default 5
+minutes).
+
+1. **Startup & Priming:** Startup rebuilds the in-memory index from cached MongoDB metadata (if present) so search is
+   available immediately, then initiates an upstream check without waiting for the first interval.
+2. **Conditional Requests:** Subsequent polls send `ETag` and `Last-Modified` validators. A `304 Not Modified` skips
+   downloading, decompressing, and re-parsing the dump.
+3. **Atomic Updates:** A modified dump must decompress and parse into a valid, non-empty JSON package array.
+   `PackageIndexUpdater` writes the batch to MongoDB and atomically swaps the active pointer, ensuring readers never see
+   a partial snapshot.
+4. **Authoritative Pruning (`PruneDeletedPackages`):**
+   When `Atoll:DataSource:PruneDeletedPackages=true`, `UpstreamPackageReconciler` compares MongoDB's seeded package set
+   against the newly published snapshot:
+   - Packages missing upstream are deleted along with their revision documents, security scans, and bare Git repos.
+   - **Corruption Guard:** If an upstream snapshot shrinks by >10% compared to the current index, pruning is deferred
+     until a second consecutive snapshot confirms the drop, preventing accidental bulk deletions from truncated
+     downloads.
+   - Failed, malformed, or empty responses never trigger pruning.
+   - Pruning operates independently of `Atoll:Mutations:Enabled` (background sync continues even when public API
+     mutations are disabled).
 
 ## Seeding
 
@@ -75,7 +118,8 @@ finding and seeding missing packages. The Direct and Bulk configuration sections
    `aur.archlinux.org`.
 4. Waits for `Atoll:Seed:Direct:SeedDelayMs` after every attempt, including a failed attempt or a conflict caused by
    another request seeding the package first.
-5. Waits five minutes before retrying when all indexed packages are present or when a cycle seeds no packages.
+5. Checks again after one minute when all indexed packages are present, limiting the delay after a metadata refresh.
+   A cycle that had candidates but seeded none waits five minutes before retrying failures.
 
 Configure it as follows:
 
@@ -101,22 +145,22 @@ to review cycle candidate, seeded, conflict, and failure counts.
 
 #### How it works
 
-For each seed cycle, the worker:
+For each seed cycle, `PackageBulkSeedWorker`:
 
-1. Finds metadata-indexed pkgnames that do not yet exist in the package repository.
-2. Resolves each pkgname to its pkgbase and groups the pkgnames by pkgbase. If metadata has no pkgbase, it uses the
-   pkgname as the fallback.
-3. Excludes pkgbases previously recorded as too large for MongoDB's 16 MiB BSON-document limit.
-4. Lists the mirror's branches once and intersects them with the target pkgbases.
-5. Fetches the remaining pkgbase branches in batches into one persistent bare cache, at depth one. Fetching runs
-   ahead as a pipeline stage, so later batches download while earlier ones are still being processed.
-6. Archives each fetched tree once, then calls `SeedFilesAsync` for every pkgname mapped to that pkgbase. Within a
-   batch, archive extraction and seeding run with bounded parallelism (`Parallelism`); this is safe because
-   `git archive` only reads the bare cache and each seeded package document is disjoint.
+1. **Candidate Discovery:** Identifies indexed pkgnames missing from MongoDB.
+2. **Pkgbase Grouping:** Maps each pkgname to its pkgbase (falling back to pkgname if unmapped) and groups candidates.
+3. **Exclusion Check:** Filters out pkgbases previously flagged in `seed-exclusions` (e.g. exceeding the 16 MiB BSON
+   limit).
+4. **Mirror Intersection:** Queries `git ls-remote --heads` on the mirror and keeps only advertised branches.
+5. **Pipelined Batch Fetching:** Fetches target pkgbase branches into a persistent bare cache (`--depth=1`). Fetching
+   runs ahead as a pipeline stage while previous batches are extracted and persisted.
+6. **Archive & Seeding:** Extracts each pkgbase tree via `git archive` and invokes `SeedFilesAsync` concurrently across
+   members (`Parallelism`), assigning each split pkgname its deterministic revision snapshot in `package-revisions`.
 
 This replaces one network clone per pkgname with one batched request per group of pkgbases. It retains the existing seed
 validation and persistence path. In particular, each split pkgname is still seeded separately and receives its normal
-pkgname-specific revision identity. When a cycle seeds no packages, the worker waits five minutes before checking again.
+pkgname-specific revision identity. When all indexed packages are present, the worker checks again after one minute;
+failed/no-progress cycles retain their longer backoff.
 
 #### Configuration and observability
 
@@ -159,11 +203,11 @@ together to distinguish these outcomes:
 | Ref changed after discovery | `atoll_bulkseed_refs_failed_total` increases after bisection; other refs in the original batch continue. |
 | Tree cannot be read | A `git archive`-related warning; mapped pkgnames are skipped for that cycle. |
 | Revision snapshot exceeds BSON limit | `atoll_bulkseed_packages_excluded_total` increases and the pkgbase is persisted in `seed-exclusions`, preventing repeated fetches in later cycles. |
-| Nothing to seed | The worker waits five minutes before the next check. |
+| All indexed packages already seeded | The worker checks for newly indexed packages again in one minute. |
 
 ## Periodic refresh
 
-The opt-in `PackageRefreshWorker` (`Atoll:Refresh:Enabled`, default `false`) continuously re-synces seeded packages so
+The `PackageRefreshWorker` (`Atoll:Refresh:Enabled`, default `true`) continuously re-synces seeded packages so
 the latest upstream version is available instead of freezing at first seed. It is independent of the seed mode and can
 run alongside either `DirectSeedWorker` or `PackageBulkSeedWorker`; when active it shares the same `IAurMirror`
 singleton (GitHub mirror cache) as bulk seeding — see [Cache lifecycle](#cache-lifecycle).
@@ -172,34 +216,32 @@ Change detection is **content-based via upstream HEAD SHA**, not AUR metadata ti
 
 ### How it works
 
-Cycles run every minute; a failed cycle backs off one minute before retrying. Each cycle:
+Refresh runs every minute (backing off on error). Each cycle executes the following stages:
 
-1. Skips when the metadata index is empty or when no packages are seeded yet.
-2. Reads the sync state of all seeded packages (a lean projection of `packages`), resolves each package's **pkgbase**
-   from the index, falling back to the stored `upstreamPackageBase`, then the pkgname, and groups members by pkgbase.
-3. Issues one `git ls-remote --heads` against the mirror to build a branch→SHA map. pkgbases with no mirror branch are
-   counted as `refsSkipped` and left untouched.
-4. Selects candidates: pkgbases where any member was never synced, where the stored `lastSyncedUpstreamHead` differs
-   from the current branch head, or where the last successful sync is older than `MaxStalenessHours` (a safety sweep so
-   nothing waits forever even when its SHA has not moved). Candidates are processed least-recently-synced first.
-5. Splits candidates by whether the upstream SHA actually moved. Candidates whose SHA is unchanged for **every** member
-   (staleness-only) skip the fetch entirely — the worker just advances their watermarks. Only genuine SHA movers are
-   batch-fetched, capped at `MaxPackagesPerRun`, reusing the bulk-seed batching/bisection. As in bulk seeding, fetching
-   runs ahead of application as a pipeline stage.
-6. For each fetched pkgbase, archives the tree once and applies it to each member pkgname with bounded parallelism
-   (`Parallelism`). If the deterministic revision ID matches the current head, the package is recorded unchanged (but
-   the watermark still advances so the pkgbase is not refetched); otherwise a new revision is appended via
-   `AppendRevisionFromUpstreamAsync`, which writes the snapshot as its own document in `package-revisions` before
-   updating the package document's head/metadata (write ordering keeps readers from ever observing a head without
-   content) and deletes revision documents evicted by the `MaxRevisions` cap.
-7. Advances the watermarks of all members of successful pkgbases; fetch or application failures record the error on the
-   affected members.
+1. **Guard Check:** Skips if the metadata index is empty or no packages are seeded.
+2. **Candidate Grouping:** Projects sync state from `packages`, resolves `pkgname` → `pkgbase`, and groups members.
+3. **Branch Discovery:** Runs `git ls-remote --heads` against the mirror to discover current remote SHAs.
+4. **Candidate Selection:** Filters for pkgbases where:
+   - Any member has never been synced, or
+   - The remote HEAD SHA differs from `lastSyncedUpstreamHead`, or
+   - The last sync exceeds `MaxStalenessHours` (staleness safety sweep).
+   Candidates are ordered least-recently-synced first.
+5. **Selective Batch Fetch:**
+   - Pkgbases whose remote SHA has not moved (staleness sweep only) skip fetching entirely; their watermarks advance
+     directly.
+   - Pkgbases with actual SHA movement are batch-fetched into the mirror cache (bounded by `MaxPackagesPerRun`).
+6. **Archive & Revision Append:**
+   - Extracts the pkgbase tree via `git archive`.
+   - Compares the deterministic revision ID with the current head. If unchanged, updates watermarks without creating a
+     new revision.
+   - If content changed, appends the revision via `AppendRevisionFromUpstreamAsync` (writing to `package-revisions`
+     first, updating root metadata second, and trimming history to `MaxRevisions`).
+7. **Watermark & State Updates:** Updates `lastSyncedUpstreamHead`, `lastSyncSucceededAt`, or `lastSyncError` across all
+   member pkgnames.
 
-New head revisions are marked `Pending` for security scanning and the previous head's scan is demoted
-(`PromoteHead
-Async`), so refreshed heads are conservatively **blocked from being served until scanned**, exactly like a
-fresh seed. On-disk bare repos are not touched during sync — `EnsureGitRepositoryAsync` observes the new
-`headRevisionId` and re-materializes lazily on the next request, keeping MongoDB authoritative.
+New head revisions are marked `Pending` for security scanning and the previous head is demoted (`PromoteHeadAsync`),
+conservatively **blocking content and Git access until verified**. On-disk bare repos are lazily re-materialized on the
+next Git request when the updated `headRevisionId` is observed.
 
 Each `packages` document carries lightweight refresh watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`,
 `lastSyncAttemptAt`, `lastSyncSucceededAt`, `lastSyncError`); these are nullable and omitted when unset, so they do not

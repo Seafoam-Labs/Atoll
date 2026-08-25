@@ -75,8 +75,10 @@ Some important environment variables are listed below.
 | Variable | Values | Description |
 | --- | --- | --- |
 | `Atoll__Mongo__ConnectionString` | MongoDB connection string | Connection string for the MongoDB instance (e.g. `mongodb://localhost:27017`). |
+| `Atoll__DataSource__RefreshIntervalMinutes` | Minutes (`5` by default) | Poll interval for the conditionally downloaded AUR metadata archive. |
+| `Atoll__DataSource__PruneDeletedPackages` | `true`, `false` | Removes seeded packages absent from a successfully parsed AUR snapshot. See [SYNC.md](docs/SYNC.md). |
 | `Atoll__Seed__Mode` | `Off`, `Direct`, `Bulk` | Controls how packages are seeded from AUR: disabled, direct fetch, or bulk import. See [SYNC.md](docs/SYNC.md). |
-| `Atoll__Refresh__Enabled` | `true`, `false` | Enables or disables background refresh of package metadata. |
+| `Atoll__Refresh__Enabled` | `true`, `false` | Enables or disables background refresh of already-seeded package content. |
 | `Atoll__Security__Enabled` | `true`, `false` | Enables or disables security scanning and content gating. See [SECURITY.md](docs/SECURITY.md). |
 | `Atoll__Mutations__Enabled` | `true`, `false` | Allows mutating operations. Set to `false` when exposing Atoll read-only on public networks. |
 
