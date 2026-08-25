@@ -4,6 +4,7 @@ using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Atoll.Api;
 
@@ -42,8 +43,12 @@ public static class Endpoints
             async ([FromServices] IPackageService repo) => TypedResults.Ok(await repo.ListAsync()));
 
         packages.MapPost("/{name}/seed",
-            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
+            async ([FromRoute] string name, [FromServices] IPackageService repo,
+                   [FromServices] IOptions<AtollOptions> options) =>
             {
+                if (!options.Value.Mutations.Enabled)
+                    return MutationsDisabled();
+
                 await repo.SeedFromAurAsync(name);
                 return TypedResults.Created($"/packages/{name}");
             });
@@ -53,8 +58,10 @@ public static class Endpoints
             TypedResults.Ok(await repo.GetHistoryAsync(name)));
 
         packages.MapDelete("/{name}",
-            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
+            async ([FromRoute] string name, [FromServices] IPackageService repo,
+                [FromServices] IOptions<AtollOptions> options) =>
             {
+                if (!options.Value.Mutations.Enabled) return MutationsDisabled();
                 await repo.DeleteAsync(name);
                 return TypedResults.NoContent();
             });
@@ -122,8 +129,12 @@ public static class Endpoints
         [FromRoute] string name,
         [FromQuery(Name = "revision")] string? revision,
         [FromServices] IPackageRepository packages,
-        [FromServices] IPackageSecurityRepository security)
+        [FromServices] IPackageSecurityRepository security,
+        [FromServices] IOptions<AtollOptions> options)
     {
+        if (!options.Value.Mutations.Enabled)
+            return MutationsDisabled();
+
         var package = await packages.GetHeadAsync(name);
         if (package is null)
             return TypedResults.NotFound();
@@ -134,6 +145,13 @@ public static class Endpoints
 
         await security.MarkPendingAsync(name, revisionId, revisionId == package.HeadRevisionId);
         return TypedResults.Accepted($"/packages/{name}/security?revision={revisionId}");
+    }
+
+    private static IResult MutationsDisabled()
+    {
+        return TypedResults.Problem(
+            "Mutating actions are disabled on this instance.",
+            statusCode: StatusCodes.Status403Forbidden);
     }
 
     private static void MapGitProtocolRoutes(RouteGroupBuilder packages)

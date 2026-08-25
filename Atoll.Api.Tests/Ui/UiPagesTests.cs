@@ -216,6 +216,59 @@ public class UiPagesTests
     }
 
     [Test]
+    public async Task Mutations_disabled_hides_seed_button_for_unseeded_package()
+    {
+        var disabled = new SecurityTestFactory { MutationsEnabled = false };
+        using var client = disabled.CreateClient();
+
+        try
+        {
+            var response = await client.GetAsync("/package/portable-kit");
+            var body = await response.Content.ReadAsStringAsync();
+
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(body, Does.Not.Contain("Seed from AUR"));
+            // The read-only AUR link remains available.
+            Assert.That(body, Does.Contain("href=\"https://aur.archlinux.org/packages/portable-kit\""));
+        }
+        finally
+        {
+            client.Dispose();
+            disabled.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task Mutations_disabled_hides_rescan_button_for_seeded_package()
+    {
+        var disabled = new SecurityTestFactory { MutationsEnabled = false };
+        using var client = disabled.CreateClient();
+
+        try
+        {
+            await disabled.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
+            await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true);
+            await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+            await disabled.SecurityRepository.CompleteScanAsync(
+                "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []));
+
+            var response = await client.GetAsync("/package/shelly-bin");
+            var body = await response.Content.ReadAsStringAsync();
+
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(body, Does.Contain("badge-seeded"));
+            Assert.That(body, Does.Not.Contain("Rescan"));
+            // Content is still served when verified; only the mutation button is hidden.
+            Assert.That(body, Does.Contain("git clone"));
+        }
+        finally
+        {
+            client.Dispose();
+            disabled.Dispose();
+        }
+    }
+
+    [Test]
     public async Task PackageDetailsRenderCloneBlockAndFindingsWhenSeededAndVerified()
     {
         var findings = new[]

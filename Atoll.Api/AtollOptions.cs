@@ -10,6 +10,7 @@ public sealed class AtollOptions
     public SeedOptions Seed { get; init; } = new();
     public RefreshOptions Refresh { get; init; } = new();
     public SecurityOptions Security { get; init; } = new();
+    public MutationsOptions Mutations { get; init; } = new();
     public UiOptions Ui { get; init; } = new();
 }
 
@@ -104,6 +105,11 @@ public sealed class RefreshOptions
     [Required] [Url] public string MirrorUrl { get; init; } = "https://github.com/archlinux/aur";
 
     [Required] public string CachePath { get; init; } = "./data/aur-mirror";
+}
+
+public sealed class MutationsOptions
+{
+    public bool Enabled { get; init; } = true;
 }
 
 public sealed class SecurityOptions

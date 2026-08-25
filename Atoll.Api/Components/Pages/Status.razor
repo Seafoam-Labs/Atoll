@@ -274,7 +274,14 @@ else
                 case SeedMode.Off:
                 default:
                     <p class="mb-0 text-ink-soft text-sm">
-                        Automatic seeding is off - packages are only seeded through manual requests.
+                        @if (Options.Value.Mutations.Enabled)
+                        {
+                            <span>Automatic seeding is off - packages are only seeded through manual requests.</span>
+                        }
+                        else
+                        {
+                            <span>Automatic seeding and manual mutations are disabled.</span>
+                        }
                     </p>
                     break;
             }

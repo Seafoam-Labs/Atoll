@@ -19,6 +19,7 @@
       - Atoll__Security__Enabled=true
       - Atoll__Security__ScannerConcurrency=2
       - Atoll__Security__PollIntervalMs=100
+      - Atoll__Mutations__Enabled=true
       # Set Atoll__Seed__Mode=Off to disable automated package seeding.
       - Atoll__Seed__Mode=Off
       # Set Atoll__Seed__Mode=Direct to enable direct package seeding.

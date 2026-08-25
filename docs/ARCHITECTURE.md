@@ -8,8 +8,8 @@ history, provides fast in-memory search, and exposes each package as a cloneable
 - **Problem:** Provide a private, searchable AUR package registry with version history and Git-compatible read access to
   PKGBUILD files.
 - **Scope:** Mirrors AUR metadata and package files read-only _from AUR's perspective_ - Atoll never writes upstream.
-  Locally it exposes unauthenticated seed and delete endpoints, so it must not be reachable by untrusted clients. Git
-  push (`git-receive-pack`) and authentication are currently out of scope.
+  Local mutation endpoints are unauthenticated: trusted deployments may enable them, while publicly reachable instances
+  must set `Atoll:Mutations:Enabled=false`. Git push (`git-receive-pack`) and authentication are currently out of scope.
 - **Success criteria:** Search queries served from memory in < 10 ms end-to-end; metadata index stays in sync with AUR
   within the configured refresh interval (default 10 minutes). Seeded content is updated only when the optional
   package-refresh worker is enabled.
@@ -160,13 +160,13 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | GET | `/metrics` | OpenTelemetry metrics in Prometheus format (see Operations) |
 | GET | `/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
 | GET | `/packages` | List all seeded package names |
-| POST | `/packages/{name}/seed` | Clone from AUR and persist (409 if exists) |
+| POST | `/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/packages/{name}` | Get head revision files |
 | GET | `/packages/{name}/versions` | Get revision history |
 | GET | `/packages/{name}/versions/{sha}` | Get specific revision files |
-| DELETE | `/packages/{name}` | Delete package (MongoDB document only - see note below) |
+| DELETE | `/packages/{name}` | Delete package (MongoDB document only - see note below). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/packages/{name}/security` | Get per-revision security status (`?revision={sha}` for one revision) |
-| POST | `/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head) |
+| POST | `/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement |
 | POST | `/packages/{name}.git/git-upload-pack` | Git pack negotiation and transfer |
 
@@ -201,7 +201,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | Atomic `PackageIndexStore` snapshot swap | Lock-free reads; consistent view per request | Full index rebuild on each refresh; 2× peak memory while both snapshots are live. Incremental updates evaluated and rejected: rebuild cost is negligible at ~116k packages per 10-minute cycle. | Active |
 | `PackageCatalogService` sorted-view cache with server-side pagination | The Blazor catalog page (`/`) paginates the full ~85k–118k-package index; each (index generation, sort) pair is sorted once into a cached array - dropped automatically when `PackageIndexStore.Replace` swaps the snapshot - after which paging is an O(PageSize) slice, and query/filter evaluation streams over the pre-sorted array, materializing rows only for the rendered page (measured: default view and page navigation ~0.01 ms warm, ~4 KB alloc/call) | First search per sort pays O(N log N) and one array of references per cached sort (~0.9 MB at 118k packages). Substring queries and seeded/security filters still scan every package (~15–25 ms floor) since matching is `Contains`-based; the catalog URL (`q`, `page`, `mode`, `seeded`, `security`, `sort`) is the single source of truth, so back/forward and deep links cover the full filter state | Active |
 | In-app response compression (Brotli + Gzip) | Compresses dynamic SSR/HTML payloads (e.g. catalog rows on `/`) and API responses to reduce transfer size ~5× without extra infra | Minimal CPU overhead (mitigated by `CompressionLevel.Fastest`). Security: ASP.NET Core disables compression over HTTPS by default (`EnableForHttps = false`) to protect against CRIME/BREACH side-channel attacks; safe for Atoll's HTTP-to-Kestrel architecture. | Active |
-| No authentication | Keeps the API simple for trusted private deployments | Unauthenticated callers can seed **and delete** packages; must sit behind a reverse proxy / firewall if exposed | Active |
+| No authentication | Keeps the API simple for trusted private deployments | Unauthenticated callers can seed, rescan, **and delete** packages; must sit behind a reverse proxy / firewall if exposed. Setting `Atoll:Mutations:Enabled=false` disables the manual seed/rescan/delete mutations (REST `403` + hidden UI buttons) so a public instance can still be exposed read-only | Active |
 
 Security notes not covered by the ADRs: options are validated on startup via Data Annotations (`[Required]`, `[Range]`,
 `[Url]`); raw stack traces are never returned to clients; `git-receive-pack` (push) is explicitly rejected with

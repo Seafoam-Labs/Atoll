@@ -190,6 +190,8 @@ The persisted `Pending` state is the durable work queue — there is no in-proce
 1. A new revision is seeded (`MongoPackageService.SeedFilesAsync`) or a rescan is requested
    (`POST /packages/{name}/security/rescan`, optionally with `?revision={sha}`); both call `MarkPendingAsync`, which
    upserts the `(package, revision)` state document to `Pending` and clears any prior findings/lease for that revision.
+   On public instances set `Atoll:Mutations:Enabled=false` to make the rescan endpoint return `403` and hide the button
+   in the UI (`403` also applies to the manual seed and delete endpoints).
 2. `PackageSecurityWorker` runs `ScannerConcurrency` poll loops. Each loop calls `TryClaimPendingScanAsync`, which
    atomically (`FindOneAndUpdate`) leases one `Pending` document whose lease has expired or is unset, stamping
    `leaseUntil = now + 5m` and `leaseOwner = {MachineName}:{Guid}`.

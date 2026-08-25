@@ -157,6 +157,10 @@ resource "aws_ecs_task_definition" "app" {
           value = "http://+:8080"
         },
         {
+          name  = "Atoll__Mutations__Enabled"
+          value = "false"
+        },
+        {
           # Host-injected forwarded-headers middleware: honor X-Forwarded-For /
           # X-Forwarded-Proto from the ALB so the app sees real client IPs and
           # https scheme.

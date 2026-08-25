@@ -42,7 +42,8 @@ Atoll seeds missing packages listed in the metadata index into the package repos
 - **`Bulk`** - discovers and batch-fetches **pkgbase** branches from the GitHub AUR mirror into a persistent bare cache,
   then seeds each mapped pkgname from the extracted tree.
 - **`Off`** - does not register an automated seed worker. Metadata indexing and explicit `POST /packages/{name}/seed`
-  requests remain available.
+  requests remain available unless `Atoll:Mutations:Enabled=false`, which rejects manual seeding, rescans, and deletes
+  (`403`) for publicly exposed instances.
 
 The modes are mutually exclusive: startup registers one worker for Direct or Bulk, and no seed worker for Off. Periodic
 refresh is independent of this choice and can run alongside any of it.

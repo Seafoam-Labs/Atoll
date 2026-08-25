@@ -3,41 +3,47 @@
 @inject IPackageSecurityRepository SecurityRepository
 @inject PackageCatalogService Catalog
 @inject NavigationManager Navigation
+@inject IOptions<AtollOptions> Atoll
 @inject ILogger<PackageActions> Logger
 
-<div class="flex flex-col items-start gap-2">
-    @if (!IsSeeded)
-    {
-        <button type="button" class="btn btn-primary" @onclick="SeedAsync" disabled="@_busy">
-            @if (_busy)
-            {
-                <span>Seeding…</span>
-            }
-            else
-            {
-                <span>Seed from AUR</span>
-            }
-        </button>
-    }
-    else
-    {
-        <button type="button" class="btn" @onclick="RescanAsync" disabled="@_busy">
-            @if (_busy)
-            {
-                <span>Queuing…</span>
-            }
-            else
-            {
-                <span>Rescan</span>
-            }
-        </button>
-    }
+@* Manually driven mutations are disabled on public instances to avoid exposing the
+    instance to outbound seeding load and rescan storms; render no buttons at all. *@
+@if (Atoll.Value.Mutations.Enabled)
+{
+    <div class="flex flex-col items-start gap-2">
+        @if (!IsSeeded)
+        {
+            <button type="button" class="btn btn-primary" @onclick="SeedAsync" disabled="@_busy">
+                @if (_busy)
+                {
+                    <span>Seeding…</span>
+                }
+                else
+                {
+                    <span>Seed from AUR</span>
+                }
+            </button>
+        }
+        else
+        {
+            <button type="button" class="btn" @onclick="RescanAsync" disabled="@_busy">
+                @if (_busy)
+                {
+                    <span>Queuing…</span>
+                }
+                else
+                {
+                    <span>Rescan</span>
+                }
+            </button>
+        }
 
-    @if (_error is not null)
-    {
-        <div class="text-sec-error text-sm" role="alert">@_error</div>
-    }
-</div>
+        @if (_error is not null)
+        {
+            <div class="text-sec-error text-sm" role="alert">@_error</div>
+        }
+    </div>
+}
 
 @code {
     [Parameter] public string Name { get; set; } = "";
@@ -49,6 +55,8 @@
 
     private async Task SeedAsync()
     {
+        if (!Atoll.Value.Mutations.Enabled) return;
+
         _busy = true;
         _error = null;
         try
@@ -78,7 +86,7 @@
 
     private async Task RescanAsync()
     {
-        if (HeadRevisionId is null) return;
+        if (!Atoll.Value.Mutations.Enabled || HeadRevisionId is null) return;
 
         _busy = true;
         _error = null;
