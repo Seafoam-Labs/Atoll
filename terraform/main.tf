@@ -58,7 +58,7 @@ resource "aws_security_group" "ecs_sg" {
 
 resource "aws_security_group" "alb_sg" {
   name_prefix = "${var.project_name}-alb-sg-"
-  description = "Allow inbound HTTP traffic from the API Gateway VPC Link to the ALB"
+  description = "Allow inbound HTTP traffic from CloudFront (VPC origin) to the ALB"
   vpc_id      = data.aws_vpc.default.id
 
   # Ensure ecs_sg's referencing rules are removed before alb_sg is destroyed
@@ -66,16 +66,15 @@ resource "aws_security_group" "alb_sg" {
     create_before_destroy = true
   }
 
-  # The ALB is internal and only reachable from the API Gateway VPC Link ENIs,
-  # which share this VPC's private address space. TLS termination happens at
-  # the API Gateway edge, so the link between the VPC Link and the ALB is
-  # plain HTTP inside the VPC.
+  # The ALB is internal and only reachable from the service-managed ENI that
+  # CloudFront creates for the VPC origin (see cloudfront.tf). TLS termination
+  # happens at the CloudFront edge, so the hop into the VPC is plain HTTP.
   ingress {
-    description     = "HTTP from API Gateway VPC Link"
+    description     = "HTTP from CloudFront"
     from_port       = 80
     to_port         = 80
     protocol        = "tcp"
-    security_groups = [aws_security_group.apigw_vpc_link.id]
+    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
   }
 
   egress {
@@ -194,14 +193,14 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
-# Application Load Balancer. Sits behind the HTTP API Gateway (see apigw.tf)
-# and transparently proxies the HTTP `Upgrade: websocket` handshake to the
-# ECS tasks, so Blazor Server's SignalR circuit runs over a real WebSocket
-# instead of falling back to long polling.
+# Application Load Balancer. Sits behind CloudFront via a VPC origin (see
+# cloudfront.tf) and transparently proxies the HTTP `Upgrade: websocket`
+# handshake to the ECS tasks, so Blazor Server's SignalR circuit runs over a
+# real WebSocket instead of falling back to long polling.
 resource "aws_lb" "main" {
   name = "${var.project_name}-alb"
-  # Fronted by an HTTP API Gateway (see apigw.tf); the ALB itself is only
-  # reachable from inside the VPC via the API Gateway VPC Link.
+  # Fronted by CloudFront via a VPC origin (see cloudfront.tf); the ALB is
+  # only reachable from CloudFront's origin-facing edge ranges.
   internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]

@@ -176,6 +176,10 @@ resource "aws_iam_policy" "github_deploy" {
           "ec2:DescribeSecurityGroupRules",
           "ec2:DescribeNetworkInterfaces",
           "ec2:DescribeVpcAttribute",
+          # The ALB SG ingress references the CloudFront origin-facing managed
+          # prefix list (see cloudfront.tf).
+          "ec2:DescribeManagedPrefixLists",
+          "ec2:GetManagedPrefixListEntries",
         ]
         Resource = "*"
       },
@@ -259,9 +263,30 @@ resource "aws_iam_policy" "github_deploy" {
         ]
       },
       {
-        # The main stack looks up the ISSUED ACM certificate for the API
-        # Gateway custom domain name and references its ARN when creating
-        # the v2 domain name.
+        # CloudFront distribution + VPC origin fronting the internal ALB (see
+        # cloudfront.tf in the main stack).
+        Sid    = "CloudFront"
+        Effect = "Allow"
+        Action = [
+          "cloudfront:CreateDistribution",
+          "cloudfront:DeleteDistribution",
+          "cloudfront:GetDistribution",
+          "cloudfront:GetDistributionConfig",
+          "cloudfront:UpdateDistribution",
+          "cloudfront:TagResource",
+          "cloudfront:UntagResource",
+          "cloudfront:ListTagsForResource",
+          "cloudfront:CreateVpcOrigin",
+          "cloudfront:DeleteVpcOrigin",
+          "cloudfront:GetVpcOrigin",
+          "cloudfront:UpdateVpcOrigin",
+          "cloudfront:ListVpcOrigins",
+        ]
+        Resource = "*"
+      },
+      {
+        # The main stack looks up the ISSUED ACM certificate for the
+        # CloudFront viewer certificate (custom domain).
         Sid    = "ReadAcmCertificates"
         Effect = "Allow"
         Action = [
@@ -394,6 +419,9 @@ resource "aws_iam_policy" "github_deploy" {
           # ECS uses this role to register/deregister task IPs with the ALB
           # target group (the service below uses a load_balancer block).
           "arn:aws:iam::${local.account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+          # CloudFront uses its service-linked role to create and manage the
+          # VPC origin ENIs inside the VPC.
+          "arn:aws:iam::${local.account_id}:role/aws-service-role/cloudfront.amazonaws.com/AWSServiceRoleForCloudFront",
         ]
         Condition = {
           StringEquals = {
@@ -402,6 +430,7 @@ resource "aws_iam_policy" "github_deploy" {
               "elasticloadbalancing.amazonaws.com",
               "ops.apigateway.amazonaws.com",
               "ecs.amazonaws.com",
+              "cloudfront.amazonaws.com",
             ]
           }
         }

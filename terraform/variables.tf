@@ -49,7 +49,7 @@ variable "docdb_master_username" {
 }
 
 variable "api_domain_name" {
-  description = "Custom domain name registered in API Gateway that fronts the ALB"
+  description = "Custom domain name served by the CloudFront distribution that fronts the ALB"
   default     = "atoll.seafoam-labs.org"
 }
 

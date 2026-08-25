@@ -214,5 +214,5 @@ jobs:
             echo ""
             echo "- Image: \`${{ steps.ecr.outputs.registry }}/atoll-api:${{ github.sha }}\`"
             echo "- Application URL: $(terraform output -raw application_url)"
-            echo "- API Gateway CNAME target: $(terraform output -raw api_gateway_target_domain_name)"
+            echo "- CloudFront CNAME target: $(terraform output -raw cloudfront_domain_name)"
           } >> "$GITHUB_STEP_SUMMARY"
