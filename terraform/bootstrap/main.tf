@@ -173,6 +173,7 @@ resource "aws_iam_policy" "github_deploy" {
           "ec2:DescribeSubnets",
           "ec2:DescribeAvailabilityZones",
           "ec2:DescribeSecurityGroups",
+          "ec2:DescribeSecurityGroupRules",
           "ec2:DescribeNetworkInterfaces",
           "ec2:DescribeVpcAttribute",
         ]
@@ -188,6 +189,7 @@ resource "aws_iam_policy" "github_deploy" {
           "ec2:AuthorizeSecurityGroupEgress",
           "ec2:RevokeSecurityGroupIngress",
           "ec2:RevokeSecurityGroupEgress",
+          "ec2:ModifySecurityGroupRules",
           "ec2:CreateTags",
           "ec2:DeleteTags",
         ]
