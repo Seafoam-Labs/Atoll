@@ -267,6 +267,8 @@ resource "aws_iam_policy" "github_deploy" {
         Action = [
           "acm:ListCertificates",
           "acm:DescribeCertificate",
+          "acm:GetCertificate",
+          "acm:ListTagsForCertificate",
         ]
         Resource = "*"
       },
