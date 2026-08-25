@@ -249,4 +249,18 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
             return Task.CompletedTask;
         }
     }
+
+    public Task DeletePackageAsync(string packageName, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            foreach (var id in _scans
+                         .Where(pair => pair.Value.PackageName == packageName)
+                         .Select(pair => pair.Key)
+                         .ToList())
+                _scans.Remove(id);
+
+            return Task.CompletedTask;
+        }
+    }
 }

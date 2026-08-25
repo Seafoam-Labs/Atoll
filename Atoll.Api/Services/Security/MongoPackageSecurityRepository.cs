@@ -242,6 +242,11 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             ct);
     }
 
+    public async Task DeletePackageAsync(string packageName, CancellationToken ct = default)
+    {
+        await _scans.DeleteManyAsync(x => x.PackageName == packageName, ct);
+    }
+
     private void EnsureIndexes()
     {
         var keys = Builders<PackageSecurityScanDocument>.IndexKeys;

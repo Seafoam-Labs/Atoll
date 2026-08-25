@@ -85,7 +85,9 @@ public sealed class DataSourceOptions
 {
     [Required] [Url] public string DataFileUrl { get; init; } = "https://aur.archlinux.org/packages-meta-ext-v1.json.gz";
 
-    [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 10;
+    [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 5;
+
+    public bool PruneDeletedPackages { get; init; } = false;
 }
 
 public sealed class RefreshOptions

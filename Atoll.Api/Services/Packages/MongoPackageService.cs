@@ -66,9 +66,33 @@ public sealed class MongoPackageService(
         return repo.GetHistoryAsync(packageName);
     }
 
-    public Task DeleteAsync(string packageName)
+    public async Task DeleteAsync(string packageName, CancellationToken ct = default)
     {
-        return repo.DeleteAsync(packageName);
+        var path = GetRepositoryPath(packageName);
+        SemaphoreSlim? lockObj = null;
+        if (path is not null)
+        {
+            lockObj = RepoLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
+            await lockObj.WaitAsync(ct);
+        }
+
+        try
+        {
+            // Derived state goes first, the authoritative package document last: if a step
+            // fails partway, the package stays visible to delete/reconcile retries and the
+            // leftovers are reclaimed. Deleting the package document first would orphan any
+            // state that survives a failure, since every cleanup path keys off it.
+            await securityRepository.DeletePackageAsync(packageName, ct);
+
+            if (path is not null && Directory.Exists(path))
+                Directory.Delete(path, true);
+
+            await repo.DeleteAsync(packageName, ct);
+        }
+        finally
+        {
+            lockObj?.Release();
+        }
     }
 
     public async Task SeedFromAurAsync(string packageName)
@@ -144,6 +168,20 @@ public sealed class MongoPackageService(
         await lockObj.WaitAsync(ct);
         try
         {
+            // Re-read under the lock: a concurrent DeleteAsync can remove the package between
+            // the initial read above and the lock acquisition, and materializing from the
+            // stale document would resurrect a repository nothing ever cleans up.
+            doc = await repo.GetHeadAsync(packageName, ct);
+            if (doc is null)
+                return;
+
+            if (securityEnabled)
+            {
+                statuses = (await securityRepository.ListStatusesForPackageAsync(packageName, ct))
+                    .ToDictionary(s => s.RevisionId, s => s.Status, StringComparer.Ordinal);
+            }
+
+            headMarker = ComputeHistoryMarker(doc, securityEnabled, statuses);
             if (IsUpToDate(path, marker, headMarker))
                 return;
 

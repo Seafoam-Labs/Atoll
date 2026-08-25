@@ -74,6 +74,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<PackageIndexStore>();
 builder.Services.AddSingleton<PackageSearchService>();
 builder.Services.AddSingleton<IAurMetadataRepository, AurMetadataRepository>();
+builder.Services.AddSingleton<UpstreamPackageReconciler>();
 builder.Services.AddSingleton<PackageIndexUpdater>();
 builder.Services.AddSingleton<AtollMetrics>();
 

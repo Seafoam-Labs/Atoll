@@ -33,4 +33,6 @@ public interface IPackageSecurityRepository
     Task PromoteHeadAsync(string packageName, string newHeadRevisionId, CancellationToken ct = default);
 
     Task DeleteAsync(string packageName, string revisionId, CancellationToken ct = default);
+
+    Task DeletePackageAsync(string packageName, CancellationToken ct = default);
 }

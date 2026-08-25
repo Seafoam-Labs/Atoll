@@ -79,8 +79,8 @@ public sealed class PackageBulkSeedWorker(
 
             if (missing.Count == 0)
             {
-                logger.LogDebug("All indexed packages are already seeded; waiting five minutes before checking again.");
-                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                logger.LogDebug("All indexed packages are already seeded; checking for newly indexed packages in one minute.");
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
                 return (0, 0, backedOff: true);
             }
 

@@ -112,6 +112,17 @@ public class MongoApiEndpointsTests
             ]
         }, revisionContent);
 
+        // A head scan record exists before the delete; the cascade must remove it too.
+        var scans = _mongo.GetDatabase(_factory.Database).GetCollection<BsonDocument>("package-security-scans");
+        await scans.InsertOneAsync(new BsonDocument
+        {
+            ["_id"] = "to-delete:rev-1",
+            ["packageName"] = "to-delete",
+            ["revisionId"] = "rev-1",
+            ["isHead"] = true,
+            ["status"] = "Pending"
+        });
+
         var del = await _client.DeleteAsync("/packages/to-delete");
         Assert.That(del.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
@@ -121,6 +132,11 @@ public class MongoApiEndpointsTests
         var revisionDocs = _mongo.GetDatabase(_factory.Database).GetCollection<BsonDocument>("package-revisions");
         Assert.That(
             await revisionDocs.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")),
+            Is.EqualTo(0));
+
+        // Cascade: the deleted package's security scan documents are also gone.
+        Assert.That(
+            await scans.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")),
             Is.EqualTo(0));
     }
 }

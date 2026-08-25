@@ -53,9 +53,14 @@ public sealed class DirectSeedWorker(
                 logger.LogDebug("Package index is empty; waiting 15 seconds before the next seed attempt.");
                 await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
             }
-            else if (result.Outcome == DirectSeedCycleOutcome.NothingMissing || result.Seeded == 0)
+            else if (result.Outcome == DirectSeedCycleOutcome.NothingMissing)
             {
-                logger.LogDebug("No packages were seeded; waiting five minutes before the next seed attempt.");
+                logger.LogDebug("All indexed packages are present; checking for newly indexed packages in one minute.");
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            }
+            else if (result.Seeded == 0)
+            {
+                logger.LogDebug("No packages were seeded; waiting five minutes before retrying failures.");
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
             }
         }

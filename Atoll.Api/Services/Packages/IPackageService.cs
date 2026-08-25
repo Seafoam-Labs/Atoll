@@ -7,7 +7,7 @@ public interface IPackageService
     Task<bool> ExistsAsync(string packageName, CancellationToken ct = default);
     Task<PackageFiles> GetAsync(string packageName, string? commitSha = null);
     Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName);
-    Task DeleteAsync(string packageName);
+    Task DeleteAsync(string packageName, CancellationToken ct = default);
     Task SyncFromStorageAsync(string packageName);
     Task SyncToStorageAsync(string packageName);
     Task SeedFromAurAsync(string packageName);

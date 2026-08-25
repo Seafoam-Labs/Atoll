@@ -35,7 +35,7 @@ public class DirectSeedWorkerTests
         public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName)
             => throw new NotSupportedException();
 
-        public Task DeleteAsync(string packageName) => throw new NotSupportedException();
+        public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task SyncFromStorageAsync(string packageName) => throw new NotSupportedException();
 
@@ -268,7 +268,7 @@ public class DirectSeedWorkerTests
         public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName)
             => throw new NotSupportedException();
 
-        public Task DeleteAsync(string packageName) => throw new NotSupportedException();
+        public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task SyncFromStorageAsync(string packageName) => throw new NotSupportedException();
 

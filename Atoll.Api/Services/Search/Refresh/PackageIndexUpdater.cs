@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using Atoll.Api.Extensions;
 using Atoll.Api.Services.Search.Indexing;
@@ -11,10 +13,14 @@ public sealed class PackageIndexUpdater(
     IAurMetadataRepository aurMetadataRepository,
     IHttpClientFactory httpClientFactory,
     IOptions<AtollOptions> options,
-    ILogger<PackageIndexUpdater> logger)
+    ILogger<PackageIndexUpdater> logger,
+    UpstreamPackageReconciler? reconciler = null)
 {
     private readonly Lock _timeLock = new();
 
+    private EntityTagHeaderValue? _etag;
+    private DateTimeOffset? _lastModified;
+    private bool _pruneConfirmationPending;
     private long _attempts;
     private long _failures;
     private DateTimeOffset? _lastFailedUtc;
@@ -75,25 +81,72 @@ public sealed class PackageIndexUpdater(
             logger.LogDebug("Fetching updated package data from AUR.");
 
             var client = httpClientFactory.CreateClient();
-            await using var compressed = await client.GetStreamAsync(
-                options.Value.DataSource.DataFileUrl, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, options.Value.DataSource.DataFileUrl);
+            if (_etag is not null)
+                request.Headers.IfNoneMatch.Add(_etag);
+            if (_lastModified is not null)
+                request.Headers.IfModifiedSince = _lastModified;
+
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotModified)
+            {
+                var current = store.Current;
+                // A 304 while a suspicious shrink awaits confirmation means the archive re-served
+                // the old artifact, so the snapshot in hand is not the promised confirmation
+                // download and must not drive pruning.
+                if (reconciler is not null && current.ByNames.Count > 0 && !_pruneConfirmationPending)
+                    await reconciler.ReconcileAsync([.. current.ByNames.Keys], current.ByNames.Count, cancellationToken);
+
+                RecordSuccess();
+                logger.LogDebug("AUR package metadata has not changed.");
+                return true;
+            }
+
+            response.EnsureSuccessStatusCode();
+            await using var compressed = await response.Content.ReadAsStreamAsync(cancellationToken);
             await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
 
             var packages = await ParsePackagesAsync(gzip, cancellationToken);
+            if (packages.Count == 0)
+                throw new InvalidDataException("AUR package dump contained no packages.");
+
             logger.LogDebug("Parsed {PackageCount} packages from the AUR metadata dump.", packages.Count);
 
+            var previousPackageCount = store.Current.ByNames.Count;
+            var pruneNeedsConfirmation = reconciler is not null
+                                         && options.Value.DataSource.PruneDeletedPackages
+                                         && UpstreamPackageReconciler.IsSuspiciousShrink(packages.Count, previousPackageCount);
             await aurMetadataRepository.SaveAsync(packages, cancellationToken);
 
             var next = PackageDataLoader.BuildFromPackages(packages);
             store.Replace(next);
-            logger.LogInformation("Package index refreshed with {PackageCount} packages.", packages.Count);
 
-            Interlocked.Increment(ref _successes);
-            lock (_timeLock)
+            // Keep the old validators while a suspicious shrink awaits confirmation. This forces
+            // one confirmation download even if the archive would otherwise answer 304 next cycle.
+            if (!pruneNeedsConfirmation)
             {
-                _lastSucceededUtc = DateTimeOffset.UtcNow;
+                _etag = response.Headers.ETag ?? _etag;
+                _lastModified = response.Content.Headers.LastModified ?? _lastModified;
+            }
+            _pruneConfirmationPending = pruneNeedsConfirmation;
+
+            if (reconciler is not null)
+            {
+                try
+                {
+                    await reconciler.ReconcileAsync([.. next.ByNames.Keys], previousPackageCount, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // A prune failure must not mask the successful refresh above; the next cycle
+                    // reconciles again against the same snapshot.
+                    logger.LogWarning(ex, "Package index refreshed, but upstream reconciliation failed.");
+                }
             }
 
+            logger.LogInformation("Package index refreshed with {PackageCount} packages.", packages.Count);
+
+            RecordSuccess();
             return true;
         }
         catch (Exception ex)
@@ -106,6 +159,15 @@ public sealed class PackageIndexUpdater(
 
             logger.LogWarning(ex, "Unable to fetch and store new package data.");
             return false;
+        }
+    }
+
+    private void RecordSuccess()
+    {
+        Interlocked.Increment(ref _successes);
+        lock (_timeLock)
+        {
+            _lastSucceededUtc = DateTimeOffset.UtcNow;
         }
     }
 

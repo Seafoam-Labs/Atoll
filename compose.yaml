@@ -7,7 +7,8 @@
       - "8080:8080"
     environment:
       - Atoll__DataSource__DataFileUrl=https://aur.archlinux.org/packages-meta-ext-v1.json.gz
-      - Atoll__DataSource__RefreshIntervalMinutes=10
+      - Atoll__DataSource__RefreshIntervalMinutes=5
+      - Atoll__DataSource__PruneDeletedPackages=true
       - Atoll__Mongo__ConnectionString=mongodb://admin:change_me@mongo:27017/atoll?authSource=admin
       - Atoll__Mongo__Database=atoll
       - Atoll__Mongo__Collections__Packages=packages
@@ -20,17 +21,14 @@
       - Atoll__Security__ScannerConcurrency=2
       - Atoll__Security__PollIntervalMs=100
       - Atoll__Mutations__Enabled=true
-      # Set Atoll__Seed__Mode=Off to disable automated package seeding.
-      - Atoll__Seed__Mode=Off
-      # Set Atoll__Seed__Mode=Direct to enable direct package seeding.
-      # - Atoll__Seed__Direct__SeedDelayMs=1000
-      # Bulk mode (GitHub mirror, ~30 min full sync): set Atoll__Seed__Mode=Bulk and uncomment.
-      # - Atoll__Seed__Bulk__MirrorUrl=https://github.com/archlinux/aur
-      # - Atoll__Seed__Bulk__CachePath=/app/data/aur-mirror
-      # - Atoll__Seed__Bulk__BatchSize=1000
-      # - Atoll__Seed__Bulk__BatchDelayMs=1000
-      # - Atoll__Seed__Bulk__Parallelism=2
-      # - Atoll__Seed__Bulk__AurFallbackForNotOnMirror=false
+      # Set Atoll__Seed__Mode=Off to retain only manually seeded packages.
+      - Atoll__Seed__Mode=Bulk
+      - Atoll__Seed__Bulk__MirrorUrl=https://github.com/archlinux/aur
+      - Atoll__Seed__Bulk__CachePath=/app/data/aur-mirror
+      - Atoll__Seed__Bulk__BatchSize=1000
+      - Atoll__Seed__Bulk__BatchDelayMs=1000
+      - Atoll__Seed__Bulk__Parallelism=2
+      - Atoll__Seed__Bulk__AurFallbackForNotOnMirror=true
       - Atoll__Refresh__Enabled=true
       - Atoll__Refresh__BatchSize=1000
       - Atoll__Refresh__BatchDelayMs=1000
