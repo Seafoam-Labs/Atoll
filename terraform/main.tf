@@ -60,7 +60,7 @@ resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg"
   description = "Allow inbound HTTP traffic from the API Gateway VPC Link to the ALB"
   vpc_id      = data.aws_vpc.default.id
-  
+
   # Ensure ecs_sg's referencing rules are removed before alb_sg is destroyed
   lifecycle {
     create_before_destroy = true
