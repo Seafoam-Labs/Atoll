@@ -15,6 +15,15 @@ namespace Atoll.Api.Tests.Search.Refresh;
 
 public class PackageIndexUpdaterTests
 {
+
+    private static UpstreamPackageReconciler InertReconciler()
+    {
+        return new UpstreamPackageReconciler(
+            new SeededNamesPackageService([]),
+            Options.Create(new AtollOptions { DataSource = new DataSourceOptions() }),
+            NullLogger<UpstreamPackageReconciler>.Instance);
+    }
+
     [Test]
     public async Task RefreshCoordinatorTracksAttemptAndFailureMetrics()
     {
@@ -32,7 +41,8 @@ public class PackageIndexUpdaterTests
                     RefreshIntervalMinutes = 10
                 }
             }),
-            NullLogger<PackageIndexUpdater>.Instance);
+            NullLogger<PackageIndexUpdater>.Instance,
+            InertReconciler());
 
         var ok = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
         var status = coordinator.GetStatus();
@@ -67,7 +77,8 @@ public class PackageIndexUpdaterTests
                     RefreshIntervalMinutes = 5
                 }
             }),
-            NullLogger<PackageIndexUpdater>.Instance);
+            NullLogger<PackageIndexUpdater>.Instance,
+            InertReconciler());
 
         var first = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
         var second = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
@@ -103,7 +114,8 @@ public class PackageIndexUpdaterTests
                     RefreshIntervalMinutes = 10
                 }
             }),
-            NullLogger<PackageIndexUpdater>.Instance);
+            NullLogger<PackageIndexUpdater>.Instance,
+            InertReconciler());
 
         var ok = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
         var status = coordinator.GetStatus();

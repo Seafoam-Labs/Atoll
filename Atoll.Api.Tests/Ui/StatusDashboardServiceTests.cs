@@ -35,7 +35,11 @@ public class StatusDashboardServiceTests
             new InMemoryAurMetadataRepository(),
             new StubHttpClientFactory(),
             Options.Create(new AtollOptions()),
-            NullLogger<PackageIndexUpdater>.Instance);
+            NullLogger<PackageIndexUpdater>.Instance,
+            new UpstreamPackageReconciler(
+                new SeededNamesPackageService([]),
+                Options.Create(new AtollOptions()),
+                NullLogger<UpstreamPackageReconciler>.Instance));
     }
 
     private static StatusDashboardService CreateService(

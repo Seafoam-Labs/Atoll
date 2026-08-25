@@ -14,7 +14,7 @@ public sealed class PackageIndexUpdater(
     IHttpClientFactory httpClientFactory,
     IOptions<AtollOptions> options,
     ILogger<PackageIndexUpdater> logger,
-    UpstreamPackageReconciler? reconciler = null)
+    UpstreamPackageReconciler reconciler)
 {
     private readonly Lock _timeLock = new();
 
@@ -94,7 +94,7 @@ public sealed class PackageIndexUpdater(
                 // A 304 while a suspicious shrink awaits confirmation means the archive re-served
                 // the old artifact, so the snapshot in hand is not the promised confirmation
                 // download and must not drive pruning.
-                if (reconciler is not null && current.ByNames.Count > 0 && !_pruneConfirmationPending)
+                if (current.ByNames.Count > 0 && !_pruneConfirmationPending)
                     await reconciler.ReconcileAsync([.. current.ByNames.Keys], current.ByNames.Count, cancellationToken);
 
                 RecordSuccess();
@@ -113,8 +113,7 @@ public sealed class PackageIndexUpdater(
             logger.LogDebug("Parsed {PackageCount} packages from the AUR metadata dump.", packages.Count);
 
             var previousPackageCount = store.Current.ByNames.Count;
-            var pruneNeedsConfirmation = reconciler is not null
-                                         && options.Value.DataSource.PruneDeletedPackages
+            var pruneNeedsConfirmation = options.Value.DataSource.PruneDeletedPackages
                                          && UpstreamPackageReconciler.IsSuspiciousShrink(packages.Count, previousPackageCount);
             await aurMetadataRepository.SaveAsync(packages, cancellationToken);
 
@@ -130,18 +129,15 @@ public sealed class PackageIndexUpdater(
             }
             _pruneConfirmationPending = pruneNeedsConfirmation;
 
-            if (reconciler is not null)
+            try
             {
-                try
-                {
-                    await reconciler.ReconcileAsync([.. next.ByNames.Keys], previousPackageCount, cancellationToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    // A prune failure must not mask the successful refresh above; the next cycle
-                    // reconciles again against the same snapshot.
-                    logger.LogWarning(ex, "Package index refreshed, but upstream reconciliation failed.");
-                }
+                await reconciler.ReconcileAsync([.. next.ByNames.Keys], previousPackageCount, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A prune failure must not mask the successful refresh above; the next cycle
+                // reconciles again against the same snapshot.
+                logger.LogWarning(ex, "Package index refreshed, but upstream reconciliation failed.");
             }
 
             logger.LogInformation("Package index refreshed with {PackageCount} packages.", packages.Count);
