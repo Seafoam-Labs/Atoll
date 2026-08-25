@@ -58,7 +58,7 @@ resource "aws_security_group" "ecs_sg" {
 
 resource "aws_security_group" "alb_sg" {
   name_prefix = "${var.project_name}-alb-sg-"
-  description = "Allow inbound HTTP traffic from the API Gateway VPC Link to the ALB"
+  description = "Allow inbound HTTP and HTTPS traffic to the ALB"
   vpc_id      = data.aws_vpc.default.id
 
   # Ensure ecs_sg's referencing rules are removed before alb_sg is destroyed
@@ -66,14 +66,26 @@ resource "aws_security_group" "alb_sg" {
     create_before_destroy = true
   }
 
-  # The ALB is internal and only reachable from the API Gateway VPC Link ENIs,
-  # which share this VPC's private address space. TLS termination happens at
-  # the API Gateway edge, so the link between the VPC Link and the ALB is
-  # plain HTTP inside the VPC.
   ingress {
-    description     = "HTTP from API Gateway VPC Link"
-    from_port       = 80
-    to_port         = 80
+    description = "HTTP from internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS from internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description     = "API listener from API Gateway VPC Link"
+    from_port       = 8080
+    to_port         = 8080
     protocol        = "tcp"
     security_groups = [aws_security_group.apigw_vpc_link.id]
   }
@@ -88,6 +100,12 @@ resource "aws_security_group" "alb_sg" {
   tags = {
     Name = "${var.project_name}-alb-sg"
   }
+}
+
+# The ISSUED ACM certificate for the custom domain
+data "aws_acm_certificate" "api_domain" {
+  domain   = var.api_domain_name
+  statuses = ["ISSUED"]
 }
 
 # The repository is created by the bootstrap stack (terraform/bootstrap): the
@@ -194,15 +212,11 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
-# Application Load Balancer. Sits behind the HTTP API Gateway (see apigw.tf)
-# and transparently proxies the HTTP `Upgrade: websocket` handshake to the
-# ECS tasks, so Blazor Server's SignalR circuit runs over a real WebSocket
-# instead of falling back to long polling.
+# Application Load Balancer. Directly terminates TLS with the ACM certificate
+# and natively supports HTTP/1.1 WebSockets for Blazor Server SignalR circuits.
 resource "aws_lb" "main" {
-  name = "${var.project_name}-alb"
-  # Fronted by an HTTP API Gateway (see apigw.tf); the ALB itself is only
-  # reachable from inside the VPC via the API Gateway VPC Link.
-  internal           = true
+  name               = "${var.project_name}-alb"
+  internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = data.aws_subnets.default.ids
@@ -237,7 +251,7 @@ resource "aws_lb_target_group" "main" {
   # service scales beyond one task.
   stickiness {
     type            = "lb_cookie"
-    enabled         = false # Not needed for single instance
+    enabled         = true
     cookie_duration = 86400
   }
 }
@@ -246,6 +260,38 @@ resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+# Private-integration listener used only by API Gateway VPC Link ENIs. Its
+# security-group rule is source-restricted, so it is not public despite the
+# internet-facing ALB.
+resource "aws_lb_listener" "api_gateway" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 8080
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main.arn
+  }
+}
+
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = data.aws_acm_certificate.api_domain.arn
 
   default_action {
     type             = "forward"
@@ -276,5 +322,5 @@ resource "aws_ecs_service" "main" {
   # counting failed health checks against it.
   health_check_grace_period_seconds = 120
 
-  depends_on = [aws_lb_listener.http]
+  depends_on = [aws_lb_listener.https]
 }

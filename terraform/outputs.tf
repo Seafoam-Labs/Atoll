@@ -14,18 +14,23 @@ output "repository_url" {
 }
 
 output "application_url" {
-  description = "The public URL of the Atoll API (API Gateway custom domain)"
+  description = "The public URL of the Atoll API"
   value       = "https://${var.api_domain_name}"
 }
 
 output "api_gateway_invoke_url" {
-  description = "Default execute-api URL of the HTTP API Gateway (useful for debugging)"
+  description = "Default execute-api URL for HTTP API clients; do not use it for Blazor WebSockets"
   value       = aws_apigatewayv2_api.main.api_endpoint
 }
 
-output "api_gateway_target_domain_name" {
-  description = "Regional target of the API Gateway custom domain; point the public CNAME for the domain here"
-  value       = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].target_domain_name
+output "alb_dns_name" {
+  description = "The DNS name of the Application Load Balancer; point the public CNAME (or Route 53 ALIAS) for the domain here"
+  value       = aws_lb.main.dns_name
+}
+
+output "alb_zone_id" {
+  description = "The canonical hosted zone ID of the Application Load Balancer (for Route 53 Alias records)"
+  value       = aws_lb.main.zone_id
 }
 
 
