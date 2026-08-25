@@ -58,23 +58,19 @@ resource "aws_security_group" "ecs_sg" {
 
 resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg"
-  description = "Allow inbound HTTP/HTTPS traffic to the ALB"
+  description = "Allow inbound HTTP traffic from the API Gateway VPC Link to the ALB"
   vpc_id      = data.aws_vpc.default.id
 
+  # The ALB is internal and only reachable from the API Gateway VPC Link ENIs,
+  # which share this VPC's private address space. TLS termination happens at
+  # the API Gateway edge, so the link between the VPC Link and the ALB is
+  # plain HTTP inside the VPC.
   ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "HTTP from API Gateway VPC Link"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.apigw_vpc_link.id]
   }
 
   egress {
@@ -193,13 +189,15 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
-# Application Load Balancer. Unlike the HTTP API Gateway it replaces, an ALB
-# transparently proxies the HTTP `Upgrade: websocket` handshake, so Blazor
-# Server's SignalR circuit runs over a real WebSocket instead of falling back
-# to long polling.
+# Application Load Balancer. Sits behind the HTTP API Gateway (see apigw.tf)
+# and transparently proxies the HTTP `Upgrade: websocket` handshake to the
+# ECS tasks, so Blazor Server's SignalR circuit runs over a real WebSocket
+# instead of falling back to long polling.
 resource "aws_lb" "main" {
-  name               = "${var.project_name}-alb"
-  internal           = false
+  name = "${var.project_name}-alb"
+  # Fronted by an HTTP API Gateway (see apigw.tf); the ALB itself is only
+  # reachable from inside the VPC via the API Gateway VPC Link.
+  internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = data.aws_subnets.default.ids
