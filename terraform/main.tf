@@ -237,7 +237,7 @@ resource "aws_lb_target_group" "main" {
   # service scales beyond one task.
   stickiness {
     type            = "lb_cookie"
-    enabled         = false # Disable stickiness until more than one instance is needed
+    enabled         = true
     cookie_duration = 86400
   }
 }
