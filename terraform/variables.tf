@@ -15,7 +15,7 @@ variable "container_port" {
 
 variable "cpu" {
   description = "Fargate instance CPU units to provision (1 vCPU = 1024 CPU units)"
-  default     = "512"
+  default     = "1024"
 }
 
 variable "memory" {
@@ -52,4 +52,3 @@ variable "api_domain_name" {
   description = "Custom domain name served by the CloudFront distribution that fronts the ALB"
   default     = "atoll.seafoam-labs.org"
 }
-
