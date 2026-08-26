@@ -292,6 +292,24 @@ public class UiPagesTests
     }
 
     [Test]
+    public async Task PackageDetailsRendersCustomExternalBaseUrlInCloneBlock()
+    {
+        using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
+        using var client = factory.CreateClient();
+        await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
+        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true);
+        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await factory.SecurityRepository.CompleteScanAsync(
+            "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []));
+
+        var response = await client.GetAsync("/package/shelly-bin");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(body, Does.Contain("git clone https://atoll.example.com/packages/shelly-bin.git"));
+    }
+
+    [Test]
     public async Task PackageDetailsRenderBlockedBannerWhenFlagged()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);

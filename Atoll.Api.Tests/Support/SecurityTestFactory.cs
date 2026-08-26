@@ -28,22 +28,29 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
     /// <summary>Set false to gate the manual seed/rescan mutations (REST 403 + hidden UI buttons).</summary>
     public bool MutationsEnabled { get; init; } = true;
 
+    /// <summary>Optional override for the public base URL rendered in UI clone blocks.</summary>
+    public string? ExternalBaseUrl { get; init; }
+
     private string RepositoriesRoot { get; } = Path.Combine(Path.GetTempPath(), $"atoll-security-{Guid.NewGuid():N}");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
 
+        var config = new Dictionary<string, string?>
+        {
+            ["Atoll:Git:RepositoriesPath"] = RepositoriesRoot,
+            ["Atoll:Security:Enabled"] = SecurityEnabled ? "true" : "false",
+            ["Atoll:Mutations:Enabled"] = MutationsEnabled ? "true" : "false",
+            // Deterministic worker cards on /status regardless of appsettings.json defaults.
+            ["Atoll:Seed:Mode"] = "Direct",
+            ["Atoll:Refresh:Enabled"] = "false"
+        };
+        if (ExternalBaseUrl is not null)
+            config["Atoll:Ui:ExternalBaseUrl"] = ExternalBaseUrl;
+
         builder.UseConfiguration(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Atoll:Git:RepositoriesPath"] = RepositoriesRoot,
-                ["Atoll:Security:Enabled"] = SecurityEnabled ? "true" : "false",
-                ["Atoll:Mutations:Enabled"] = MutationsEnabled ? "true" : "false",
-                // Deterministic worker cards on /status regardless of appsettings.json defaults.
-                ["Atoll:Seed:Mode"] = "Direct",
-                ["Atoll:Refresh:Enabled"] = "false"
-            })
+            .AddInMemoryCollection(config)
             .Build());
 
         builder.ConfigureServices(services =>

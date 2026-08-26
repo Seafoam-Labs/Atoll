@@ -21,6 +21,7 @@
       - Atoll__Security__ScannerConcurrency=2
       - Atoll__Security__PollIntervalMs=100
       - Atoll__Mutations__Enabled=true
+      - Atoll__Ui__ExternalBaseUrl=http://localhost:8080
       # Set Atoll__Seed__Mode=Off to retain only manually seeded packages.
       - Atoll__Seed__Mode=Bulk
       - Atoll__Seed__Bulk__MirrorUrl=https://github.com/archlinux/aur

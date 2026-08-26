@@ -81,6 +81,7 @@ Some important environment variables are listed below.
 | `Atoll__Refresh__Enabled` | `true`, `false` | Enables or disables background refresh of already-seeded package content. |
 | `Atoll__Security__Enabled` | `true`, `false` | Enables or disables security scanning and content gating. See [SECURITY.md](docs/SECURITY.md). |
 | `Atoll__Mutations__Enabled` | `true`, `false` | Allows mutating operations. Set to `false` when exposing Atoll read-only on public networks. |
+| `Atoll__Ui__ExternalBaseUrl` | URL (`http://localhost:5290` by default) | Public base URL of the instance used for UI links and Git clone instructions. |
 
 Note: double underscores (`__`) are the standard .NET convention for nesting configuration sections, so
 `Atoll__Seed__Mode` maps to `Atoll:Seed:Mode` in `appsettings.json`.
