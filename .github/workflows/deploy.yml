@@ -25,7 +25,9 @@ env:
 jobs:
   build-image:
     name: Build container image
-    runs-on: ubuntu-latest
+    # Graviton runner (free for public repos): builds the arm64 image natively,
+    # matching the ARM64 Fargate task definition.
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -133,7 +135,9 @@ jobs:
 
   deploy:
     name: Deploy to AWS
-    runs-on: ubuntu-latest
+    # Graviton runner: the image pushed to ECR must be arm64 to match the
+    # ARM64 Fargate task definition.
+    runs-on: ubuntu-24.04-arm
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     defaults:
       run:
