@@ -18,6 +18,10 @@ public class MongoPackageServiceTests
             [".SRCINFO"] = "pkgname = shelly\n"
         };
 
+    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset T1 = new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset T2 = new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero);
+
     private static MongoPackageService CreateService(
         InMemoryPackageRepository repo,
         PackageIndexStore? indexStore = null,
@@ -428,10 +432,6 @@ public class MongoPackageServiceTests
             "aging out an old revision must invalidate the marker even when the head is unchanged");
     }
 
-    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset T1 = new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset T2 = new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero);
-
     private static PackageDocument TestDoc(string headRevisionId, params (string Id, DateTimeOffset At)[] revisions)
     {
         return new PackageDocument
@@ -458,5 +458,187 @@ public class MongoPackageServiceTests
             [], [], [],
             [], [], [],
             [], []);
+    }
+
+    [Test]
+    public async Task SeedFilesAsync_estimate_above_limit_but_exact_bson_under_limit_is_accepted()
+    {
+        // Two files totalling 16,776,000 content bytes: the conservative estimate
+        // (content + 160/file + 1024) exceeds the 16 MiB BSON limit, but the exact
+        // ToBson() measurement stays under it, so the exact second pass must admit it.
+        const int perFile = 8_388_000;
+        var estimated = 2L * perFile + 2 * (160 + "large-1.txt".Length) + 1024;
+        Assert.That(estimated, Is.GreaterThan(16 * 1024 * 1024),
+            "precondition: the conservative estimate must exceed the BSON limit");
+
+        var repo = new InMemoryPackageRepository();
+        var options = Options.Create(new AtollOptions
+        {
+            Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
+        });
+        var service = new MongoPackageService(
+            repo,
+            new PackageIndexStore(),
+            options,
+            new InMemoryPackageSecurityRepository(),
+            NullLogger<MongoPackageService>.Instance);
+        var files = new Dictionary<string, string>
+        {
+            ["large-1.txt"] = new('x', perFile),
+            ["large-2.txt"] = new('x', perFile)
+        };
+
+        await service.SeedFilesAsync("boundary", files);
+
+        var persisted = await service.GetAsync("boundary");
+        var packageExists = await repo.ExistsAsync("boundary");
+        Assert.Multiple(() =>
+        {
+            Assert.That(packageExists, Is.True);
+            Assert.That(persisted.Files["large-1.txt"], Has.Length.EqualTo(perFile));
+        });
+    }
+
+    [Test]
+    public async Task DeleteAsync_failure_after_derived_cleanup_leaves_package_deletable_again()
+    {
+        var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
+        var reposRoot = Path.Combine(Path.GetTempPath(), $"atoll-delete-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(reposRoot);
+        var options = Options.Create(new AtollOptions
+        {
+            Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
+            Git = new GitOptions { RepositoriesPath = reposRoot }
+        });
+        var service = new MongoPackageService(
+            repo,
+            new PackageIndexStore(),
+            options,
+            security,
+            NullLogger<MongoPackageService>.Instance);
+        var failingOnce = new ThrowOnceOnDeleteRepository(repo);
+        var retryService = new MongoPackageService(
+            failingOnce,
+            new PackageIndexStore(),
+            options,
+            security,
+            NullLogger<MongoPackageService>.Instance);
+
+        try
+        {
+            await service.SeedFilesAsync("shelly", SampleFiles);
+            Assert.That(await security.CountPendingAsync(), Is.EqualTo(1));
+            var repoDir = service.GetRepositoryPath("shelly")!;
+            Directory.CreateDirectory(repoDir);
+            await File.WriteAllTextAsync(Path.Combine(repoDir, "HEAD"), "marker-for-cleanup");
+
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await retryService.DeleteAsync("shelly"));
+
+            var remainingScans = await security.ListForPackageAsync("shelly");
+            var packageStillExists = await repo.ExistsAsync("shelly");
+            Assert.Multiple(() =>
+            {
+                // Derived state is removed before the authoritative document, so the failed
+                // delete leaves no orphaned scan records or on-disk cache...
+                Assert.That(remainingScans, Is.Empty);
+                Assert.That(Directory.Exists(repoDir), Is.False);
+                // ...while the package document survives, keeping the delete retryable.
+                Assert.That(packageStillExists, Is.True);
+            });
+
+            await retryService.DeleteAsync("shelly");
+
+            Assert.That(await repo.ExistsAsync("shelly"), Is.False);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(reposRoot))
+                    Directory.Delete(reposRoot, true);
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+    }
+
+    private sealed class ThrowOnceOnDeleteRepository(IPackageRepository inner) : IPackageRepository
+    {
+        public bool HasThrown { get; private set; }
+
+        public Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
+        {
+            return inner.ListAsync(ct);
+        }
+
+        public Task<long> CountAsync(CancellationToken ct = default)
+        {
+            return inner.CountAsync(ct);
+        }
+
+        public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.ExistsAsync(packageName, ct);
+        }
+
+        public Task<PackageDocument?> GetHeadAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.GetHeadAsync(packageName, ct);
+        }
+
+        public Task<string?> GetHeadRevisionIdAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.GetHeadRevisionIdAsync(packageName, ct);
+        }
+
+        public Task<PackageRevisionContentDocument?> GetRevisionAsync(
+            string packageName, string revisionId, CancellationToken ct = default)
+        {
+            return inner.GetRevisionAsync(packageName, revisionId, ct);
+        }
+
+        public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.GetHistoryAsync(packageName, ct);
+        }
+
+        public Task InsertSeedAsync(
+            PackageDocument doc, PackageRevisionContentDocument revision, CancellationToken ct = default)
+        {
+            return inner.InsertSeedAsync(doc, revision, ct);
+        }
+
+        public Task AppendRevisionAsync(
+            string packageName, PackageRevisionContentDocument revision, int maxRevisions,
+            CancellationToken ct = default)
+        {
+            return inner.AppendRevisionAsync(packageName, revision, maxRevisions, ct);
+        }
+
+        public Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)
+        {
+            return inner.ListSyncStatesAsync(ct);
+        }
+
+        public Task UpdateSyncStateAsync(
+            IReadOnlyCollection<string> packageNames, string? upstreamHead, bool succeeded, string? error,
+            CancellationToken ct = default)
+        {
+            return inner.UpdateSyncStateAsync(packageNames, upstreamHead, succeeded, error, ct);
+        }
+
+        public Task DeleteAsync(string packageName, CancellationToken ct = default)
+        {
+            if (!HasThrown)
+            {
+                HasThrown = true;
+                throw new InvalidOperationException("simulated delete failure");
+            }
+
+            return inner.DeleteAsync(packageName, ct);
+        }
     }
 }

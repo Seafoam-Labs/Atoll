@@ -20,6 +20,9 @@ public class GitRepositoryMaterializationTests
             [".SRCINFO"] = "pkgname = shelly\n"
         };
 
+    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset T1 = new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
+
     private static async Task<bool> GitIsAvailable()
     {
         var (exitCode, _) = await GitClient.TryExecuteAsync(["--version"], CancellationToken.None);
@@ -292,6 +295,161 @@ public class GitRepositoryMaterializationTests
         catch
         {
             // ignore
+        }
+    }
+
+    [Test]
+    public async Task Missing_revision_content_materializes_remaining_history_without_marker()
+    {
+        var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
+        var reposRoot = CreateTempReposRoot();
+        var options = Options.Create(new AtollOptions
+        {
+            Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
+            Git = new GitOptions { RepositoriesPath = reposRoot }
+        });
+        var service = new MongoPackageService(
+            new RevisionHidingRepository(repo, "rev-1"),
+            new PackageIndexStore(),
+            options,
+            security,
+            NullLogger<MongoPackageService>.Instance);
+        try
+        {
+            await repo.InsertSeedAsync(
+                new PackageDocument
+                {
+                    Id = "pkg",
+                    PackageName = "pkg",
+                    CreatedAt = T0,
+                    UpdatedAt = T0,
+                    HeadRevisionId = "rev-1",
+                    Revisions = [new PackageRevisionDocument { RevisionId = "rev-1", CreatedAt = T0 }]
+                },
+                new PackageRevisionContentDocument
+                {
+                    Id = PackageSchema.RevisionDocumentId("pkg", "rev-1"),
+                    PackageName = "pkg",
+                    RevisionId = "rev-1",
+                    CreatedAt = T0,
+                    Files = new Dictionary<string, PackageFile>
+                    {
+                        ["PKGBUILD"] = new() { Content = "pkgname=pkg\npkgver=1.0\n", Size = 0, Hash = "unused" }
+                    }
+                });
+            await repo.AppendRevisionAsync("pkg", new PackageRevisionContentDocument
+            {
+                Id = PackageSchema.RevisionDocumentId("pkg", "rev-2"),
+                PackageName = "pkg",
+                RevisionId = "rev-2",
+                CreatedAt = T1,
+                Files = new Dictionary<string, PackageFile>
+                {
+                    ["PKGBUILD"] = new() { Content = "pkgname=pkg\npkgver=2.0\n", Size = 0, Hash = "unused" }
+                }
+            }, 10);
+
+            await security.MarkPendingAsync("pkg", "rev-1", true);
+            await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
+            await security.MarkPendingAsync("pkg", "rev-2", true);
+            await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
+
+            await service.EnsureGitRepositoryAsync("pkg");
+
+            var gitDir = service.GetRepositoryPath("pkg")!;
+            var ct = CancellationToken.None;
+            var count = (await GitClient.ExecuteAsync(gitDir, ["rev-list", "--count", "main"], null, null, ct)).Trim();
+            var pkgbuild = await GitClient.ExecuteAsync(gitDir, ["show", "main:PKGBUILD"], null, null, ct);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(count, Is.EqualTo("1"),
+                    "the revision whose content document is missing must be skipped");
+                Assert.That(pkgbuild, Is.EqualTo("pkgname=pkg\npkgver=2.0\n"),
+                    "the remaining revision becomes a parentless head commit");
+                Assert.That(File.Exists(Path.Combine(gitDir, ".atoll-head")), Is.False,
+                    "an incomplete materialization must not write the marker, so the next request retries");
+            });
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+        }
+    }
+
+    /// <summary>
+    ///     Simulates a lost revision content document: the head document still lists the
+    ///     revision, but GetRevisionAsync cannot serve it.
+    /// </summary>
+    private sealed class RevisionHidingRepository(IPackageRepository inner, string hiddenRevisionId) : IPackageRepository
+    {
+        public Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
+        {
+            return inner.ListAsync(ct);
+        }
+
+        public Task<long> CountAsync(CancellationToken ct = default)
+        {
+            return inner.CountAsync(ct);
+        }
+
+        public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.ExistsAsync(packageName, ct);
+        }
+
+        public Task<PackageDocument?> GetHeadAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.GetHeadAsync(packageName, ct);
+        }
+
+        public Task<string?> GetHeadRevisionIdAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.GetHeadRevisionIdAsync(packageName, ct);
+        }
+
+        public Task<PackageRevisionContentDocument?> GetRevisionAsync(
+            string packageName, string revisionId, CancellationToken ct = default)
+        {
+            return revisionId == hiddenRevisionId
+                ? Task.FromResult<PackageRevisionContentDocument?>(null)
+                : inner.GetRevisionAsync(packageName, revisionId, ct);
+        }
+
+        public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.GetHistoryAsync(packageName, ct);
+        }
+
+        public Task InsertSeedAsync(
+            PackageDocument doc, PackageRevisionContentDocument revision, CancellationToken ct = default)
+        {
+            return inner.InsertSeedAsync(doc, revision, ct);
+        }
+
+        public Task AppendRevisionAsync(
+            string packageName, PackageRevisionContentDocument revision, int maxRevisions,
+            CancellationToken ct = default)
+        {
+            return inner.AppendRevisionAsync(packageName, revision, maxRevisions, ct);
+        }
+
+        public Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)
+        {
+            return inner.ListSyncStatesAsync(ct);
+        }
+
+        public Task UpdateSyncStateAsync(
+            IReadOnlyCollection<string> packageNames, string? upstreamHead, bool succeeded, string? error,
+            CancellationToken ct = default)
+        {
+            return inner.UpdateSyncStateAsync(packageNames, upstreamHead, succeeded, error, ct);
+        }
+
+        public Task DeleteAsync(string packageName, CancellationToken ct = default)
+        {
+            return inner.DeleteAsync(packageName, ct);
         }
     }
 }
