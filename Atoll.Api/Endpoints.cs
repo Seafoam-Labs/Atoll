@@ -1,6 +1,6 @@
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Seed;
+using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Http.HttpResults;

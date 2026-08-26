@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using Atoll.Api.Services.Packages.Refresh;
-using Atoll.Api.Services.Packages.Seed;
+using Atoll.Api.Services.Sync.Bulk;
+using Atoll.Api.Services.Sync.Refresh;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Search.Refresh;

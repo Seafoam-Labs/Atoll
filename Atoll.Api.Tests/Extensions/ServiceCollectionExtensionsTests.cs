@@ -1,7 +1,8 @@
 using Atoll.Api.Extensions;
-using Atoll.Api.Services.Packages.Mirror;
-using Atoll.Api.Services.Packages.Refresh;
-using Atoll.Api.Services.Packages.Seed;
+using Atoll.Api.Services.Sync.Bulk;
+using Atoll.Api.Services.Sync.Direct;
+using Atoll.Api.Services.Sync.Mirror;
+using Atoll.Api.Services.Sync.Refresh;
 using Atoll.Api.Services.Search.Refresh;
 using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Hosting;

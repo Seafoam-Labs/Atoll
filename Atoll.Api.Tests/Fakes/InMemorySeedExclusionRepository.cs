@@ -1,4 +1,4 @@
-using Atoll.Api.Services.Packages.Seed;
+using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Fakes;
 
