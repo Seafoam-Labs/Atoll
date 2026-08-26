@@ -114,7 +114,9 @@ internal static class ServiceCollectionExtensions
         {
             services.AddSingleton<IPackageRepository, MongoPackageRepository>();
             services.AddSingleton<ISeedExclusionRepository, MongoSeedExclusionRepository>();
-            services.AddSingleton<IPackageService, MongoPackageService>();
+            services.AddSingleton<IAurPackageSource, AurGitPackageSource>();
+            services.AddSingleton<DirectPackageSeeder>();
+            services.AddSingleton<IPackageService, PackageService>();
             return services;
         }
 

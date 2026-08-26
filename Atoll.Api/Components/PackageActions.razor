@@ -1,5 +1,5 @@
 @rendermode InteractiveServer
-@inject IPackageService Packages
+@inject DirectPackageSeeder Seeder
 @inject IPackageSecurityRepository SecurityRepository
 @inject PackageCatalogService Catalog
 @inject NavigationManager Navigation
@@ -61,7 +61,7 @@
         _error = null;
         try
         {
-            await Packages.SeedFromAurAsync(Name);
+            await Seeder.SeedAsync(Name);
             Catalog.InvalidateSnapshot();
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }

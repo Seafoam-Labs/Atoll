@@ -72,7 +72,7 @@ public class GitCommitFixtureTests
                 Git = new GitOptions { RepositoriesPath = reposRoot }
             });
             var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-            var service = new MongoPackageService(repo, new PackageIndexStore(), options, security, cache);
+            var service = new PackageService(repo, options, security, cache);
 
             await InsertVerifiedHistoryAsync(repo, security);
             await cache.EnsureRepositoryAsync("fixture");

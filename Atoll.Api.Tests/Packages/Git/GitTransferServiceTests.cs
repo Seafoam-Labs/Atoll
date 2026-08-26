@@ -27,7 +27,7 @@ public class GitTransferServiceTests
         return exitCode == 0;
     }
 
-    private static (GitTransferService git, MongoPackageService packages, GitRepositoryCache cache, IPackageSecurityRepository security, string reposRoot)
+    private static (GitTransferService git, PackageService packages, GitRepositoryCache cache, IPackageSecurityRepository security, string reposRoot)
         CreateServices()
     {
         var repo = new InMemoryPackageRepository();
@@ -40,7 +40,7 @@ public class GitTransferServiceTests
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var packages = new MongoPackageService(repo, new PackageIndexStore(), options, security, cache);
+        var packages = new PackageService(repo, options, security, cache);
         var git = new GitTransferService(repo, cache);
         return (git, packages, cache, security, reposRoot);
     }

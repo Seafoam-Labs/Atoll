@@ -225,8 +225,6 @@ public class StatusDashboardServiceTests
         public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
 
 
-        public Task SeedFromAurAsync(string packageName) => throw new NotSupportedException();
-
         public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
             => throw new NotSupportedException();
 
@@ -255,8 +253,6 @@ public class StatusDashboardServiceTests
 
         public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
 
-
-        public Task SeedFromAurAsync(string packageName) => throw new NotSupportedException();
 
         public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
             => throw new NotSupportedException();

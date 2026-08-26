@@ -22,7 +22,7 @@ public class GitSmartHttpEndpointsTests
     private HttpClient _client = null!;
 
     private GitTestFactory _factory = null!;
-    private MongoPackageService _packages = null!;
+    private PackageService _packages = null!;
 
     private static bool GitIsAvailable()
     {
@@ -36,7 +36,7 @@ public class GitSmartHttpEndpointsTests
         Assume.That(GitIsAvailable(), "git binary is required for these tests");
         _factory = new GitTestFactory();
         _client = _factory.CreateClient();
-        _packages = (MongoPackageService)_factory.Services.GetRequiredService<IPackageService>();
+        _packages = (PackageService)_factory.Services.GetRequiredService<IPackageService>();
     }
 
     [TearDown]

@@ -1,7 +1,5 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,7 +8,7 @@ using NUnit.Framework;
 
 namespace Atoll.Api.Tests.Packages;
 
-public class MongoPackageServiceTests
+public class PackageServiceTests
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
         new Dictionary<string, string>
@@ -19,16 +17,15 @@ public class MongoPackageServiceTests
             [".SRCINFO"] = "pkgname = shelly\n"
         };
 
-    private static MongoPackageService CreateService(
+    private static PackageService CreateService(
         InMemoryPackageRepository repo,
-        PackageIndexStore? indexStore = null,
         IPackageSecurityRepository? securityRepository = null)
     {
         var options = Options.Create(new AtollOptions
         {
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         });
-        return new MongoPackageService(repo, indexStore ?? new PackageIndexStore(), options, securityRepository ?? new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
     }
 
     [Test]
@@ -106,7 +103,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 1_024, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
 
         var big = new Dictionary<string, string>
         {
@@ -127,7 +124,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         var files = new Dictionary<string, string>
         {
             ["large-1.txt"] = new('x', 9_000_000),
@@ -153,7 +150,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         await service.SeedFilesAsync("pkg", SampleFiles);
         var history = await service.GetHistoryAsync("pkg");
         var originalHead = history[0].Sha;
@@ -240,65 +237,6 @@ public class MongoPackageServiceTests
     }
 
     [Test]
-    public void ResolvePackageBase_split_package_returns_pkgbase_not_pkgname()
-    {
-        // Split packages (e.g. "libfoo" / "libfoo-devel" under base "foo") have
-        // pkgname != pkgbase; AUR Git URLs are keyed by pkgbase.
-        var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages([
-            SampleMetadata("libfoo", "foo"),
-            SampleMetadata("libfoo-devel", "foo")
-        ]));
-
-        var service = CreateService(new InMemoryPackageRepository(), store);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(service.ResolvePackageBase("libfoo"), Is.EqualTo("foo"));
-            Assert.That(service.ResolvePackageBase("libfoo-devel"), Is.EqualTo("foo"));
-        });
-    }
-
-    [Test]
-    public void ResolvePackageBase_non_split_package_returns_pkgname()
-    {
-        var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages([
-            SampleMetadata("shelly", "shelly")
-        ]));
-
-        var service = CreateService(new InMemoryPackageRepository(), store);
-
-        Assert.That(service.ResolvePackageBase("shelly"), Is.EqualTo("shelly"));
-    }
-
-    [Test]
-    public void ResolvePackageBase_unknown_package_falls_back_to_pkgname()
-    {
-        // Cold start or stale index: fall back to pkgname so non-split packages
-        // can still be seeded. Split packages will fail at clone time, which is
-        // the pre-fix behavior and surfaces the missing index entry in logs.
-        var store = new PackageIndexStore();
-
-        var service = CreateService(new InMemoryPackageRepository(), store);
-
-        Assert.That(service.ResolvePackageBase("anything"), Is.EqualTo("anything"));
-    }
-
-    private static AurPackageMetadata SampleMetadata(string name, string packageBase)
-    {
-        return new AurPackageMetadata(
-            0, name, 0, packageBase,
-            "1.0", "sample", null,
-            0, 0, null,
-            null, null,
-            0, 0, "",
-            [], [], [],
-            [], [], [],
-            [], []);
-    }
-
-    [Test]
     public async Task SeedFilesAsync_estimate_above_limit_but_exact_bson_under_limit_is_accepted()
     {
         // Two files totalling 16,776,000 content bytes: the conservative estimate
@@ -314,7 +252,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         var files = new Dictionary<string, string>
         {
             ["large-1.txt"] = new('x', perFile),
@@ -345,9 +283,9 @@ public class MongoPackageServiceTests
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options, security, cache);
+        var service = new PackageService(repo, options, security, cache);
         var failingOnce = new ThrowOnceOnDeleteRepository(repo);
-        var retryService = new MongoPackageService(failingOnce, new PackageIndexStore(), options, security, cache);
+        var retryService = new PackageService(failingOnce, options, security, cache);
 
         try
         {

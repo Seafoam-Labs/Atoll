@@ -10,12 +10,10 @@ namespace Atoll.Api.Tests.Packages.Seed;
 
 public class DirectSeedWorkerTests
 {
-    /// <summary>Records SeedFromAurAsync calls; fails for the configured packages.</summary>
+    /// <summary>Records persisted seeds; fetch failures are simulated on the source.</summary>
     private sealed class FakeSeedService(IReadOnlyList<string> seededNames) : IPackageService
     {
         public List<string> SeedCalls { get; } = [];
-
-        public HashSet<string> FailFor { get; } = [];
 
         public Task<IReadOnlyList<string>> ListAsync()
         {
@@ -37,22 +35,35 @@ public class DirectSeedWorkerTests
 
         public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
 
-
-        public Task SeedFromAurAsync(string packageName)
+        public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
         {
             SeedCalls.Add(packageName);
-            return FailFor.Contains(packageName)
-                ? Task.FromException(new InvalidOperationException("boom"))
-                : Task.CompletedTask;
+            return Task.CompletedTask;
         }
-
-        public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
-            => throw new NotSupportedException();
 
         public Task<bool> AppendRevisionFromUpstreamAsync(
             string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
             => throw new NotSupportedException();
+    }
 
+    /// <summary>Records fetched pkgbases; fails or cancels for the configured packages.</summary>
+    private sealed class FakeAurPackageSource : IAurPackageSource
+    {
+        public HashSet<string> FailFor { get; } = [];
+
+        public CancellationTokenSource? CancelDuringFetch { get; set; }
+
+        public Task<IReadOnlyDictionary<string, string>> FetchFilesAsync(
+            string packageBase, CancellationToken ct = default)
+        {
+            if (CancelDuringFetch is not null)
+                CancelDuringFetch.Cancel();
+
+            return FailFor.Contains(packageBase)
+                ? Task.FromException<IReadOnlyDictionary<string, string>>(new InvalidOperationException("boom"))
+                : Task.FromResult<IReadOnlyDictionary<string, string>>(
+                    new Dictionary<string, string> { ["PKGBUILD"] = "pkgname=x\n" });
+        }
     }
 
     /// <summary>Serves ListAsync with a fixed set of already-seeded names.</summary>
@@ -65,7 +76,7 @@ public class DirectSeedWorkerTests
             => Task.FromResult((long)existing.Count);
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
-            => throw new NotSupportedException();
+            => Task.FromResult(existing.Contains(packageName));
 
         public Task<PackageDocument?> GetHeadAsync(string packageName, CancellationToken ct = default)
             => throw new NotSupportedException();
@@ -123,13 +134,15 @@ public class DirectSeedWorkerTests
     private static DirectSeedWorker CreateWorker(
         PackageIndexStore store,
         IPackageRepository repo,
+        FakeAurPackageSource source,
         IPackageService service,
         DirectSeedStatusStore status)
     {
+        var seeder = new DirectPackageSeeder(repo, store, source, service);
         return new DirectSeedWorker(
             store,
             repo,
-            service,
+            seeder,
             status,
             Options.Create(new AtollOptions()),
             NullLogger<DirectSeedWorker>.Instance);
@@ -140,7 +153,7 @@ public class DirectSeedWorkerTests
     {
         var status = new DirectSeedStatusStore(enabled: true);
         var worker = CreateWorker(
-            IndexWithPackages(), new FakePackageRepository([]), new FakeSeedService([]), status);
+            IndexWithPackages(), new FakePackageRepository([]), new FakeAurPackageSource(), new FakeSeedService([]), status);
 
         var result = await worker.RunCycleAsync(TimeSpan.FromMilliseconds(1), CancellationToken.None);
         var snapshot = status.GetSnapshot();
@@ -157,7 +170,7 @@ public class DirectSeedWorkerTests
     {
         var status = new DirectSeedStatusStore(enabled: true);
         var service = new FakeSeedService([]);
-        var worker = CreateWorker(IndexWithPackages(Meta("shelly")), new FakePackageRepository(["shelly"]), service, status);
+        var worker = CreateWorker(IndexWithPackages(Meta("shelly")), new FakePackageRepository(["shelly"]), new FakeAurPackageSource(), service, status);
 
         var result = await worker.RunCycleAsync(TimeSpan.FromMilliseconds(1), CancellationToken.None);
 
@@ -177,6 +190,7 @@ public class DirectSeedWorkerTests
         var worker = CreateWorker(
             IndexWithPackages(Meta("kept"), Meta("one"), Meta("two")),
             new FakePackageRepository(["kept"]),
+            new FakeAurPackageSource(),
             service,
             status);
 
@@ -204,9 +218,10 @@ public class DirectSeedWorkerTests
     {
         var status = new DirectSeedStatusStore(enabled: true);
         var service = new FakeSeedService([]);
-        service.FailFor.Add("broken");
+        var source = new FakeAurPackageSource();
+        source.FailFor.Add("broken");
         var worker = CreateWorker(
-            IndexWithPackages(Meta("broken"), Meta("fine")), new FakePackageRepository([]), service, status);
+            IndexWithPackages(Meta("broken"), Meta("fine")), new FakePackageRepository([]), source, service, status);
 
         var result = await worker.RunCycleAsync(TimeSpan.FromMilliseconds(1), CancellationToken.None);
         var snapshot = status.GetSnapshot();
@@ -215,7 +230,7 @@ public class DirectSeedWorkerTests
         {
             Assert.That(result.Outcome, Is.EqualTo(DirectSeedCycleOutcome.Completed));
             Assert.That(result.Seeded, Is.EqualTo(1));
-            Assert.That(service.SeedCalls.Count, Is.EqualTo(2));
+            Assert.That(service.SeedCalls, Is.EqualTo(["fine"]));
             Assert.That(snapshot.Seeded, Is.EqualTo(1));
             Assert.That(snapshot.Failed, Is.EqualTo(1));
             Assert.That(snapshot.CyclesCompleted, Is.EqualTo(1));
@@ -229,9 +244,9 @@ public class DirectSeedWorkerTests
         using var cts = new CancellationTokenSource();
         // The first seed succeeds and requests cancellation; the inter-package
         // Task.Delay then throws and the finally block still ends the cycle.
-        var cancelling = new CancellingSeedService(cts);
+        var source = new FakeAurPackageSource { CancelDuringFetch = cts };
         var worker = CreateWorker(
-            IndexWithPackages(Meta("one"), Meta("two")), new FakePackageRepository([]), cancelling, status);
+            IndexWithPackages(Meta("one"), Meta("two")), new FakePackageRepository([]), source, new FakeSeedService([]), status);
 
         Assert.ThrowsAsync(Is.InstanceOf<OperationCanceledException>(),
             () => worker.RunCycleAsync(TimeSpan.FromMilliseconds(1), cts.Token));
@@ -244,38 +259,5 @@ public class DirectSeedWorkerTests
             Assert.That(snapshot.CyclesCompleted, Is.EqualTo(1));
             Assert.That(snapshot.Seeded, Is.EqualTo(1));
         });
-    }
-
-    private sealed class CancellingSeedService(CancellationTokenSource cts) : IPackageService
-    {
-        public Task<IReadOnlyList<string>> ListAsync() => Task.FromResult<IReadOnlyList<string>>([]);
-
-        public Task<int> CountAsync() => Task.FromResult(0);
-
-        public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
-            => Task.FromResult(false);
-
-        public Task<PackageFiles> GetAsync(string packageName, string? commitSha = null)
-            => throw new NotSupportedException();
-
-        public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName)
-            => throw new NotSupportedException();
-
-        public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
-
-
-        public Task SeedFromAurAsync(string packageName)
-        {
-            cts.Cancel();
-            return Task.CompletedTask;
-        }
-
-        public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
-            => throw new NotSupportedException();
-
-        public Task<bool> AppendRevisionFromUpstreamAsync(
-            string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
-            => throw new NotSupportedException();
-
     }
 }

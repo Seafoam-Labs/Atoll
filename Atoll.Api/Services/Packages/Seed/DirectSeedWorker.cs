@@ -15,7 +15,7 @@ internal sealed record DirectSeedCycleResult(DirectSeedCycleOutcome Outcome, int
 public sealed class DirectSeedWorker(
     PackageIndexStore indexStore,
     IPackageRepository repo,
-    IPackageService packageService,
+    DirectPackageSeeder seeder,
     DirectSeedStatusStore status,
     IOptions<AtollOptions> options,
     ILogger<DirectSeedWorker> logger) : BackgroundService
@@ -102,7 +102,7 @@ public sealed class DirectSeedWorker(
 
                 try
                 {
-                    await packageService.SeedFromAurAsync(packageName);
+                    await seeder.SeedAsync(packageName, stoppingToken);
                     seeded++;
                     status.RecordSeeded();
                     logger.LogTrace("Seeded package {PackageName}.", packageName);

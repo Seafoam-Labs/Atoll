@@ -47,7 +47,7 @@ internal sealed class GitTestFactory : WebApplicationFactory<Program>
             services.AddSingleton<IPackageRepository>(Repository);
             services.AddSingleton<IPackageSecurityRepository>(new InMemoryPackageSecurityRepository());
             services.AddSingleton<IAurMetadataRepository>(_ => new InMemoryAurMetadataRepository());
-            services.AddSingleton<IPackageService, MongoPackageService>();
+            services.AddSingleton<IPackageService, PackageService>();
             services.AddSingleton<IGitTransferService, GitTransferService>();
         });
     }

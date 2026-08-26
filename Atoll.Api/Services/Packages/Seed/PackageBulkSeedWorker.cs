@@ -10,6 +10,7 @@ public sealed class PackageBulkSeedWorker(
     PackageIndexStore indexStore,
     IPackageRepository repo,
     IPackageService packageService,
+    DirectPackageSeeder directSeeder,
     ISeedExclusionRepository exclusions,
     IAurMirror mirror,
     BulkSeedStatusStore status,
@@ -323,7 +324,7 @@ public sealed class PackageBulkSeedWorker(
 
             try
             {
-                await packageService.SeedFromAurAsync(packageName);
+                await directSeeder.SeedAsync(packageName, ct);
                 seeded++;
             }
             catch (PackageConflictException)

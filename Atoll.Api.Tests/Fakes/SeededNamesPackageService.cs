@@ -26,9 +26,6 @@ internal sealed class SeededNamesPackageService(IReadOnlyList<string> seededName
     public Task DeleteAsync(string packageName, CancellationToken ct = default)
         => throw new NotSupportedException();
 
-    public Task SeedFromAurAsync(string packageName)
-        => throw new NotSupportedException();
-
     public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
         => throw new NotSupportedException();
 

@@ -36,7 +36,7 @@ public class GitRepositoryMaterializationTests
         return path;
     }
 
-    private static (MongoPackageService service, GitRepositoryCache cache, IPackageSecurityRepository security, string reposRoot)
+    private static (PackageService service, GitRepositoryCache cache, IPackageSecurityRepository security, string reposRoot)
         CreateService()
     {
         var repo = new InMemoryPackageRepository();
@@ -48,7 +48,7 @@ public class GitRepositoryMaterializationTests
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        return (new MongoPackageService(repo, new PackageIndexStore(), options, security, cache), cache, security, reposRoot);
+        return (new PackageService(repo, options, security, cache), cache, security, reposRoot);
     }
 
     [SetUp]
@@ -168,7 +168,7 @@ public class GitRepositoryMaterializationTests
         });
         var security = new InMemoryPackageSecurityRepository();
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options, security, cache);
+        var service = new PackageService(repo, options, security, cache);
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 
@@ -338,7 +338,7 @@ public class GitRepositoryMaterializationTests
         });
         var hidingRepo = new RevisionHidingRepository(repo, "rev-1");
         var cache = new GitRepositoryCache(hidingRepo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new MongoPackageService(hidingRepo, new PackageIndexStore(), options, security, cache);
+        var service = new PackageService(hidingRepo, options, security, cache);
         try
         {
             await repo.InsertSeedAsync(

@@ -72,7 +72,7 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
             services.AddSingleton<IPackageSecurityRepository>(SecurityRepository);
             services.AddSingleton<ISeedExclusionRepository>(SeedExclusions);
             services.AddSingleton<IAurMetadataRepository>(_ => new InMemoryAurMetadataRepository());
-            services.AddSingleton<IPackageService, MongoPackageService>();
+            services.AddSingleton<IPackageService, PackageService>();
             services.AddSingleton<IGitTransferService, GitTransferService>();
         });
     }

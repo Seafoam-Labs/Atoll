@@ -8,7 +8,6 @@ public interface IPackageService
     Task<PackageFiles> GetAsync(string packageName, string? commitSha = null);
     Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName);
     Task DeleteAsync(string packageName, CancellationToken ct = default);
-    Task SeedFromAurAsync(string packageName);
     Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files);
 
     Task<bool> AppendRevisionFromUpstreamAsync(string packageName, IReadOnlyDictionary<string, string> files,

@@ -1,5 +1,6 @@
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Packages.Seed;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -43,13 +44,13 @@ public static class Endpoints
             async ([FromServices] IPackageService repo) => TypedResults.Ok(await repo.ListAsync()));
 
         packages.MapPost("/{name}/seed",
-            async ([FromRoute] string name, [FromServices] IPackageService repo,
+            async ([FromRoute] string name, [FromServices] DirectPackageSeeder seeder,
                 [FromServices] IOptions<AtollOptions> options) =>
             {
                 if (!options.Value.Mutations.Enabled)
                     return MutationsDisabled();
 
-                await repo.SeedFromAurAsync(name);
+                await seeder.SeedAsync(name);
                 return TypedResults.Created($"/packages/{name}");
             });
 

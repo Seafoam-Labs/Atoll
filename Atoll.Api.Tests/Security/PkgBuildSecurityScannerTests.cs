@@ -219,7 +219,7 @@ public class PkgBuildSecurityScannerTests
     {
         // Repository files reach the scanner as UTF-8-decoded strings, so decode
         // real on-disk bytes instead of relying on string escapes. This mirrors
-        // how MongoPackageService / AurMirror hand content to the scanner.
+        // how PackageService / AurMirror hand content to the scanner.
         var elf = Encoding.UTF8.GetString([0x7F, 0x45, 0x4C, 0x46, .. Encoding.UTF8.GetBytes("payload")]);
         var binary = "abc\0def";
 

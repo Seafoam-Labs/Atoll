@@ -1,12 +1,13 @@
-using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
+using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Packages.Seed;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Packages;
+namespace Atoll.Api.Tests.Packages.Seed;
 
 /// <summary>
 ///     Characterizes the temporary-directory lifecycle of the direct AUR clone: the clone target
@@ -14,7 +15,7 @@ namespace Atoll.Api.Tests.Packages;
 ///     path is exercised with a package name that cannot exist upstream.
 /// </summary>
 [Category("RequiresGit")]
-public class SeedFromAurCloneCleanupTests
+public class DirectPackageSeederCloneCleanupTests
 {
     [SetUp]
     public async Task SetUp()
@@ -31,7 +32,10 @@ public class SeedFromAurCloneCleanupTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var security = new InMemoryPackageSecurityRepository();
+        var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
+        var service = new PackageService(repo, options, security, cache);
+        var seeder = new DirectPackageSeeder(repo, new PackageIndexStore(), new AurGitPackageSource(), service);
 
         // A space in the package name makes the clone URL malformed, which git rejects
         // client-side before any network access. The temp directory is named
@@ -40,7 +44,7 @@ public class SeedFromAurCloneCleanupTests
         var pattern = "atoll-cleanup probe *";
         var before = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet();
 
-        Assert.ThrowsAsync<InvalidOperationException>(async () => await service.SeedFromAurAsync(probe));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await seeder.SeedAsync(probe));
 
         var after = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet();
         var packagePersisted = await repo.ExistsAsync(probe);

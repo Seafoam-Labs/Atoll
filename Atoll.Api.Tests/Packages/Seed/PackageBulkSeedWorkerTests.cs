@@ -58,16 +58,21 @@ public class PackageBulkSeedWorkerTests
         BulkSeedStatusStore status,
         ISeedExclusionRepository? exclusions = null)
     {
-        var service = new MongoPackageService(repo, store, Options.Create(BulkOptions()), new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), Options.Create(BulkOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var options = Options.Create(BulkOptions());
+        var security = new InMemoryPackageSecurityRepository();
+        var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
+        var service = new PackageService(repo, options, security, cache);
+        var seeder = new DirectPackageSeeder(repo, store, new AurGitPackageSource(), service);
         exclusions ??= new InMemorySeedExclusionRepository();
         return new PackageBulkSeedWorker(
             store,
             repo,
             service,
+            seeder,
             exclusions,
             mirror,
             status,
-            Options.Create(BulkOptions()),
+            options,
             NullLogger<PackageBulkSeedWorker>.Instance);
     }
 
@@ -196,7 +201,10 @@ public class PackageBulkSeedWorkerTests
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("other", "other"));
         var repo = new InMemoryPackageRepository();
-        var service = new MongoPackageService(repo, store, Options.Create(BulkOptions()), new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), Options.Create(BulkOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var options = Options.Create(BulkOptions());
+        var security = new InMemoryPackageSecurityRepository();
+        var service = new PackageService(repo, options, security,
+            new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance));
         await service.SeedFilesAsync("shelly", BaseFiles); // pre-seeded
 
         var mirror = new FakeMirror { Branches = { "shelly", "other" } };

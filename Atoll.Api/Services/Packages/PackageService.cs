@@ -1,14 +1,11 @@
-using System.Text;
 using Atoll.Api.Services.Git;
-using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
 using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Packages;
 
-public sealed class MongoPackageService(
+public sealed class PackageService(
     IPackageRepository repo,
-    PackageIndexStore indexStore,
     IOptions<AtollOptions> options,
     IPackageSecurityRepository securityRepository,
     IGitRepositoryCache gitCache) : IPackageService
@@ -62,30 +59,6 @@ public sealed class MongoPackageService(
         return gitCache.DeleteAsync(packageName, token => repo.DeleteAsync(packageName, token), ct);
     }
 
-    public async Task SeedFromAurAsync(string packageName)
-    {
-        if (await repo.ExistsAsync(packageName))
-            throw new PackageConflictException(packageName);
-
-        var packageBase = ResolvePackageBase(packageName);
-
-        var tempPath = Path.Combine(Path.GetTempPath(), $"atoll-{packageName}-{Guid.NewGuid():N}");
-        Dictionary<string, string> files;
-        try
-        {
-            Directory.CreateDirectory(tempPath);
-            await GitClient.CloneAsync($"https://aur.archlinux.org/{packageBase}.git", tempPath);
-            files = await ReadFilesAsync(tempPath);
-        }
-        finally
-        {
-            if (Directory.Exists(tempPath))
-                Directory.Delete(tempPath, true);
-        }
-
-        await SeedFilesAsync(packageName, files);
-    }
-
     public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
     {
         var snapshot = PackageSnapshotFactory.Create(
@@ -129,34 +102,6 @@ public sealed class MongoPackageService(
         await securityRepository.PromoteHeadAsync(packageName, snapshot.RevisionId, ct);
 
         return true;
-    }
-
-    internal string ResolvePackageBase(string packageName)
-    {
-        if (indexStore.Current.ByNames.TryGetValue(packageName, out var metadata)
-            && !string.IsNullOrEmpty(metadata.PackageBase))
-            return metadata.PackageBase;
-
-        return packageName;
-    }
-
-    private static async Task<Dictionary<string, string>> ReadFilesAsync(string workDir)
-    {
-        var files = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        foreach (var path in Directory.EnumerateFiles(workDir, "*", SearchOption.AllDirectories))
-        {
-            var relative = Path.GetRelativePath(workDir, path).Replace('\\', '/');
-
-            if (relative.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
-                relative.StartsWith(".git/", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var bytes = await File.ReadAllBytesAsync(path);
-            files[relative] = Encoding.UTF8.GetString(bytes);
-        }
-
-        return files;
     }
 
     private static PackageFiles ToPackageFiles(IReadOnlyDictionary<string, PackageFile> files)
