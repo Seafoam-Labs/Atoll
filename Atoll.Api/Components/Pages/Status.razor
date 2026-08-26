@@ -499,21 +499,18 @@ else
                 </div>
             </div>
         }
-        @if (Env.IsDevelopment())
-        {
-            <div class="link-card">
-                <span class="link-card-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-5">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                              d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"/>
-                    </svg>
-                </span>
-                <div class="link-card-body">
-                    <a href="/openapi/v1.json" class="link-card-title">OpenAPI schema</a>
-                    <p class="link-card-desc">Machine-readable API contract (development only)</p>
-                </div>
+        <div class="link-card">
+            <span class="link-card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-5">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"/>
+                </svg>
+            </span>
+            <div class="link-card-body">
+                <a href="/scalar" class="link-card-title">OpenAPI schema</a>
+                <p class="link-card-desc">Interactive API documentation</p>
             </div>
-        }
+        </div>
     </div>
 
     @if (m.ExcludedPackageBaseNames.Count > 0)

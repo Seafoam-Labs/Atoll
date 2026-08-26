@@ -1,6 +1,7 @@
 using Atoll.Api;
 using Atoll.Api.Components;
 using Atoll.Api.Extensions;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,7 +46,7 @@ app.Use(async (context, next) =>
 app.UseRouting();
 
 app.MapOpenApi();
-
+app.MapScalarApiReference();
 app.MapEndpoints();
 app.MapPrometheusScrapingEndpoint();
 
