@@ -26,12 +26,6 @@ internal sealed class SeededNamesPackageService(IReadOnlyList<string> seededName
     public Task DeleteAsync(string packageName, CancellationToken ct = default)
         => throw new NotSupportedException();
 
-    public Task SyncFromStorageAsync(string packageName)
-        => throw new NotSupportedException();
-
-    public Task SyncToStorageAsync(string packageName)
-        => throw new NotSupportedException();
-
     public Task SeedFromAurAsync(string packageName)
         => throw new NotSupportedException();
 
@@ -42,7 +36,7 @@ internal sealed class SeededNamesPackageService(IReadOnlyList<string> seededName
         string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
         => throw new NotSupportedException();
 
-    public string? GetRepositoryPath(string packageName)
+    public string GetRepositoryPath(string packageName)
         => throw new NotSupportedException();
 
     public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)

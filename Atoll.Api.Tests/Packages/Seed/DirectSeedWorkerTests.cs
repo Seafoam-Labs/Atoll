@@ -37,9 +37,6 @@ public class DirectSeedWorkerTests
 
         public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
 
-        public Task SyncFromStorageAsync(string packageName) => throw new NotSupportedException();
-
-        public Task SyncToStorageAsync(string packageName) => throw new NotSupportedException();
 
         public Task SeedFromAurAsync(string packageName)
         {
@@ -270,9 +267,6 @@ public class DirectSeedWorkerTests
 
         public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
 
-        public Task SyncFromStorageAsync(string packageName) => throw new NotSupportedException();
-
-        public Task SyncToStorageAsync(string packageName) => throw new NotSupportedException();
 
         public Task SeedFromAurAsync(string packageName)
         {

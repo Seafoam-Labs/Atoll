@@ -1,11 +1,9 @@
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
 using System.Text;
 using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
 using Microsoft.Extensions.Options;
-using MongoDB.Bson;
 
 namespace Atoll.Api.Services.Packages;
 
@@ -16,14 +14,6 @@ public sealed class MongoPackageService(
     IPackageSecurityRepository securityRepository,
     ILogger<MongoPackageService> logger) : IPackageService
 {
-    private const int MongoMaxDocumentSizeBytes = 16 * 1024 * 1024;
-
-    // Per-file BSON overhead: hash string, size field, element names, and framing.
-    private const int FileEntryOverheadBytes = 160;
-
-    // Revision-document-level overhead: identifiers, timestamps, and revision metadata.
-    private const int DocumentOverheadBytes = 1024;
-
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
     private readonly AtollOptions _options = options.Value;
 
@@ -119,16 +109,6 @@ public sealed class MongoPackageService(
         await SeedFilesAsync(packageName, files);
     }
 
-    public Task SyncFromStorageAsync(string packageName)
-    {
-        return Task.CompletedTask;
-    }
-
-    public Task SyncToStorageAsync(string packageName)
-    {
-        return Task.CompletedTask;
-    }
-
     public string? GetRepositoryPath(string packageName)
     {
         var root = _options.Git.RepositoriesPath;
@@ -153,10 +133,8 @@ public sealed class MongoPackageService(
         var securityEnabled = _options.Security.Enabled;
         Dictionary<string, SecurityStatus>? statuses = null;
         if (securityEnabled)
-        {
             statuses = (await securityRepository.ListStatusesForPackageAsync(packageName, ct))
                 .ToDictionary(s => s.RevisionId, s => s.Status, StringComparer.Ordinal);
-        }
 
         var marker = Path.Combine(path, ".atoll-head");
         var headMarker = ComputeHistoryMarker(doc, securityEnabled, statuses);
@@ -176,10 +154,8 @@ public sealed class MongoPackageService(
                 return;
 
             if (securityEnabled)
-            {
                 statuses = (await securityRepository.ListStatusesForPackageAsync(packageName, ct))
                     .ToDictionary(s => s.RevisionId, s => s.Status, StringComparer.Ordinal);
-            }
 
             headMarker = ComputeHistoryMarker(doc, securityEnabled, statuses);
             if (IsUpToDate(path, marker, headMarker))
@@ -240,44 +216,22 @@ public sealed class MongoPackageService(
 
     public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
     {
-        var packageFiles = BuildAndValidatePackageFiles(files);
-        var revisionId = ComputeRevisionId(packageName, packageFiles);
-        var now = DateTimeOffset.UtcNow;
-
-        var revision = new PackageRevisionContentDocument
-        {
-            Id = PackageSchema.RevisionDocumentId(packageName, revisionId),
-            PackageName = packageName,
-            RevisionId = revisionId,
-            CreatedAt = now,
-            Author = "aur",
-            Message = "seed from AUR",
-            Files = packageFiles
-        };
-
-        ThrowIfRevisionDocumentTooLarge(packageName, revision);
+        var snapshot = PackageSnapshotFactory.Create(
+            packageName, files, _options.Mongo.MaxFileBytes, "aur", "seed from AUR");
+        PackageDocumentSizeValidator.Validate(packageName, snapshot.Content);
 
         var doc = new PackageDocument
         {
             Id = packageName,
             PackageName = packageName,
-            CreatedAt = now,
-            UpdatedAt = now,
-            HeadRevisionId = revisionId,
-            Revisions =
-            [
-                new PackageRevisionDocument
-                {
-                    RevisionId = revisionId,
-                    CreatedAt = now,
-                    Author = "aur",
-                    Message = "seed from AUR"
-                }
-            ]
+            CreatedAt = snapshot.CreatedAt,
+            UpdatedAt = snapshot.CreatedAt,
+            HeadRevisionId = snapshot.RevisionId,
+            Revisions = [snapshot.Metadata]
         };
 
-        await repo.InsertSeedAsync(doc, revision);
-        await securityRepository.MarkPendingAsync(packageName, revisionId, true);
+        await repo.InsertSeedAsync(doc, snapshot.Content);
+        await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true);
     }
 
     public async Task<bool> AppendRevisionFromUpstreamAsync(
@@ -285,34 +239,22 @@ public sealed class MongoPackageService(
         IReadOnlyDictionary<string, string> files,
         CancellationToken ct = default)
     {
-        var packageFiles = BuildAndValidatePackageFiles(files);
-        var revisionId = ComputeRevisionId(packageName, packageFiles);
+        var snapshot = PackageSnapshotFactory.Create(
+            packageName, files, _options.Mongo.MaxFileBytes, "aur", "refresh from AUR");
 
         var current = await repo.GetHeadAsync(packageName, ct);
         if (current is null)
             throw new KeyNotFoundException($"Package '{packageName}' not found.");
 
-        if (revisionId == current.HeadRevisionId)
+        if (snapshot.RevisionId == current.HeadRevisionId)
             return false;
 
-        var now = DateTimeOffset.UtcNow;
-        var revision = new PackageRevisionContentDocument
-        {
-            Id = PackageSchema.RevisionDocumentId(packageName, revisionId),
-            PackageName = packageName,
-            RevisionId = revisionId,
-            CreatedAt = now,
-            Author = "aur",
-            Message = "refresh from AUR",
-            Files = packageFiles
-        };
+        PackageDocumentSizeValidator.Validate(packageName, snapshot.Content);
 
-        ThrowIfRevisionDocumentTooLarge(packageName, revision);
+        await repo.AppendRevisionAsync(packageName, snapshot.Content, _options.Mongo.MaxRevisions, ct);
 
-        await repo.AppendRevisionAsync(packageName, revision, _options.Mongo.MaxRevisions, ct);
-
-        await securityRepository.MarkPendingAsync(packageName, revisionId, true, ct);
-        await securityRepository.PromoteHeadAsync(packageName, revisionId, ct);
+        await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true, ct);
+        await securityRepository.PromoteHeadAsync(packageName, snapshot.RevisionId, ct);
 
         return true;
     }
@@ -364,10 +306,10 @@ public sealed class MongoPackageService(
     {
         var builder = new StringBuilder();
         builder.Append(doc.HeadRevisionId);
-        foreach (var revision in OrderedRevisions(doc))
+        foreach (var revisionId in OrderedRevisions(doc).Select(r => r.RevisionId))
         {
-            builder.Append('\n').Append(revision.RevisionId);
-            if (securityEnabled && statuses is not null && statuses.TryGetValue(revision.RevisionId, out var status))
+            builder.Append('\n').Append(revisionId);
+            if (securityEnabled && statuses is not null && statuses.TryGetValue(revisionId, out var status))
                 builder.Append(':').Append(status);
         }
 
@@ -443,64 +385,6 @@ public sealed class MongoPackageService(
             .ToString();
 
         return string.IsNullOrEmpty(sanitized) ? "unknown" : sanitized;
-    }
-
-    private Dictionary<string, PackageFile> BuildAndValidatePackageFiles(
-        IReadOnlyDictionary<string, string> files)
-    {
-        var maxFileBytes = _options.Mongo.MaxFileBytes;
-        var result = new Dictionary<string, PackageFile>(files.Count);
-
-        foreach (var (name, content) in files)
-        {
-            var bytes = Encoding.UTF8.GetBytes(content);
-            if (bytes.Length > maxFileBytes)
-                throw new InvalidOperationException(
-                    $"File '{name}' is {bytes.Length} bytes which exceeds the per-file limit of {maxFileBytes} bytes.");
-
-            var hash = SHA256.HashData(bytes);
-            result[name] = new PackageFile
-            {
-                Content = content,
-                Size = bytes.Length,
-                Hash = $"sha256:{Convert.ToHexString(hash).ToLowerInvariant()}"
-            };
-        }
-
-        return result;
-    }
-
-    private static void ThrowIfRevisionDocumentTooLarge(string packageName, PackageRevisionContentDocument revision)
-    {
-        if (EstimateSerializedSizeBound(revision.Files) <= MongoMaxDocumentSizeBytes)
-            return;
-
-        var serializedSizeBytes = revision.ToBson().LongLength;
-        if (serializedSizeBytes > MongoMaxDocumentSizeBytes)
-            throw new PackageDocumentTooLargeException(packageName, serializedSizeBytes, MongoMaxDocumentSizeBytes);
-    }
-
-    private static long EstimateSerializedSizeBound(IReadOnlyDictionary<string, PackageFile> files)
-    {
-        long contentBytes = 0;
-        foreach (var (name, file) in files)
-            contentBytes += file.Size + Encoding.UTF8.GetByteCount(name) + FileEntryOverheadBytes;
-
-        return contentBytes + DocumentOverheadBytes;
-    }
-
-    private static string ComputeRevisionId(
-        string packageName,
-        IReadOnlyDictionary<string, PackageFile> files)
-    {
-        var builder = new StringBuilder();
-        builder.Append(packageName);
-
-        foreach (var (name, file) in files.OrderBy(kv => kv.Key, StringComparer.Ordinal))
-            builder.Append('\0').Append(name).Append('\0').Append(file.Hash);
-
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static async Task<Dictionary<string, string>> ReadFilesAsync(string workDir)
