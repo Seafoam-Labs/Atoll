@@ -1,5 +1,5 @@
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
@@ -36,7 +36,8 @@ public class GitRepositoryMaterializationTests
         return path;
     }
 
-    private static (MongoPackageService service, IPackageSecurityRepository security, string reposRoot) CreateService()
+    private static (MongoPackageService service, GitRepositoryCache cache, IPackageSecurityRepository security, string reposRoot)
+        CreateService()
     {
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
@@ -46,12 +47,8 @@ public class GitRepositoryMaterializationTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        return (new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            security,
-            NullLogger<MongoPackageService>.Instance), security, reposRoot);
+        var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
+        return (new MongoPackageService(repo, new PackageIndexStore(), options, security, cache), cache, security, reposRoot);
     }
 
     [SetUp]
@@ -61,16 +58,16 @@ public class GitRepositoryMaterializationTests
     }
 
     [Test]
-    public async Task EnsureGitRepositoryAsync_creates_bare_repo_with_main_branch()
+    public async Task EnsureRepositoryAsync_creates_bare_repo_with_main_branch()
     {
-        var (service, security, reposRoot) = CreateService();
+        var (service, cache, security, reposRoot) = CreateService();
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             await security.MarkHeadVerifiedAsync("shelly");
-            await service.EnsureGitRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly");
 
-            var gitDir = service.GetRepositoryPath("shelly")!;
+            var gitDir = cache.GetRepositoryPath("shelly")!;
             Assert.That(Directory.Exists(gitDir), Is.True);
             Assert.That((await File.ReadAllTextAsync(Path.Combine(gitDir, "HEAD"))).Trim(),
                 Is.EqualTo("ref: refs/heads/main"));
@@ -86,20 +83,20 @@ public class GitRepositoryMaterializationTests
     }
 
     [Test]
-    public async Task EnsureGitRepositoryAsync_is_idempotent_when_head_unchanged()
+    public async Task EnsureRepositoryAsync_is_idempotent_when_head_unchanged()
     {
-        var (service, security, reposRoot) = CreateService();
+        var (service, cache, security, reposRoot) = CreateService();
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             await security.MarkHeadVerifiedAsync("shelly");
-            await service.EnsureGitRepositoryAsync("shelly");
-            var gitDir = service.GetRepositoryPath("shelly")!;
+            await cache.EnsureRepositoryAsync("shelly");
+            var gitDir = cache.GetRepositoryPath("shelly")!;
             var marker = Path.Combine(gitDir, ".atoll-head");
             var firstMarkerWrite = File.GetLastWriteTimeUtc(marker);
 
             await Task.Delay(50);
-            await service.EnsureGitRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly");
 
             var secondMarkerWrite = File.GetLastWriteTimeUtc(marker);
             Assert.That(secondMarkerWrite, Is.EqualTo(firstMarkerWrite),
@@ -112,17 +109,17 @@ public class GitRepositoryMaterializationTests
     }
 
     [Test]
-    public async Task EnsureGitRepositoryAsync_produces_cloneable_repo_with_expected_files()
+    public async Task EnsureRepositoryAsync_produces_cloneable_repo_with_expected_files()
     {
-        var (service, security, reposRoot) = CreateService();
+        var (service, cache, security, reposRoot) = CreateService();
         var cloneDir = Path.Combine(Path.GetTempPath(),
             $"atoll-clone-{Guid.NewGuid():N}");
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             await security.MarkHeadVerifiedAsync("shelly");
-            await service.EnsureGitRepositoryAsync("shelly");
-            var gitDir = service.GetRepositoryPath("shelly")!;
+            await cache.EnsureRepositoryAsync("shelly");
+            var gitDir = cache.GetRepositoryPath("shelly")!;
 
             string[] args = ["clone", "--quiet", gitDir, cloneDir];
             await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, null, null, CancellationToken.None);
@@ -146,13 +143,13 @@ public class GitRepositoryMaterializationTests
     }
 
     [Test]
-    public async Task EnsureGitRepositoryAsync_returns_silently_for_unknown_package()
+    public async Task EnsureRepositoryAsync_returns_silently_for_unknown_package()
     {
-        var (service, _, reposRoot) = CreateService();
+        var (_, cache, _, reposRoot) = CreateService();
         try
         {
             Assert.DoesNotThrowAsync(async () =>
-                await service.EnsureGitRepositoryAsync("does-not-exist"));
+                await cache.EnsureRepositoryAsync("does-not-exist"));
         }
         finally
         {
@@ -161,7 +158,7 @@ public class GitRepositoryMaterializationTests
     }
 
     [Test]
-    public async Task EnsureGitRepositoryAsync_returns_silently_when_no_path_configured()
+    public async Task EnsureRepositoryAsync_returns_silently_when_no_path_configured()
     {
         var repo = new InMemoryPackageRepository();
         var options = Options.Create(new AtollOptions
@@ -169,24 +166,21 @@ public class GitRepositoryMaterializationTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = "" }
         });
-        var service = new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            new InMemoryPackageSecurityRepository(),
-            NullLogger<MongoPackageService>.Instance);
+        var security = new InMemoryPackageSecurityRepository();
+        var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options, security, cache);
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 
         Assert.DoesNotThrowAsync(async () =>
-            await service.EnsureGitRepositoryAsync("shelly"));
-        Assert.That(service.GetRepositoryPath("shelly"), Is.Null);
+            await cache.EnsureRepositoryAsync("shelly"));
+        Assert.That(cache.GetRepositoryPath("shelly"), Is.Null);
     }
 
     [Test]
     public async Task Flagged_revision_is_excluded_from_git_history_until_rescanned()
     {
-        var (service, security, reposRoot) = CreateService();
+        var (service, cache, security, reposRoot) = CreateService();
         var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
         try
         {
@@ -204,8 +198,8 @@ public class GitRepositoryMaterializationTests
             var flaggedRevision = await security.CompleteScanAsync("shelly", SecurityStatus.Flagged,
                 new SecurityFinding("network-download", FindingSeverity.Critical, "test", "curl | sh", "PKGBUILD"));
 
-            await service.EnsureGitRepositoryAsync("shelly");
-            var (commits, pkgbuild) = await CloneAndInspectAsync(service, "shelly", cloneDir);
+            await cache.EnsureRepositoryAsync("shelly");
+            var (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
             {
                 Assert.That(commits, Is.EqualTo(1), "the flagged head revision must not be cloneable");
@@ -217,9 +211,9 @@ public class GitRepositoryMaterializationTests
             await security.MarkPendingAsync("shelly", flaggedRevision, true);
             await security.MarkHeadVerifiedAsync("shelly");
 
-            await service.EnsureGitRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly");
             TryCleanup(cloneDir);
-            (commits, pkgbuild) = await CloneAndInspectAsync(service, "shelly", cloneDir);
+            (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
             {
                 Assert.That(commits, Is.EqualTo(2), "a rescan to Verified must restore the revision to history");
@@ -236,7 +230,7 @@ public class GitRepositoryMaterializationTests
     [Test]
     public async Task Flagged_ancestor_is_excluded_when_head_is_verified()
     {
-        var (service, security, reposRoot) = CreateService();
+        var (service, cache, security, reposRoot) = CreateService();
         var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
         try
         {
@@ -254,8 +248,8 @@ public class GitRepositoryMaterializationTests
             Assert.That(await service.AppendRevisionFromUpstreamAsync("shelly", revision2), Is.True);
             await security.MarkHeadVerifiedAsync("shelly");
 
-            await service.EnsureGitRepositoryAsync("shelly");
-            var (commits, pkgbuild) = await CloneAndInspectAsync(service, "shelly", cloneDir);
+            await cache.EnsureRepositoryAsync("shelly");
+            var (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
             {
                 Assert.That(commits, Is.EqualTo(1),
@@ -270,10 +264,43 @@ public class GitRepositoryMaterializationTests
         }
     }
 
-    private static async Task<(int Commits, string Pkgbuild)> CloneAndInspectAsync(
-        MongoPackageService service, string packageName, string cloneDir)
+    [Test]
+    public async Task Concurrent_materialize_and_delete_never_resurrects_the_repository()
     {
-        var gitDir = service.GetRepositoryPath(packageName)!;
+        var (service, cache, security, reposRoot) = CreateService();
+        try
+        {
+            var repoDir = cache.GetRepositoryPath("shelly")!;
+            for (var i = 0; i < 10; i++)
+            {
+                await service.SeedFilesAsync("shelly", SampleFiles);
+                await security.MarkHeadVerifiedAsync("shelly");
+
+                // Materializers race a full delete. Deletion and materialization share one
+                // per-repository lock and the delete removes the authoritative document
+                // while holding it, so a late materializer must re-read a missing head and
+                // bail instead of rebuilding the directory after the delete committed.
+                await Task.WhenAll(
+                    cache.EnsureRepositoryAsync("shelly"),
+                    cache.EnsureRepositoryAsync("shelly"),
+                    service.DeleteAsync("shelly"));
+
+                Assert.That(Directory.Exists(repoDir), Is.False,
+                    $"iteration {i}: the deleted repository must not be resurrected");
+                Assert.That(await service.ExistsAsync("shelly"), Is.False,
+                    $"iteration {i}: the package document must be gone");
+            }
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+        }
+    }
+
+    private static async Task<(int Commits, string Pkgbuild)> CloneAndInspectAsync(
+        GitRepositoryCache cache, string packageName, string cloneDir)
+    {
+        var gitDir = cache.GetRepositoryPath(packageName)!;
         string[] args = ["clone", "--quiet", gitDir, cloneDir];
         await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, null, null, CancellationToken.None);
 
@@ -309,12 +336,9 @@ public class GitRepositoryMaterializationTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        var service = new MongoPackageService(
-            new RevisionHidingRepository(repo, "rev-1"),
-            new PackageIndexStore(),
-            options,
-            security,
-            NullLogger<MongoPackageService>.Instance);
+        var hidingRepo = new RevisionHidingRepository(repo, "rev-1");
+        var cache = new GitRepositoryCache(hidingRepo, security, options, NullLogger<GitRepositoryCache>.Instance);
+        var service = new MongoPackageService(hidingRepo, new PackageIndexStore(), options, security, cache);
         try
         {
             await repo.InsertSeedAsync(
@@ -355,9 +379,9 @@ public class GitRepositoryMaterializationTests
             await security.MarkPendingAsync("pkg", "rev-2", true);
             await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
 
-            await service.EnsureGitRepositoryAsync("pkg");
+            await cache.EnsureRepositoryAsync("pkg");
 
-            var gitDir = service.GetRepositoryPath("pkg")!;
+            var gitDir = cache.GetRepositoryPath("pkg")!;
             var ct = CancellationToken.None;
             var count = (await GitClient.ExecuteAsync(gitDir, ["rev-list", "--count", "main"], null, null, ct)).Trim();
             var pkgbuild = await GitClient.ExecuteAsync(gitDir, ["show", "main:PKGBUILD"], null, null, ct);

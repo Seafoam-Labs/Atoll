@@ -321,7 +321,6 @@ public class PackageIndexUpdaterTests
         public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName)
             => throw new NotSupportedException();
 
-
         public Task SeedFromAurAsync(string packageName)
             => throw new NotSupportedException();
 
@@ -332,10 +331,5 @@ public class PackageIndexUpdaterTests
             string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public string? GetRepositoryPath(string packageName)
-            => throw new NotSupportedException();
-
-        public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
-            => throw new NotSupportedException();
     }
 }

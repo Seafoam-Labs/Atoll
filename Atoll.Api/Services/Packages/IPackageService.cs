@@ -13,7 +13,4 @@ public interface IPackageService
 
     Task<bool> AppendRevisionFromUpstreamAsync(string packageName, IReadOnlyDictionary<string, string> files,
         CancellationToken ct = default);
-
-    string? GetRepositoryPath(string packageName);
-    Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default);
 }

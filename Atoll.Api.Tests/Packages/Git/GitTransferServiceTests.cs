@@ -1,6 +1,6 @@
 using System.Text;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
@@ -27,7 +27,7 @@ public class GitTransferServiceTests
         return exitCode == 0;
     }
 
-    private static (GitTransferService git, MongoPackageService packages, IPackageSecurityRepository security, string reposRoot)
+    private static (GitTransferService git, MongoPackageService packages, GitRepositoryCache cache, IPackageSecurityRepository security, string reposRoot)
         CreateServices()
     {
         var repo = new InMemoryPackageRepository();
@@ -39,14 +39,10 @@ public class GitTransferServiceTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        var packages = new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            security,
-            NullLogger<MongoPackageService>.Instance);
-        var git = new GitTransferService(packages);
-        return (git, packages, security, reposRoot);
+        var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
+        var packages = new MongoPackageService(repo, new PackageIndexStore(), options, security, cache);
+        var git = new GitTransferService(repo, cache);
+        return (git, packages, cache, security, reposRoot);
     }
 
     [SetUp]
@@ -58,7 +54,7 @@ public class GitTransferServiceTests
     [Test]
     public async Task AdvertiseRefsAsync_unknown_package_returns_NotFound()
     {
-        var (git, _, _, reposRoot) = CreateServices();
+        var (git, _, _, _, reposRoot) = CreateServices();
         try
         {
             using var output = new MemoryStream();
@@ -75,7 +71,7 @@ public class GitTransferServiceTests
     [Test]
     public async Task UploadPackAsync_unknown_package_returns_NotFound()
     {
-        var (git, _, _, reposRoot) = CreateServices();
+        var (git, _, _, _, reposRoot) = CreateServices();
         try
         {
             using var input = new MemoryStream();
@@ -92,7 +88,7 @@ public class GitTransferServiceTests
     [Test]
     public async Task AdvertiseRefsAsync_writes_pkt_line_prelude_and_refs()
     {
-        var (git, packages, security, reposRoot) = CreateServices();
+        var (git, packages, cache, security, reposRoot) = CreateServices();
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);
@@ -121,7 +117,7 @@ public class GitTransferServiceTests
     [Test]
     public async Task UploadPackAsync_serves_a_full_clone_to_a_local_client()
     {
-        var (git, packages, security, reposRoot) = CreateServices();
+        var (git, packages, cache, security, reposRoot) = CreateServices();
         var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
         try
         {
@@ -131,8 +127,8 @@ public class GitTransferServiceTests
             using var advOutput = new MemoryStream();
             await git.AdvertiseRefsAsync("shelly", advOutput, CancellationToken.None);
 
-            await packages.EnsureGitRepositoryAsync("shelly");
-            var gitDir = packages.GetRepositoryPath("shelly")!;
+            await cache.EnsureRepositoryAsync("shelly");
+            var gitDir = cache.GetRepositoryPath("shelly")!;
             string[] args = ["clone", "--quiet", gitDir, cloneDir];
             await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, null, null, CancellationToken.None);
 
@@ -153,7 +149,7 @@ public class GitTransferServiceTests
     [Test]
     public async Task UploadPackAsync_stateless_rpc_responds_to_want_request()
     {
-        var (git, packages, security, reposRoot) = CreateServices();
+        var (git, packages, cache, security, reposRoot) = CreateServices();
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);

@@ -3,7 +3,7 @@ using CliWrap;
 using CliWrap.Exceptions;
 using static CliWrap.CommandResultValidation;
 
-namespace Atoll.Api.Services.Packages.Git;
+namespace Atoll.Api.Services.Git;
 
 public static class GitClient
 {

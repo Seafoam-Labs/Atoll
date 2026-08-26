@@ -1,10 +1,12 @@
 using System.Text;
+using Atoll.Api.Services.Packages;
 using CliWrap;
 using CliWrap.Exceptions;
 
-namespace Atoll.Api.Services.Packages.Git;
+namespace Atoll.Api.Services.Git;
 
-public sealed class GitTransferService(IPackageService packages) : IGitTransferService
+public sealed class GitTransferService(IPackageRepository packages, IGitRepositoryCache repositoryCache)
+    : IGitTransferService
 {
     public async Task<GitTransferResult> AdvertiseRefsAsync(string name, Stream output, CancellationToken ct)
     {
@@ -74,9 +76,9 @@ public sealed class GitTransferService(IPackageService packages) : IGitTransferS
         if (!await packages.ExistsAsync(name, ct))
             return null;
 
-        await packages.EnsureGitRepositoryAsync(name, ct);
+        await repositoryCache.EnsureRepositoryAsync(name, ct);
 
-        var gitDir = packages.GetRepositoryPath(name);
+        var gitDir = repositoryCache.GetRepositoryPath(name);
         if (gitDir is null || !Directory.Exists(gitDir))
             return null;
 

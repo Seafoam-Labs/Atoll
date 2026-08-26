@@ -1,5 +1,5 @@
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,12 +31,7 @@ public class SeedFromAurCloneCleanupTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            new InMemoryPackageSecurityRepository(),
-            NullLogger<MongoPackageService>.Instance);
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
 
         // A space in the package name makes the clone URL malformed, which git rejects
         // client-side before any network access. The temp directory is named

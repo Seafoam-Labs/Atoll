@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Packages.Git;
+namespace Atoll.Api.Services.Git;
 
 public interface IGitTransferService
 {

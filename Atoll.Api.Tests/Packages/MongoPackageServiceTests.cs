@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
@@ -18,10 +19,6 @@ public class MongoPackageServiceTests
             [".SRCINFO"] = "pkgname = shelly\n"
         };
 
-    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset T1 = new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset T2 = new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero);
-
     private static MongoPackageService CreateService(
         InMemoryPackageRepository repo,
         PackageIndexStore? indexStore = null,
@@ -31,12 +28,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         });
-        return new MongoPackageService(
-            repo,
-            indexStore ?? new PackageIndexStore(),
-            options,
-            securityRepository ?? new InMemoryPackageSecurityRepository(),
-            NullLogger<MongoPackageService>.Instance);
+        return new MongoPackageService(repo, indexStore ?? new PackageIndexStore(), options, securityRepository ?? new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
     }
 
     [Test]
@@ -114,12 +106,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 1_024, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            new InMemoryPackageSecurityRepository(),
-            NullLogger<MongoPackageService>.Instance);
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
 
         var big = new Dictionary<string, string>
         {
@@ -140,12 +127,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            new InMemoryPackageSecurityRepository(),
-            NullLogger<MongoPackageService>.Instance);
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         var files = new Dictionary<string, string>
         {
             ["large-1.txt"] = new('x', 9_000_000),
@@ -171,12 +153,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            new InMemoryPackageSecurityRepository(),
-            NullLogger<MongoPackageService>.Instance);
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         await service.SeedFilesAsync("pkg", SampleFiles);
         var history = await service.GetHistoryAsync("pkg");
         var originalHead = history[0].Sha;
@@ -308,145 +285,6 @@ public class MongoPackageServiceTests
         Assert.That(service.ResolvePackageBase("anything"), Is.EqualTo("anything"));
     }
 
-    [Test]
-    public void IsRevisionServable_security_disabled_serves_every_revision()
-    {
-        Assert.Multiple(() =>
-        {
-            Assert.That(MongoPackageService.IsRevisionServable(false, null), Is.True);
-            Assert.That(MongoPackageService.IsRevisionServable(false, SecurityStatus.Pending), Is.True);
-            Assert.That(MongoPackageService.IsRevisionServable(false, SecurityStatus.Verified), Is.True);
-            Assert.That(MongoPackageService.IsRevisionServable(false, SecurityStatus.Flagged), Is.True);
-            Assert.That(MongoPackageService.IsRevisionServable(false, SecurityStatus.Error), Is.True);
-        });
-    }
-
-    [Test]
-    public void IsRevisionServable_security_enabled_serves_only_verified_revisions()
-    {
-        Assert.Multiple(() =>
-        {
-            Assert.That(MongoPackageService.IsRevisionServable(true, SecurityStatus.Verified), Is.True);
-            Assert.That(MongoPackageService.IsRevisionServable(true, SecurityStatus.Pending), Is.False);
-            Assert.That(MongoPackageService.IsRevisionServable(true, SecurityStatus.Flagged), Is.False);
-            Assert.That(MongoPackageService.IsRevisionServable(true, SecurityStatus.Error), Is.False);
-            Assert.That(MongoPackageService.IsRevisionServable(true, null), Is.False);
-        });
-    }
-
-    [Test]
-    public void ComputeHistoryMarker_security_disabled_ignores_scan_statuses()
-    {
-        var doc = TestDoc("rev-3", ("rev-1", T0), ("rev-2", T1), ("rev-3", T2));
-        var statuses = new Dictionary<string, SecurityStatus>
-        {
-            ["rev-1"] = SecurityStatus.Flagged,
-            ["rev-2"] = SecurityStatus.Verified,
-            ["rev-3"] = SecurityStatus.Verified
-        };
-
-        var without = MongoPackageService.ComputeHistoryMarker(doc, false, null);
-        var with = MongoPackageService.ComputeHistoryMarker(doc, false, statuses);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(without, Is.EqualTo("rev-3\nrev-1\nrev-2\nrev-3"));
-            Assert.That(with, Is.EqualTo(without), "statuses must not affect the marker when security is disabled");
-        });
-    }
-
-    [Test]
-    public void ComputeHistoryMarker_security_enabled_includes_statuses_in_materialization_order()
-    {
-        // Revisions are stored newest-first; the marker must enumerate them in CreatedAt order.
-        var doc = TestDoc("rev-3", ("rev-3", T2), ("rev-1", T0), ("rev-2", T1));
-        var statuses = new Dictionary<string, SecurityStatus>
-        {
-            ["rev-1"] = SecurityStatus.Pending,
-            ["rev-2"] = SecurityStatus.Verified,
-            ["rev-3"] = SecurityStatus.Flagged
-        };
-
-        Assert.That(MongoPackageService.ComputeHistoryMarker(doc, true, statuses),
-            Is.EqualTo("rev-3\nrev-1:Pending\nrev-2:Verified\nrev-3:Flagged"));
-    }
-
-    [Test]
-    public void ComputeHistoryMarker_changes_when_a_scan_status_flips()
-    {
-        var doc = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
-        var flagged = new Dictionary<string, SecurityStatus>
-        {
-            ["rev-1"] = SecurityStatus.Flagged,
-            ["rev-2"] = SecurityStatus.Verified
-        };
-        var verified = new Dictionary<string, SecurityStatus>
-        {
-            ["rev-1"] = SecurityStatus.Verified,
-            ["rev-2"] = SecurityStatus.Verified
-        };
-
-        Assert.That(MongoPackageService.ComputeHistoryMarker(doc, true, flagged),
-            Is.Not.EqualTo(MongoPackageService.ComputeHistoryMarker(doc, true, verified)),
-            "a rescan flipping a revision's status must invalidate the marker");
-    }
-
-    [Test]
-    public void ComputeHistoryMarker_changes_when_a_scan_document_appears_or_disappears()
-    {
-        var doc = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
-        var full = new Dictionary<string, SecurityStatus>
-        {
-            ["rev-1"] = SecurityStatus.Pending,
-            ["rev-2"] = SecurityStatus.Verified
-        };
-        var neverScanned = new Dictionary<string, SecurityStatus> { ["rev-2"] = SecurityStatus.Verified };
-
-        Assert.That(MongoPackageService.ComputeHistoryMarker(doc, true, full),
-            Is.Not.EqualTo(MongoPackageService.ComputeHistoryMarker(doc, true, neverScanned)));
-    }
-
-    [Test]
-    public void ComputeHistoryMarker_changes_when_security_is_toggled()
-    {
-        var doc = TestDoc("rev-1", ("rev-1", T0));
-        var statuses = new Dictionary<string, SecurityStatus> { ["rev-1"] = SecurityStatus.Verified };
-
-        Assert.That(MongoPackageService.ComputeHistoryMarker(doc, true, statuses),
-            Is.Not.EqualTo(MongoPackageService.ComputeHistoryMarker(doc, false, null)));
-    }
-
-    [Test]
-    public void ComputeHistoryMarker_changes_when_history_ages_out_a_revision()
-    {
-        var withOldRevision = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
-        var withoutOldRevision = TestDoc("rev-2", ("rev-2", T1));
-        var statuses = new Dictionary<string, SecurityStatus>
-        {
-            ["rev-1"] = SecurityStatus.Verified,
-            ["rev-2"] = SecurityStatus.Verified
-        };
-
-        Assert.That(MongoPackageService.ComputeHistoryMarker(withOldRevision, true, statuses),
-            Is.Not.EqualTo(MongoPackageService.ComputeHistoryMarker(withoutOldRevision, true, statuses)),
-            "aging out an old revision must invalidate the marker even when the head is unchanged");
-    }
-
-    private static PackageDocument TestDoc(string headRevisionId, params (string Id, DateTimeOffset At)[] revisions)
-    {
-        return new PackageDocument
-        {
-            Id = "pkg",
-            PackageName = "pkg",
-            CreatedAt = T0,
-            UpdatedAt = T2,
-            HeadRevisionId = headRevisionId,
-            Revisions = revisions
-                .Select(r => new PackageRevisionDocument { RevisionId = r.Id, CreatedAt = r.At })
-                .ToList()
-        };
-    }
-
     private static AurPackageMetadata SampleMetadata(string name, string packageBase)
     {
         return new AurPackageMetadata(
@@ -476,12 +314,7 @@ public class MongoPackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            new InMemoryPackageSecurityRepository(),
-            NullLogger<MongoPackageService>.Instance);
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         var files = new Dictionary<string, string>
         {
             ["large-1.txt"] = new('x', perFile),
@@ -511,25 +344,16 @@ public class MongoPackageServiceTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        var service = new MongoPackageService(
-            repo,
-            new PackageIndexStore(),
-            options,
-            security,
-            NullLogger<MongoPackageService>.Instance);
+        var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
+        var service = new MongoPackageService(repo, new PackageIndexStore(), options, security, cache);
         var failingOnce = new ThrowOnceOnDeleteRepository(repo);
-        var retryService = new MongoPackageService(
-            failingOnce,
-            new PackageIndexStore(),
-            options,
-            security,
-            NullLogger<MongoPackageService>.Instance);
+        var retryService = new MongoPackageService(failingOnce, new PackageIndexStore(), options, security, cache);
 
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             Assert.That(await security.CountPendingAsync(), Is.EqualTo(1));
-            var repoDir = service.GetRepositoryPath("shelly")!;
+            var repoDir = cache.GetRepositoryPath("shelly")!;
             Directory.CreateDirectory(repoDir);
             await File.WriteAllTextAsync(Path.Combine(repoDir, "HEAD"), "marker-for-cleanup");
 

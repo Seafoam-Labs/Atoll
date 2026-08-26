@@ -234,10 +234,6 @@ public class StatusDashboardServiceTests
             string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public string? GetRepositoryPath(string packageName) => throw new NotSupportedException();
-
-        public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
-            => throw new NotSupportedException();
     }
 
     private sealed class ThrowingPackageService : IPackageService
@@ -269,10 +265,6 @@ public class StatusDashboardServiceTests
             string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public string? GetRepositoryPath(string packageName) => throw new NotSupportedException();
-
-        public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
-            => throw new NotSupportedException();
     }
 
     private sealed class StubHttpClientFactory : IHttpClientFactory

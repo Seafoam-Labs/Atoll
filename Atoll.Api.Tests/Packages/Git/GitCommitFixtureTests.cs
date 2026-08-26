@@ -1,5 +1,5 @@
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
@@ -71,17 +71,13 @@ public class GitCommitFixtureTests
                 Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
                 Git = new GitOptions { RepositoriesPath = reposRoot }
             });
-            var service = new MongoPackageService(
-                repo,
-                new PackageIndexStore(),
-                options,
-                security,
-                NullLogger<MongoPackageService>.Instance);
+            var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
+            var service = new MongoPackageService(repo, new PackageIndexStore(), options, security, cache);
 
             await InsertVerifiedHistoryAsync(repo, security);
-            await service.EnsureGitRepositoryAsync("fixture");
+            await cache.EnsureRepositoryAsync("fixture");
 
-            var gitDir = service.GetRepositoryPath("fixture")!;
+            var gitDir = cache.GetRepositoryPath("fixture")!;
             var ct = CancellationToken.None;
             var mainRef = (await GitClient.ExecuteAsync(gitDir, ["rev-parse", "refs/heads/main"], null, null, ct)).Trim();
             var commits = (await GitClient.ExecuteAsync(gitDir, ["rev-list", "main"], null, null, ct))

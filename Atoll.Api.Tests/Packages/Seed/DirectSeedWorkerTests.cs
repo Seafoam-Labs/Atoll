@@ -53,10 +53,6 @@ public class DirectSeedWorkerTests
             string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public string GetRepositoryPath(string packageName) => throw new NotSupportedException();
-
-        public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
-            => throw new NotSupportedException();
     }
 
     /// <summary>Serves ListAsync with a fixed set of already-seeded names.</summary>
@@ -281,9 +277,5 @@ public class DirectSeedWorkerTests
             string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public string GetRepositoryPath(string packageName) => throw new NotSupportedException();
-
-        public Task EnsureGitRepositoryAsync(string packageName, CancellationToken ct = default)
-            => throw new NotSupportedException();
     }
 }

@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Git;
 using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;

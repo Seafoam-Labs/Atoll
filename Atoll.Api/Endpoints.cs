@@ -1,5 +1,5 @@
+using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Git;
 using Atoll.Api.Services.Search;
 using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -44,7 +44,7 @@ public static class Endpoints
 
         packages.MapPost("/{name}/seed",
             async ([FromRoute] string name, [FromServices] IPackageService repo,
-                   [FromServices] IOptions<AtollOptions> options) =>
+                [FromServices] IOptions<AtollOptions> options) =>
             {
                 if (!options.Value.Mutations.Enabled)
                     return MutationsDisabled();

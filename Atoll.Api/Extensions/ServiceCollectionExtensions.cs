@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Text.Json.Serialization;
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Git;
+using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages.Mirror;
 using Atoll.Api.Services.Packages.Refresh;
 using Atoll.Api.Services.Packages.Seed;
@@ -120,6 +120,7 @@ internal static class ServiceCollectionExtensions
 
         public IServiceCollection AddGitServices()
         {
+            services.AddSingleton<IGitRepositoryCache, GitRepositoryCache>();
             services.AddSingleton<IGitTransferService, GitTransferService>();
             return services;
         }

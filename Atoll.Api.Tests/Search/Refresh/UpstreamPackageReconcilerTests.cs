@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Search.Indexing;
 using Atoll.Api.Services.Search.Refresh;
 using Atoll.Api.Tests.Fakes;
@@ -29,12 +30,8 @@ public class UpstreamPackageReconcilerTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
-        var service = new MongoPackageService(
-            repository,
-            new PackageIndexStore(),
-            options,
-            security,
-            NullLogger<MongoPackageService>.Instance);
+        var cache = new GitRepositoryCache(repository, security, options, NullLogger<GitRepositoryCache>.Instance);
+        var service = new MongoPackageService(repository, new PackageIndexStore(), options, security, cache);
         var reconciler = new UpstreamPackageReconciler(
             service,
             options,
@@ -44,7 +41,7 @@ public class UpstreamPackageReconcilerTests
         {
             await service.SeedFilesAsync("kept", Files);
             await service.SeedFilesAsync("removed", Files);
-            var removedRepo = service.GetRepositoryPath("removed")!;
+            var removedRepo = cache.GetRepositoryPath("removed")!;
             Directory.CreateDirectory(removedRepo);
             await File.WriteAllTextAsync(Path.Combine(removedRepo, "HEAD"), "stale");
 
@@ -80,12 +77,7 @@ public class UpstreamPackageReconcilerTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = string.Empty }
         });
-        var service = new MongoPackageService(
-            repository,
-            new PackageIndexStore(),
-            options,
-            security,
-            NullLogger<MongoPackageService>.Instance);
+        var service = new MongoPackageService(repository, new PackageIndexStore(), options, security, new GitRepositoryCache(repository, security, options, NullLogger<GitRepositoryCache>.Instance));
         var reconciler = new UpstreamPackageReconciler(
             service,
             options,
@@ -116,12 +108,7 @@ public class UpstreamPackageReconcilerTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = string.Empty }
         });
-        var service = new MongoPackageService(
-            repository,
-            new PackageIndexStore(),
-            options,
-            security,
-            NullLogger<MongoPackageService>.Instance);
+        var service = new MongoPackageService(repository, new PackageIndexStore(), options, security, new GitRepositoryCache(repository, security, options, NullLogger<GitRepositoryCache>.Instance));
         var reconciler = new UpstreamPackageReconciler(
             service,
             options,
