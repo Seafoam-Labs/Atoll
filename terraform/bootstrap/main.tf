@@ -180,6 +180,14 @@ resource "aws_iam_policy" "github_deploy" {
           # prefix list (see cloudfront.tf).
           "ec2:DescribeManagedPrefixLists",
           "ec2:GetManagedPrefixListEntries",
+          # CloudFront validates these on the CALLER when creating a VPC
+          # origin; without all five, CreateVpcOrigin fails with 403 even
+          # though cloudfront:CreateVpcOrigin itself is allowed.
+          "ec2:DescribeInstances",
+          "ec2:DescribeRegions",
+          "ec2:DescribeAddresses",
+          "ec2:DescribeNetworkAcls",
+          "ec2:DescribeTags",
         ]
         Resource = "*"
       },
@@ -419,9 +427,10 @@ resource "aws_iam_policy" "github_deploy" {
           # ECS uses this role to register/deregister task IPs with the ALB
           # target group (the service below uses a load_balancer block).
           "arn:aws:iam::${local.account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
-          # CloudFront uses its service-linked role to create and manage the
-          # VPC origin ENIs inside the VPC.
-          "arn:aws:iam::${local.account_id}:role/aws-service-role/cloudfront.amazonaws.com/AWSServiceRoleForCloudFront",
+          # CloudFront VPC origins manage their ENIs inside the VPC through a
+          # dedicated SLR whose service principal is
+          # vpcorigin.cloudfront.amazonaws.com (not cloudfront.amazonaws.com).
+          "arn:aws:iam::${local.account_id}:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/AWSServiceRoleForCloudFrontVPCOrigin",
         ]
         Condition = {
           StringEquals = {
@@ -430,7 +439,7 @@ resource "aws_iam_policy" "github_deploy" {
               "elasticloadbalancing.amazonaws.com",
               "ops.apigateway.amazonaws.com",
               "ecs.amazonaws.com",
-              "cloudfront.amazonaws.com",
+              "vpcorigin.cloudfront.amazonaws.com",
             ]
           }
         }
