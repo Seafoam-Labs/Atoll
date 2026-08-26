@@ -71,10 +71,11 @@ packages that were previously `Flagged`. Disabling the feature is a bypass, not 
 ## Status model
 
 Each retained package revision has its own security-state document in the `package-security-scans` collection, keyed by
-the composite id `{packageName}:{revisionId}` (revision ids are content-addressed SHA-256 hashes, so the same content
-always maps to the same id). A new head revision gets a fresh `Pending` document; previous revisions keep their own
-scan state, so a flagged revision blocks only itself. Each document also carries a denormalized `isHead` flag so the
-gate can resolve the head scan without a second read against the `packages` collection. The status is one of:
+the composite id `{packageName}:{revisionId}`. Revision IDs hash the package name plus ordinally sorted file names and
+per-file hashes, so the same normalized snapshot for one package maps to the same ID. A new head revision gets a fresh
+`Pending` document; previous revisions keep their own scan state, so a flagged revision blocks only itself. Each
+document also carries a denormalized `isHead` flag, allowing the gate to resolve the head scan without reading the
+`packages` collection. The status is one of:
 
 | Status | Meaning | Content served? |
 | --- | --- | --- |

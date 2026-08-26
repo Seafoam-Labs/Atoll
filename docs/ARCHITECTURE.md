@@ -22,6 +22,13 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   added.
 - **Domain logic lives in services, not endpoints** - `Endpoints.cs` only routes and maps; all business rules live in
   `Services/`.
+- **Boundaries follow ownership** - `Catalog` owns metadata and in-memory search; `Packages` owns authoritative package
+  lifecycle; `Sync` acquires package content; `Git` owns Smart HTTP and its rebuildable repository cache. Git transport
+  depends on the cache rather than `IPackageService`, and package/Git persistence does not depend on Catalog internals.
+- **Host policy stays visible** - `Program.cs` composes cohesive registration groups. Sync registration preserves
+  defaults, registers status stores even when workers are disabled, selects one Direct/Bulk worker or none for Off, and
+  shares one
+  mirror between Bulk and Refresh.
 
 ## Tech Stack
 
@@ -38,37 +45,26 @@ history, provides fast in-memory search, and exposes each package as a cloneable
 
 ## Architecture
 
-```txt
-                      [Git client / HTTP client / Web browser]
-                                         │
-                                         ▼
-                      [ASP.NET Core Minimal API / Blazor]
-                         (:8080 container / :5290 dev)
-                                         │
-     ┌────────────────────────┬──────────┴───────────┬────────────────────────┐
-     │                        │                      │                        │
-     ▼                        ▼                      ▼                        ▼
-[PackageSearchService]   [IPackageService]  [GitTransferService]    [PackageDetailsService /
-(in-memory index)        (MongoDB repos)    (git upload-pack)        StatusDashboardService]
-     │                        │                      │                        │
-     ▼                        │                      ▼                        │
-[PackageIndexStore]           │              [Bare Git Repos]                 │
-     ▲                        │              (data/repos/ cache)              │
-     │                        │                      │                        │
-     │                        └──────────┬───────────┘                        │
-     │                                   │                                    │
-     │                                   ▼                                    │
-     │                              [MongoDB]                                 │
-     │                        (authoritative state) ──────────────────────────┘
-     │                                   ▲
-     │                                   │ writes & leases
-     ├───────────────────────┬───────────┴───────────┬────────────────────────┐
-     │                       │                       │                        │
-[PackageIndexWorker]   [SeedWorker]        [RefreshWorker]          [SecurityWorker]
-(polls AUR metadata)   (Direct / Bulk)     (re-syncs upstream)      (static analysis)
-     │                       │                       │
-     ▼                       ▼                       ▼
- [AUR Metadata]        [AUR / Mirror]      [GitHub AUR Mirror]
+```mermaid
+flowchart TD
+    Client[Git / HTTP client / browser] --> Host[ASP.NET Core / Blazor]
+    Host --> Catalog[Catalog / in-memory search]
+    Host --> Packages[Packages application boundary]
+    Host --> GitTransport[Git Smart HTTP transport]
+    Host --> Sync[Direct / Bulk / Refresh]
+    Host --> Security[Security scanning and access]
+
+    Catalog --> Mongo[(MongoDB authoritative state)]
+    Catalog --> Packages
+    Packages --> Mongo
+    Packages --> GitCache[Git repository cache]
+    GitTransport --> GitCache
+    GitCache --> Mongo
+    GitCache --> Repos[(Bare repositories cache)]
+    Sync --> Catalog
+    Sync --> Packages
+    Sync --> Upstream[AUR / mirror]
+    Security --> Mongo
 ```
 
 - **PackageIndexWorker:** Periodically downloads the AUR metadata archive (`packages-meta-ext-v1.json.gz`) with
@@ -88,10 +84,9 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   - `PackageCatalogService`: Powers `/` with cached pre-sorted views, live filtering, and server-side pagination.
   - `PackageDetailsService`: Assembles package metadata, relations, file trees, and security verdicts.
   - `StatusDashboardService`: Aggregates worker statuses, sync metrics, and exclusions for `/status`.
-- **GitTransferService:** Serves Git clone/fetch requests via `git upload-pack`. Bare repositories under `data/repos/`
-  are lazily materialized from MongoDB on demand. Commits are synthesized deterministically from stored revisions, so
-  their Git SHAs form Atoll's stable public Git namespace; they are distinct from both Atoll revision IDs and upstream
-  AUR commit SHAs.
+- **Git services:** `GitTransferService` handles `git upload-pack` streams only. `GitRepositoryCache` owns repository
+  paths, per-package locks, markers, materialization, and deletion. It synthesizes deterministic commits from retained,
+  servable revisions; their SHAs are distinct from both Atoll revision IDs and upstream AUR commits.
 - **Package name semantics:** `{name}` in routes is always the AUR **pkgname**. When interacting with Git mirrors or
   AUR, Atoll maps `pkgname` to its parent **pkgbase** using the in-memory index
   (`DirectPackageSeeder.ResolvePackageBase` for manual/direct seeding; the bulk and refresh candidate planners
@@ -108,8 +103,9 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - **Package CRUD:** `PackageService` delegates to `MongoPackageRepository`; seeding is orchestrated by
   `DirectPackageSeeder` (`Services/Sync/Direct`), which fetches the AUR Git tree to a temp directory, reads the
   files, and persists them to MongoDB via `IPackageService.SeedFilesAsync`.
-- **Git Smart HTTP:** `GitTransferService` ensures the on-disk bare repository exists and is current (materializing from
-  MongoDB on first use or after a new revision), then pipes stdin/stdout to `git upload-pack`.
+- **Git Smart HTTP:** `GitTransferService` asks `IGitRepositoryCache` for a current bare repository, then pipes
+  stdin/stdout to `git upload-pack`. Materialization reads package revisions and scan status without mutating package
+  data.
 
 ## State & Storage
 
@@ -131,8 +127,10 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   lazily materialized from `package-revisions`. Re-materialized whenever the head revision or security status changes.
 - **Limits & containment:**
   - `MaxRevisions` (default 10) caps retained revision history per package.
-  - `MaxFileBytes` (default 5 MB) rejects oversized files at seed time.
-  - 16 MiB BSON limit applies per revision document. Oversized packages are recorded in `seed-exclusions`.
+  - `MaxFileBytes` (default 5 MB) is enforced on UTF-8 content bytes; each file stores its SHA-256 hash.
+  - Revision IDs hash the package name plus ordinally sorted file names and hashes, independent of input order.
+  - The 16 MiB BSON limit applies per revision document. A conservative estimate avoids routine serialization; documents
+    near the limit are measured exactly. Oversized packages are recorded in `seed-exclusions`.
   - Disk growth for bare repos is unbounded (~116k bare repos if full AUR is seeded). Use `Seed:Mode=Off` or monitor
     storage/inodes.
 
@@ -180,8 +178,9 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | `/package/{name}/revisions` | Static SSR | Revision history list and static security analysis findings |
 | `/status` | Static SSR | Operational dashboard: index sync, workers, security scans, exclusions |
 
-`DELETE` removes the package and revision documents, security scan records, and the materialized bare Git repository.
-`GitTransferService` also verifies that the MongoDB package still exists before serving an on-disk repository.
+`DELETE` removes derived scan/cache state before authoritative package data, so failures remain retryable. Cache cleanup
+and package deletion hold the same per-repository lock used by materialization, preventing a concurrent request from
+resurrecting the repository. `GitTransferService` also verifies that the MongoDB package still exists before serving it.
 
 ### Security scanning
 
@@ -205,6 +204,10 @@ configuration, and limitations are documented in [Package security scanning](SEC
 Security notes not covered by the ADRs: options are validated on startup via Data Annotations (`[Required]`, `[Range]`,
 `[Url]`); raw stack traces are never returned to clients; `git-receive-pack` (push) is explicitly rejected with
 `403 Forbidden`.
+
+**Git identity compatibility:** commit identity depends on ordered revisions, trees and executable modes, sanitized
+revision authors, timestamps, messages, and parent order. The `git-v2` marker introduced corrected author identities;
+older local caches rebuild lazily and receive new synthesized SHAs once.
 
 ## Operations
 

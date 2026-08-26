@@ -69,8 +69,8 @@ minutes).
    against the newly published snapshot:
    - Packages missing upstream are deleted along with their revision documents, security scans, and bare Git repos.
    - **Corruption Guard:** If an upstream snapshot shrinks by >10% compared to the current index, pruning is deferred
-     until a second consecutive snapshot confirms the drop, preventing accidental bulk deletions from truncated
-     downloads.
+     until a second consecutive snapshot confirms the drop. The first snapshot's validators are withheld so the next
+     poll downloads the archive again instead of accepting a `304`.
    - Failed, malformed, or empty responses never trigger pruning.
    - Pruning operates independently of `Atoll:Mutations:Enabled` (background sync continues even when public API
      mutations are disabled).
@@ -80,8 +80,8 @@ minutes).
 Atoll seeds missing packages listed in the metadata index into the package repository. Select the strategy with
 `Atoll:Seed:Mode`:
 
-- **`Direct`** - clones each missing **pkgname** directly from AUR. This is the default mode and does not need a mirror
-  cache.
+- **`Direct`** - maps each missing **pkgname** to its **pkgbase** and clones that repository directly from AUR. This is
+  the default mode and does not need a mirror cache.
 - **`Bulk`** - discovers and batch-fetches **pkgbase** branches from the GitHub AUR mirror into a persistent bare cache,
   then seeds each mapped pkgname from the extracted tree.
 - **`Off`** - does not register an automated seed worker. Metadata indexing and explicit `POST /packages/{name}/seed`
@@ -115,8 +115,9 @@ finding and seeding missing packages. The Direct and Bulk configuration sections
 1. Reads the current metadata index and waits 15 seconds if it is empty.
 2. Lists packages already in the package repository and selects missing pkgnames.
 3. Runs `DirectPackageSeeder` once per missing pkgname: it rejects packages already present, maps the pkgname to
-   its pkgbase via the index, fetches the tree from `aur.archlinux.org/{pkgbase}.git` through
-   `IAurPackageSource`/`AurGitPackageSource`, and persists it by delegating to `IPackageService.SeedFilesAsync`.
+   its pkgbase via the index, fetches `aur.archlinux.org/{pkgbase}.git` through `AurGitPackageSource`, and delegates
+   persistence to `IPackageService.SeedFilesAsync`. The source uses a unique temporary checkout, excludes `.git`, and
+   removes the checkout after success, failure, or cancellation.
 4. Waits for `Atoll:Seed:Direct:SeedDelayMs` after every attempt, including a failed attempt or a conflict caused by
    another request seeding the package first.
 5. Checks again after one minute when all indexed packages are present, limiting the delay after a metadata refresh.
