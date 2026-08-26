@@ -44,8 +44,7 @@ app.Use(async (context, next) =>
 
 app.UseRouting();
 
-if (app.Environment.IsDevelopment())
-    app.MapOpenApi();
+app.MapOpenApi();
 
 app.MapEndpoints();
 app.MapPrometheusScrapingEndpoint();
