@@ -16,9 +16,13 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 ARG TAILWIND_VERSION=4.3.3
+# TARGETARCH is provided by BuildKit: amd64 for x86 runners, arm64 for the
+# Graviton CI runners that build the production image.
+ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
-    && curl -fsSL "https://github.com/tailwindlabs/tailwindcss/releases/download/v${TAILWIND_VERSION}/tailwindcss-linux-x64" \
+    && tailwind_arch="$(case "$TARGETARCH" in amd64) echo x64 ;; arm64) echo arm64 ;; *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; esac)" \
+    && curl -fsSL "https://github.com/tailwindlabs/tailwindcss/releases/download/v${TAILWIND_VERSION}/tailwindcss-linux-${tailwind_arch}" \
         -o /usr/local/bin/tailwindcss \
     && chmod +x /usr/local/bin/tailwindcss \
     && rm -rf /var/lib/apt/lists/*
