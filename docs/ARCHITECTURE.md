@@ -105,8 +105,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - **Package CRUD:** `PackageService` delegates to `MongoPackageRepository`; seeding is orchestrated by
   `DirectPackageSeeder` (`Services/Sync/Direct`), which fetches the AUR Git tree to a temp directory, reads the
   files, and persists them to MongoDB via `IPackageService.SeedFilesAsync`.
-- **AUR RPC v5:** `AurRpcService` serves legacy `/rpc?v=5&type=…` and path-style `/rpc/v5/…` requests from the
-  in-memory catalog. Responses expose Atoll's standard `/{pkgbase}.git` aliases as `URLPath`.
+- **AUR RPC v5:** `AurRpcService` serves legacy GET or form-encoded POST requests at `/rpc` and path-style
+  `/rpc/v5/…` requests from the in-memory catalog. Responses expose Atoll's standard `/{pkgbase}.git` aliases as `URLPath`.
 - **Git Smart HTTP:** `GitTransferService` asks `IGitRepositoryCache` for a current bare repository, then pipes
   stdin/stdout to `git upload-pack`. Materialization reads package revisions and scan status without mutating package
   data. Standard root-level `/{pkgbase}.git` aliases coexist with Atoll's `/packages/{name}.git` routes; split-package
@@ -162,7 +162,7 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | GET/HEAD | `/health` | Liveness only - does not check MongoDB or index readiness |
 | GET | `/metrics` | OpenTelemetry metrics in Prometheus format (see Operations) |
 | GET | `/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
-| GET | `/rpc?v=5&type=…` | aurweb-compatible RPC v5 endpoint for yay/paru |
+| GET/POST | `/rpc` | aurweb-compatible RPC v5 endpoint for yay/paru |
 | GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint |
 | GET | `/packages` | List all seeded package names |
 | POST | `/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |

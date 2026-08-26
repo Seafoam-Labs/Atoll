@@ -50,6 +50,30 @@ public class AurRpcEndpointsTests
     }
 
     [Test]
+    public async Task LegacyInfo_accepts_paru_form_encoded_post_requests()
+    {
+        using var content = new FormUrlEncodedContent(
+        [
+            new KeyValuePair<string, string>("v", "5"),
+            new KeyValuePair<string, string>("type", "info"),
+            new KeyValuePair<string, string>("arg[]", "shelly-bin"),
+            new KeyValuePair<string, string>("arg[]", "missing")
+        ]);
+
+        var response = await _client.PostAsync("/rpc", content);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Multiple(() =>
+        {
+            Assert.That(body.RootElement.GetProperty("type").GetString(), Is.EqualTo("multiinfo"));
+            Assert.That(body.RootElement.GetProperty("resultcount").GetInt32(), Is.EqualTo(1));
+            Assert.That(body.RootElement.GetProperty("results")[0].GetProperty("Name").GetString(),
+                Is.EqualTo("shelly-bin"));
+        });
+    }
+
+    [Test]
     public async Task LegacySearch_supports_default_and_relation_fields()
     {
         var byDescription = await Json("/rpc?v=5&type=search&arg=modern");

@@ -45,7 +45,8 @@ Paru derives both `http://localhost:5290/rpc` and `http://localhost:5290/{pkgbas
 
 Atoll supports:
 
-- Legacy RPC requests at `/rpc?v=5&type=…`, including repeated `arg[]` parameters.
+- Legacy RPC requests at `/rpc`, using either GET query parameters or POST form data, including repeated `arg[]`
+  parameters.
 - Path-style RPC requests under `/rpc/v5/…`.
 - `info`/`multiinfo`, `search`, `msearch`, `suggest`, and `suggest-pkgbase`.
 - All aurweb v5 search fields: `name`, `name-desc`, `maintainer`, `comaintainers`, dependency/relation fields,

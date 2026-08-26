@@ -148,12 +148,11 @@ public class StatusPageTests
     }
 
     [Test]
-    public async Task StatusPageOmitsOpenApiLinkOutsideDevelopment()
+    public async Task StatusPageShowsOpenApiLink()
     {
         var response = await _client.GetAsync("/status");
         var body = await response.Content.ReadAsStringAsync();
 
-        // The Testing environment is not Development, so no OpenAPI link may appear.
-        Assert.That(body, Does.Not.Contain("/openapi/v1.json"));
+        Assert.That(body, Does.Contain("/openapi/v1.json"));
     }
 }
