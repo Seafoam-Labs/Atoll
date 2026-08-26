@@ -52,3 +52,9 @@ variable "api_domain_name" {
   description = "Custom domain name served by the CloudFront distribution that fronts the ALB"
   default     = "atoll.seafoam-labs.org"
 }
+
+variable "waf_rate_limit" {
+  description = "Requests per source IP per 5-minute window before the WAF blocks them (WAF minimum is 100)"
+  type        = number
+  default     = 250
+}
