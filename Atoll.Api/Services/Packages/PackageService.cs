@@ -52,12 +52,12 @@ public sealed class PackageService(
         return repo.GetHistoryAsync(packageName);
     }
 
-    public Task DeleteAsync(string packageName, CancellationToken ct = default)
+    public async Task DeleteAsync(string packageName, CancellationToken ct = default)
     {
-        // The cache removes derived state (scan records, on-disk repository) before calling
-        // back to delete the authoritative package document, holding the repository lock
-        // throughout so concurrent materialization cannot resurrect the directory.
-        return gitCache.DeleteAsync(packageName, token => repo.DeleteAsync(packageName, token), ct);
+        // Git owns its derived-state cleanup and materialization lock; Packages owns the
+        // authoritative delete. The scope keeps both steps atomic with respect to materialization.
+        await using var deletion = await gitCache.BeginDeleteAsync(packageName, ct);
+        await repo.DeleteAsync(packageName, ct);
     }
 
     public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)

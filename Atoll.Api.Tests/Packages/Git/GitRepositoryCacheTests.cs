@@ -1,4 +1,3 @@
-using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
 using NUnit.Framework;
@@ -54,7 +53,7 @@ public class GitRepositoryCacheTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(without, Is.EqualTo("rev-3\nrev-1\nrev-2\nrev-3"));
+            Assert.That(without, Is.EqualTo("git-v2\nrev-3\nrev-1\nrev-2\nrev-3"));
             Assert.That(with, Is.EqualTo(without), "statuses must not affect the marker when security is disabled");
         });
     }
@@ -72,7 +71,7 @@ public class GitRepositoryCacheTests
         };
 
         Assert.That(GitRepositoryCache.ComputeHistoryMarker(doc, true, statuses),
-            Is.EqualTo("rev-3\nrev-1:Pending\nrev-2:Verified\nrev-3:Flagged"));
+            Is.EqualTo("git-v2\nrev-3\nrev-1:Pending\nrev-2:Verified\nrev-3:Flagged"));
     }
 
     [Test]

@@ -13,9 +13,8 @@ public interface IGitRepositoryCache
     Task EnsureRepositoryAsync(string packageName, CancellationToken ct = default);
 
     /// <summary>
-    ///     Deletes the package's derived state (scan records and the on-disk repository) and
-    ///     then the authoritative package documents via <paramref name="deletePackageAsync" />,
-    ///     all under the repository's materialization lock.
+    ///     Acquires the repository's materialization lock and deletes its derived state. The returned
+    ///     scope keeps the lock held so package deletion can remove authoritative data without a race.
     /// </summary>
-    Task DeleteAsync(string packageName, Func<CancellationToken, Task> deletePackageAsync, CancellationToken ct = default);
+    Task<IAsyncDisposable> BeginDeleteAsync(string packageName, CancellationToken ct = default);
 }

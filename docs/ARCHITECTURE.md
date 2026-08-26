@@ -90,7 +90,8 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   - `StatusDashboardService`: Aggregates worker statuses, sync metrics, and exclusions for `/status`.
 - **GitTransferService:** Serves Git clone/fetch requests via `git upload-pack`. Bare repositories under `data/repos/`
   are lazily materialized from MongoDB on demand. Commits are synthesized deterministically from stored revisions, so
-  **commit SHAs served over Git match Atoll revision IDs, not upstream AUR commit SHAs**.
+  their Git SHAs form Atoll's stable public Git namespace; they are distinct from both Atoll revision IDs and upstream
+  AUR commit SHAs.
 - **Package name semantics:** `{name}` in routes is always the AUR **pkgname**. When interacting with Git mirrors or
   AUR, Atoll maps `pkgname` to its parent **pkgbase** using the in-memory index
   (`DirectPackageSeeder.ResolvePackageBase` for manual/direct seeding; the bulk and refresh candidate planners
@@ -229,9 +230,10 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 
 ## Follow-up work
 
-- Add direct-AUR fallback and periodic full verification for pkgbases unavailable from the mirror.
-- Expand scanner coverage, add source-host policy and manual overrides, and prevent Git from exposing flagged historical
-  revisions.
+- Add periodic full verification for pkgbases unavailable from the mirror; direct-AUR fallback is already used when a
+  mirror branch is unavailable.
+- Expand scanner coverage, add source-host policy, and add manual overrides. Git already excludes pending, flagged,
+  errored, and unscanned historical revisions while security is enabled.
 - Evaluate content-addressed deduplication or GridFS/chunked storage for revision snapshots larger than MongoDB's 16 MiB
   document limit.
 - `PackageCatalogService` substring queries and seeded/security filters still scan the full sorted view on every call

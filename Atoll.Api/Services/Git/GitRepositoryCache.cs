@@ -19,6 +19,7 @@ public sealed class GitRepositoryCache(
     IOptions<AtollOptions> options,
     ILogger<GitRepositoryCache> logger) : IGitRepositoryCache
 {
+    private const string MaterializationVersion = "git-v2";
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
     private readonly AtollOptions _options = options.Value;
 
@@ -129,10 +130,7 @@ public sealed class GitRepositoryCache(
     }
 
 
-    public async Task DeleteAsync(
-        string packageName,
-        Func<CancellationToken, Task> deletePackageAsync,
-        CancellationToken ct = default)
+    public async Task<IAsyncDisposable> BeginDeleteAsync(string packageName, CancellationToken ct = default)
     {
         var path = GetRepositoryPath(packageName);
         SemaphoreSlim? lockObj = null;
@@ -144,22 +142,20 @@ public sealed class GitRepositoryCache(
 
         try
         {
-            // Derived state goes first, the authoritative package document last: if a step
-            // fails partway, the package stays visible to delete/reconcile retries and the
-            // leftovers are reclaimed. Deleting the package document first would orphan any
-            // state that survives a failure, since every cleanup path keys off it. Everything
-            // runs under the repository lock, so concurrent materialization cannot
-            // resurrect the directory between the cleanup steps.
+            // Derived state goes first so a later authoritative-delete failure remains retryable.
+            // The returned scope keeps the materialization lock held until PackageService has
+            // removed the authoritative package document.
             await securityRepository.DeletePackageAsync(packageName, ct);
 
             if (path is not null && Directory.Exists(path))
                 Directory.Delete(path, true);
 
-            await deletePackageAsync(ct);
+            return new DeletionScope(lockObj);
         }
-        finally
+        catch
         {
             lockObj?.Release();
+            throw;
         }
     }
 
@@ -200,7 +196,7 @@ public sealed class GitRepositoryCache(
         IReadOnlyDictionary<string, SecurityStatus>? statuses)
     {
         var builder = new StringBuilder();
-        builder.Append(doc.HeadRevisionId);
+        builder.Append(MaterializationVersion).Append('\n').Append(doc.HeadRevisionId);
         foreach (var revisionId in OrderedRevisions(doc).Select(r => r.RevisionId))
         {
             builder.Append('\n').Append(revisionId);
@@ -275,11 +271,21 @@ public sealed class GitRepositoryCache(
 
     private static string SanitizeIdent(string value)
     {
-        var sanitized = value.Trim()
-            .Where(c => c is not ('<' or '>' or '\n' or '\r'))
-            .ToString();
+        var sanitized = string.Concat(value.Trim()
+            .Where(c => c is not ('<' or '>' or '\n' or '\r')));
 
         return string.IsNullOrEmpty(sanitized) ? "unknown" : sanitized;
+    }
+
+    private sealed class DeletionScope(SemaphoreSlim? lockObj) : IAsyncDisposable
+    {
+        private SemaphoreSlim? _lockObj = lockObj;
+
+        public ValueTask DisposeAsync()
+        {
+            Interlocked.Exchange(ref _lockObj, null)?.Release();
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class TempFile : IDisposable

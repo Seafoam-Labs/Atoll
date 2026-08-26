@@ -1,6 +1,5 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
-using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
@@ -20,10 +19,10 @@ namespace Atoll.Api.Tests.Packages.Git;
 [Category("RequiresGit")]
 public class GitCommitFixtureTests
 {
-    private const string Commit1 = "09bc074ee0a6d9c56449bce97bef3941797fdc54";
-    private const string Commit2 = "e34691f37ebcf30e13fa6eb5488ed4c0c0cd0f55";
+    private const string Commit1 = "05cf997338ec40468b61cd3c0bdabd138b69a39e";
+    private const string Commit2 = "646ba0035f252f4668a17676698dda616f96856a";
 
-    // Exercises the SanitizeIdent input path; see the author-identity note in the assertion.
+    // Exercises trimming and removal of characters Git forbids in author identities.
     private const string WeirdAuthor = "weird <au>thor\nx";
     private static readonly DateTimeOffset T1 = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset T2 = new(2026, 1, 2, 12, 0, 0, TimeSpan.Zero);
@@ -98,18 +97,13 @@ public class GitCommitFixtureTests
                 Assert.That(commits[0], Is.EqualTo(Commit2));
                 Assert.That(commits[1], Is.EqualTo(Commit1));
 
-                // Author identity quirk pinned as-is: SanitizeIdent calls ToString() on the
-                // lazy IEnumerable<char>, so every commit's author name is the runtime's
-                // iterator type name (and the email appends @atoll.local). The revision's own
-                // author string never reaches git. Changing this is a deliberate behavior
-                // change to SanitizeIdent, not a refactor.
+                // Author identities retain their revision author after removing characters that
+                // are invalid in a Git ident. The same sanitized value forms the local email.
                 Assert.That(logLines[0],
-                    Is.EqualTo(Commit2 + "|System.Linq.Enumerable+IEnumerableWhereIterator`1[System.Char]"
-                                       + "|System.Linq.Enumerable+IEnumerableWhereIterator`1[System.Char]@atoll.local"
+                    Is.EqualTo(Commit2 + "|aur|aur@atoll.local"
                                        + "|1767355200|atoll|atoll@local|1767355200|refresh from AUR"));
                 Assert.That(logLines[1],
-                    Is.EqualTo(Commit1 + "|System.Linq.Enumerable+IEnumerableWhereIterator`1[System.Char]"
-                                       + "|System.Linq.Enumerable+IEnumerableWhereIterator`1[System.Char]@atoll.local"
+                    Is.EqualTo(Commit1 + "|weird authorx|weird authorx@atoll.local"
                                        + "|1767268800|atoll|atoll@local|1767268800|seed from AUR"));
 
                 // install.sh is executable by extension; notes.txt by its #! content; the rest 100644.
