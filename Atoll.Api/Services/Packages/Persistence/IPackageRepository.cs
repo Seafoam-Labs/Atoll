@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Packages;
+namespace Atoll.Api.Services.Packages.Persistence;
 
 public interface IPackageRepository
 {

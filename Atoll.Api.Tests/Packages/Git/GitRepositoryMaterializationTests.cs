@@ -7,6 +7,7 @@ using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Packages.Git;
 

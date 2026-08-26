@@ -9,6 +9,7 @@ using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Sync.Refresh;
 

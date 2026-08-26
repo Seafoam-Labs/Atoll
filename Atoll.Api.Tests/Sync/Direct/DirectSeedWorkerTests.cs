@@ -5,6 +5,7 @@ using Atoll.Api.Services.Catalog.Indexing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Sync.Direct;
 

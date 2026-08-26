@@ -6,6 +6,7 @@ using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Ui;
 

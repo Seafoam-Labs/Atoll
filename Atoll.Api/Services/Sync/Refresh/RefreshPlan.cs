@@ -1,5 +1,6 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Services.Sync.Refresh;
 

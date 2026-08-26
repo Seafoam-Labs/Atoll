@@ -1,7 +1,7 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace Atoll.Api.Services.Packages;
+namespace Atoll.Api.Services.Packages.Persistence;
 
 public static class PackageSchema
 {

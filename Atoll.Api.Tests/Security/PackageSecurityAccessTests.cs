@@ -3,6 +3,7 @@ using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Security;
 
