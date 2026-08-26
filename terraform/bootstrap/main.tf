@@ -293,6 +293,26 @@ resource "aws_iam_policy" "github_deploy" {
         Resource = "*"
       },
       {
+        # AWS WAF web ACL attached to the CloudFront distribution (see
+        # waf.tf). The association itself rides on the distribution update
+        # above; these manage the ACL resource.
+        Sid    = "Waf"
+        Effect = "Allow"
+        Action = [
+          "wafv2:CreateWebACL",
+          "wafv2:DeleteWebACL",
+          "wafv2:GetWebACL",
+          "wafv2:UpdateWebACL",
+          "wafv2:ListWebACLs",
+          "wafv2:TagResource",
+          "wafv2:UntagResource",
+          "wafv2:ListTagsForResource",
+          "wafv2:GetLoggingConfiguration",
+          "wafv2:DeleteLoggingConfiguration",
+        ]
+        Resource = "*"
+      },
+      {
         # The main stack looks up the ISSUED ACM certificate for the
         # CloudFront viewer certificate (custom domain).
         Sid    = "ReadAcmCertificates"

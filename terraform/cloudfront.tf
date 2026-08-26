@@ -55,6 +55,11 @@ resource "aws_cloudfront_distribution" "main" {
   aliases     = [var.api_domain_name]
   price_class = "PriceClass_100"
 
+  # AWS WAF web ACL (see waf.tf): rate limiting and any future edge rules.
+  # WAF inspects the HTTP request/upgrade handshake; established WebSocket
+  # frames are not re-inspected.
+  web_acl_id = aws_wafv2_web_acl.main.arn
+
   origin {
     domain_name = aws_lb.main.dns_name
     origin_id   = "${var.project_name}-alb"
