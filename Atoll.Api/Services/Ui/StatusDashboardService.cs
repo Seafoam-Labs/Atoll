@@ -3,8 +3,8 @@ using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Sync.Bulk;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Sync.Refresh;
-using Atoll.Api.Services.Search.Indexing;
-using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Microsoft.Extensions.Options;
 

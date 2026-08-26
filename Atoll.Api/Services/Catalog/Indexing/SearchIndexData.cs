@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
 
-namespace Atoll.Api.Services.Search.Indexing;
+namespace Atoll.Api.Services.Catalog.Indexing;
 
 public sealed record SearchIndexData(
     ImmutableDictionary<string, AurPackageMetadata> ByNames,

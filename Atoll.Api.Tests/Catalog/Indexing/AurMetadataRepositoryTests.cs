@@ -1,7 +1,8 @@
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Persistence;
 using Atoll.Api.Tests.Fakes;
 
-namespace Atoll.Api.Tests.Search.Indexing;
+namespace Atoll.Api.Tests.Catalog.Indexing;
 
 public class AurMetadataRepositoryTests : AurMetadataRepositoryContract
 {

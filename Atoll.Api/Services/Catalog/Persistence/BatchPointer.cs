@@ -1,7 +1,7 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace Atoll.Api.Services.Search.Indexing;
+namespace Atoll.Api.Services.Catalog.Persistence;
 
 [BsonIgnoreExtraElements]
 public sealed class BatchPointer

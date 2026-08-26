@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Atoll.Api.Services.Search.Indexing;
+namespace Atoll.Api.Services.Catalog.Indexing;
 
 /// <summary>
 ///     Splits raw tokens into unique, lowercased, index-ready terms.

@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Search.Indexing;
+namespace Atoll.Api.Services.Catalog.Indexing;
 
 public sealed class PackageIndexStore
 {

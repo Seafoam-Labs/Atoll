@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Search;
+namespace Atoll.Api.Services.Catalog;
 
 public sealed record AurPackageMetadata(
     long Id,

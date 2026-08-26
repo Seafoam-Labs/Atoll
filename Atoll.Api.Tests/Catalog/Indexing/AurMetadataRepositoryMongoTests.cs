@@ -1,9 +1,10 @@
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Persistence;
 using Atoll.Api.Tests.Support;
 using MongoDB.Driver;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Search.Indexing;
+namespace Atoll.Api.Tests.Catalog.Indexing;
 
 [Category("RequiresMongo")]
 public class AurMetadataRepositoryMongoTests : AurMetadataRepositoryContract

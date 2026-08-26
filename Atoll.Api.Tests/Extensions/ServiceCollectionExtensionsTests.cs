@@ -3,7 +3,7 @@ using Atoll.Api.Services.Sync.Bulk;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Sync.Mirror;
 using Atoll.Api.Services.Sync.Refresh;
-using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;

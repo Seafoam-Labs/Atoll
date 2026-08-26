@@ -2,9 +2,9 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Atoll.Api.Services.Sync.Bulk;
 using Atoll.Api.Services.Sync.Refresh;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
-using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 
 namespace Atoll.Api.Services.Metrics;

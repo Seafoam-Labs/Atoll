@@ -3,15 +3,15 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
-using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Search.Refresh;
+namespace Atoll.Api.Tests.Catalog.Refresh;
 
 public class PackageIndexUpdaterTests
 {
@@ -30,17 +30,18 @@ public class PackageIndexUpdaterTests
         var invalidPayload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
 
         var store = new PackageIndexStore();
+        var options = Options.Create(new AtollOptions
+        {
+            DataSource = new DataSourceOptions
+            {
+                DataFileUrl = "https://example.test/packages.json.gz",
+                RefreshIntervalMinutes = 10
+            }
+        });
         var coordinator = new PackageIndexUpdater(store,
             new InMemoryAurMetadataRepository(),
-            new StubHttpClientFactory(invalidPayload),
-            Options.Create(new AtollOptions
-            {
-                DataSource = new DataSourceOptions
-                {
-                    DataFileUrl = "https://example.test/packages.json.gz",
-                    RefreshIntervalMinutes = 10
-                }
-            }),
+            new AurMetadataClient(new StubHttpClientFactory(invalidPayload), options, NullLogger<AurMetadataClient>.Instance),
+            options,
             NullLogger<PackageIndexUpdater>.Instance,
             InertReconciler());
 
@@ -65,18 +66,19 @@ public class PackageIndexUpdaterTests
         var payload = Gzip("[{\"ID\":1,\"Name\":\"demo\",\"PackageBase\":\"demo\",\"Version\":\"1.0-1\"}]");
         var handler = new ConditionalStubHttpMessageHandler(payload);
         var store = new PackageIndexStore();
+        var options = Options.Create(new AtollOptions
+        {
+            DataSource = new DataSourceOptions
+            {
+                DataFileUrl = "https://example.test/packages.json.gz",
+                RefreshIntervalMinutes = 5
+            }
+        });
         var coordinator = new PackageIndexUpdater(
             store,
             new InMemoryAurMetadataRepository(),
-            new HandlerHttpClientFactory(handler),
-            Options.Create(new AtollOptions
-            {
-                DataSource = new DataSourceOptions
-                {
-                    DataFileUrl = "https://example.test/packages.json.gz",
-                    RefreshIntervalMinutes = 5
-                }
-            }),
+            new AurMetadataClient(new HandlerHttpClientFactory(handler), options, NullLogger<AurMetadataClient>.Instance),
+            options,
             NullLogger<PackageIndexUpdater>.Instance,
             InertReconciler());
 
@@ -102,18 +104,19 @@ public class PackageIndexUpdaterTests
         var aurMetadata = new InMemoryAurMetadataRepository();
         await aurMetadata.SaveAsync([Meta("demo")], CancellationToken.None);
         var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages([Meta("demo")]));
+        store.Replace(PackageIndexBuilder.BuildFromPackages([Meta("demo")]));
+        var options = Options.Create(new AtollOptions
+        {
+            DataSource = new DataSourceOptions
+            {
+                DataFileUrl = "https://example.test/packages.json.gz",
+                RefreshIntervalMinutes = 10
+            }
+        });
         var coordinator = new PackageIndexUpdater(store,
             aurMetadata,
-            new StubHttpClientFactory(Gzip("[]")),
-            Options.Create(new AtollOptions
-            {
-                DataSource = new DataSourceOptions
-                {
-                    DataFileUrl = "https://example.test/packages.json.gz",
-                    RefreshIntervalMinutes = 10
-                }
-            }),
+            new AurMetadataClient(new StubHttpClientFactory(Gzip("[]")), options, NullLogger<AurMetadataClient>.Instance),
+            options,
             NullLogger<PackageIndexUpdater>.Instance,
             InertReconciler());
 
@@ -152,7 +155,7 @@ public class PackageIndexUpdaterTests
         var coordinator = new PackageIndexUpdater(
             new PackageIndexStore(),
             new InMemoryAurMetadataRepository(),
-            new HandlerHttpClientFactory(handler),
+            new AurMetadataClient(new HandlerHttpClientFactory(handler), options, NullLogger<AurMetadataClient>.Instance),
             options,
             NullLogger<PackageIndexUpdater>.Instance,
             reconciler);

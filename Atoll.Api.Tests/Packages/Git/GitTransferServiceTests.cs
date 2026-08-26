@@ -1,7 +1,7 @@
 using System.Text;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;

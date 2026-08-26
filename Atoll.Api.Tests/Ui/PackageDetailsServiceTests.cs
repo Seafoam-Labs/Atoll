@@ -1,5 +1,5 @@
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;

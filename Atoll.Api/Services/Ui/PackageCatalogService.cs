@@ -2,8 +2,8 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 
 namespace Atoll.Api.Services.Ui;

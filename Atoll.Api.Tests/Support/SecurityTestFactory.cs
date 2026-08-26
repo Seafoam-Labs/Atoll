@@ -1,7 +1,8 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages.Persistence;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Persistence;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;

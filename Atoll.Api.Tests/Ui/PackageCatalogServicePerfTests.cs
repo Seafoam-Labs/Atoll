@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
 using NUnit.Framework;

@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Search.Indexing;
+namespace Atoll.Api.Services.Catalog.Persistence;
 
 public static class AurMetadataExtensions
 {

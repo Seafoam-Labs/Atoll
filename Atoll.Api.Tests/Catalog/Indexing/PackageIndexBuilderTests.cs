@@ -1,18 +1,18 @@
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Support;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Search.Indexing;
+namespace Atoll.Api.Tests.Catalog.Indexing;
 
-public class PackageDataLoaderTests
+public class PackageIndexBuilderTests
 {
     [Test]
     public async Task LoaderBuildsAllThreeIndexes()
     {
         var path = await TestData.WriteSamplePackagesAsync();
 
-        var indexes = await PackageDataLoader.LoadAsync(path, CancellationToken.None);
+        var indexes = await PackageIndexBuilder.LoadAsync(path, CancellationToken.None);
 
         AssertIndexesMatchSample(indexes);
     }
@@ -21,10 +21,10 @@ public class PackageDataLoaderTests
     public async Task BuildFromPackagesProducesSameIndexesAsLoadAsync()
     {
         var path = await TestData.WriteSamplePackagesAsync();
-        var fromFile = await PackageDataLoader.LoadAsync(path, CancellationToken.None);
+        var fromFile = await PackageIndexBuilder.LoadAsync(path, CancellationToken.None);
 
         var packages = SamplePackages();
-        var fromPackages = PackageDataLoader.BuildFromPackages(packages);
+        var fromPackages = PackageIndexBuilder.BuildFromPackages(packages);
 
         Assert.Multiple(() =>
         {
@@ -44,7 +44,7 @@ public class PackageDataLoaderTests
             SamplePackage("", "Has no name", [])
         };
 
-        var indexes = PackageDataLoader.BuildFromPackages(packages);
+        var indexes = PackageIndexBuilder.BuildFromPackages(packages);
 
         Assert.Multiple(() =>
         {

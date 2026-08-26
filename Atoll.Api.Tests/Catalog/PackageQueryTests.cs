@@ -1,7 +1,7 @@
-using Atoll.Api.Services.Search;
+using Atoll.Api.Services.Catalog;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Search;
+namespace Atoll.Api.Tests.Catalog;
 
 public class PackageQueryTests
 {

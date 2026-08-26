@@ -2,9 +2,9 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Atoll.Api.Extensions;
 
-namespace Atoll.Api.Services.Search.Indexing;
+namespace Atoll.Api.Services.Catalog.Indexing;
 
-public static class PackageDataLoader
+public static class PackageIndexBuilder
 {
     public static async Task<SearchIndexData> LoadAsync(string filePath, CancellationToken cancellationToken)
     {

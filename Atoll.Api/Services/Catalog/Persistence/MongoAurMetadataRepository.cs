@@ -1,14 +1,14 @@
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 
-namespace Atoll.Api.Services.Search.Indexing;
+namespace Atoll.Api.Services.Catalog.Persistence;
 
-public sealed class AurMetadataRepository : IAurMetadataRepository
+public sealed class MongoAurMetadataRepository : IAurMetadataRepository
 {
     private readonly IMongoCollection<AurPackageMetadataDocument> _packages;
     private readonly IMongoCollection<BatchPointer> _pointer;
 
-    public AurMetadataRepository(IMongoClient client, IOptions<AtollOptions> options)
+    public MongoAurMetadataRepository(IMongoClient client, IOptions<AtollOptions> options)
     {
         var o = options.Value;
         var db = client.GetDatabase(o.Mongo.Database);

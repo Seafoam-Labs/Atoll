@@ -1,13 +1,13 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
-using Atoll.Api.Services.Search.Indexing;
-using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Search.Refresh;
+namespace Atoll.Api.Tests.Catalog.Refresh;
 
 public class UpstreamPackageReconcilerTests
 {

@@ -4,8 +4,8 @@ using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Sync.Mirror;
 using Atoll.Api.Services.Sync.Bulk;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -49,7 +49,7 @@ public class PackageBulkSeedWorkerTests
     private static PackageIndexStore IndexWithPackages(params AurPackageMetadata[] packages)
     {
         var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages(packages));
+        store.Replace(PackageIndexBuilder.BuildFromPackages(packages));
         return store;
     }
 

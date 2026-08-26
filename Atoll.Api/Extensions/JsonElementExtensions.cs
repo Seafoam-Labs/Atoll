@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Atoll.Api.Services.Search;
+using Atoll.Api.Services.Catalog;
 
 namespace Atoll.Api.Extensions;
 

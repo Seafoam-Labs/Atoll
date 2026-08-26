@@ -1,6 +1,6 @@
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
 
-namespace Atoll.Api.Services.Search.Refresh;
+namespace Atoll.Api.Services.Catalog.Refresh;
 
 public sealed class PackageIndexWorker(
     PackageIndexUpdater manager,

@@ -1,5 +1,5 @@
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
 using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Sync.Direct;

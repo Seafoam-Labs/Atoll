@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Search.Refresh;
+namespace Atoll.Api.Services.Catalog.Refresh;
 
 public sealed record RefreshStatusSnapshot(
     string MetadataCollection,

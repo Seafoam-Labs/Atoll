@@ -1,5 +1,6 @@
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Persistence;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 
@@ -31,9 +32,9 @@ internal static class MongoRepositoryFactory
         return new MongoPackageRepository(client, CreateOptions(database));
     }
 
-    public static AurMetadataRepository CreateAurMetadataRepository(IMongoClient client, string database)
+    public static MongoAurMetadataRepository CreateAurMetadataRepository(IMongoClient client, string database)
     {
-        return new AurMetadataRepository(client, CreateOptions(database));
+        return new MongoAurMetadataRepository(client, CreateOptions(database));
     }
 
     public static async Task DropDatabaseAsync(IMongoClient client, string database)

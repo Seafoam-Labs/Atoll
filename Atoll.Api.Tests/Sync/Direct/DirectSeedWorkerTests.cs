@@ -1,7 +1,7 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Sync.Direct;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -127,7 +127,7 @@ public class DirectSeedWorkerTests
     private static PackageIndexStore IndexWithPackages(params AurPackageMetadata[] packages)
     {
         var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages(packages));
+        store.Replace(PackageIndexBuilder.BuildFromPackages(packages));
         return store;
     }
 

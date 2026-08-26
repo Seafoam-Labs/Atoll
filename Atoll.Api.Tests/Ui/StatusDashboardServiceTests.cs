@@ -3,9 +3,9 @@ using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Sync.Bulk;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Sync.Refresh;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
-using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
@@ -26,21 +26,22 @@ public class StatusDashboardServiceTests
     private static PackageIndexStore IndexWithPackages(params AurPackageMetadata[] packages)
     {
         var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages(packages));
+        store.Replace(PackageIndexBuilder.BuildFromPackages(packages));
         return store;
     }
 
     private static PackageIndexUpdater Updater(PackageIndexStore store)
     {
+        var options = Options.Create(new AtollOptions());
         return new PackageIndexUpdater(
             store,
             new InMemoryAurMetadataRepository(),
-            new StubHttpClientFactory(),
-            Options.Create(new AtollOptions()),
+            new AurMetadataClient(new StubHttpClientFactory(), options, NullLogger<AurMetadataClient>.Instance),
+            options,
             NullLogger<PackageIndexUpdater>.Instance,
             new UpstreamPackageReconciler(
                 new SeededNamesPackageService([]),
-                Options.Create(new AtollOptions()),
+                options,
                 NullLogger<UpstreamPackageReconciler>.Instance));
     }
 

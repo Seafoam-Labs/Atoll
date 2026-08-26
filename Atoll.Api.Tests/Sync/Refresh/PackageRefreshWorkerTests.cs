@@ -2,8 +2,8 @@ using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Sync.Mirror;
 using Atoll.Api.Services.Sync.Refresh;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -46,7 +46,7 @@ public class PackageRefreshWorkerTests
     private static PackageIndexStore IndexWithPackages(params AurPackageMetadata[] packages)
     {
         var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages(packages));
+        store.Replace(PackageIndexBuilder.BuildFromPackages(packages));
         return store;
     }
 

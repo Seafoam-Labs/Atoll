@@ -1,7 +1,7 @@
 using Atoll.Api.Services.Packages;
 using Microsoft.Extensions.Options;
 
-namespace Atoll.Api.Services.Search.Refresh;
+namespace Atoll.Api.Services.Catalog.Refresh;
 
 public sealed class UpstreamPackageReconciler(
     IPackageService packages,

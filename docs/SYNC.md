@@ -18,8 +18,8 @@ The application-level implementation is in:
 - `Atoll.Api/Services/Packages/Refresh/PackageRefreshWorker.cs`
 - `Atoll.Api/Services/Packages/Refresh/RefreshPlan.cs`
 - `Atoll.Api/Services/Packages/Mirror/AurMirror.cs`
-- `Atoll.Api/Services/Search/Refresh/PackageIndexUpdater.cs`
-- `Atoll.Api/Services/Search/Refresh/UpstreamPackageReconciler.cs`
+- `Atoll.Api/Services/Catalog/Refresh/PackageIndexUpdater.cs`
+- `Atoll.Api/Services/Catalog/Refresh/UpstreamPackageReconciler.cs`
 
 ## pkgname and pkgbase
 

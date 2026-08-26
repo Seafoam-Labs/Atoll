@@ -1,17 +1,14 @@
-using System.IO.Compression;
-using System.Net;
 using System.Net.Http.Headers;
-using System.Text.Json;
-using Atoll.Api.Extensions;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Persistence;
 using Microsoft.Extensions.Options;
 
-namespace Atoll.Api.Services.Search.Refresh;
+namespace Atoll.Api.Services.Catalog.Refresh;
 
 public sealed class PackageIndexUpdater(
     PackageIndexStore store,
     IAurMetadataRepository aurMetadataRepository,
-    IHttpClientFactory httpClientFactory,
+    AurMetadataClient metadataClient,
     IOptions<AtollOptions> options,
     ILogger<PackageIndexUpdater> logger,
     UpstreamPackageReconciler reconciler)
@@ -60,7 +57,7 @@ public sealed class PackageIndexUpdater(
         }
 
         logger.LogInformation("Loaded {Count} packages. Building indexes.", packages.Count);
-        var next = PackageDataLoader.BuildFromPackages(packages);
+        var next = PackageIndexBuilder.BuildFromPackages(packages);
         store.Replace(next);
         lock (_timeLock)
         {
@@ -78,17 +75,9 @@ public sealed class PackageIndexUpdater(
 
         try
         {
-            logger.LogDebug("Fetching updated package data from AUR.");
+            var result = await metadataClient.FetchAsync(_etag, _lastModified, cancellationToken);
 
-            var client = httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Get, options.Value.DataSource.DataFileUrl);
-            if (_etag is not null)
-                request.Headers.IfNoneMatch.Add(_etag);
-            if (_lastModified is not null)
-                request.Headers.IfModifiedSince = _lastModified;
-
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            if (response.StatusCode == HttpStatusCode.NotModified)
+            if (result is AurMetadataResult.NotModified)
             {
                 var current = store.Current;
                 // A 304 while a suspicious shrink awaits confirmation means the archive re-served
@@ -102,13 +91,8 @@ public sealed class PackageIndexUpdater(
                 return true;
             }
 
-            response.EnsureSuccessStatusCode();
-            await using var compressed = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
-
-            var packages = await ParsePackagesAsync(gzip, cancellationToken);
-            if (packages.Count == 0)
-                throw new InvalidDataException("AUR package dump contained no packages.");
+            var snapshot = (AurMetadataResult.Snapshot)result;
+            var packages = snapshot.Packages;
 
             logger.LogDebug("Parsed {PackageCount} packages from the AUR metadata dump.", packages.Count);
 
@@ -117,15 +101,15 @@ public sealed class PackageIndexUpdater(
                                          && UpstreamPackageReconciler.IsSuspiciousShrink(packages.Count, previousPackageCount);
             await aurMetadataRepository.SaveAsync(packages, cancellationToken);
 
-            var next = PackageDataLoader.BuildFromPackages(packages);
+            var next = PackageIndexBuilder.BuildFromPackages(packages);
             store.Replace(next);
 
             // Keep the old validators while a suspicious shrink awaits confirmation. This forces
             // one confirmation download even if the archive would otherwise answer 304 next cycle.
             if (!pruneNeedsConfirmation)
             {
-                _etag = response.Headers.ETag ?? _etag;
-                _lastModified = response.Content.Headers.LastModified ?? _lastModified;
+                _etag = snapshot.ETag ?? _etag;
+                _lastModified = snapshot.LastModified ?? _lastModified;
             }
             _pruneConfirmationPending = pruneNeedsConfirmation;
 
@@ -165,31 +149,5 @@ public sealed class PackageIndexUpdater(
         {
             _lastSucceededUtc = DateTimeOffset.UtcNow;
         }
-    }
-
-    private static async Task<IReadOnlyList<AurPackageMetadata>> ParsePackagesAsync(
-        Stream gzipStream,
-        CancellationToken ct)
-    {
-        // The whole decompressed dump is held in memory (~110k packages today).
-        // If the dump grows significantly, switch to Utf8JsonReader / DeserializeAsyncEnumerable.
-        using var doc = await JsonDocument.ParseAsync(gzipStream, cancellationToken: ct);
-
-        if (doc.RootElement.ValueKind != JsonValueKind.Array)
-            throw new InvalidDataException("AUR package dump is not a JSON array.");
-
-        var packages = new List<AurPackageMetadata>();
-        foreach (var element in doc.RootElement.EnumerateArray())
-        {
-            if (!element.TryGetProperty("Name", out var nameElement) ||
-                nameElement.ValueKind != JsonValueKind.String) continue;
-
-            var name = nameElement.GetString();
-            if (string.IsNullOrEmpty(name)) continue;
-
-            packages.Add(element.DeserializeAurPackage());
-        }
-
-        return packages;
     }
 }

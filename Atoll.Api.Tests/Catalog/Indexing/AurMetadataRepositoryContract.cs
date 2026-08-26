@@ -1,8 +1,9 @@
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Persistence;
 using NUnit.Framework;
 
-namespace Atoll.Api.Tests.Search.Indexing;
+namespace Atoll.Api.Tests.Catalog.Indexing;
 
 public abstract class AurMetadataRepositoryContract
 {

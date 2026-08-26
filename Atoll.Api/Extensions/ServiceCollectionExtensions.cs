@@ -8,9 +8,10 @@ using Atoll.Api.Services.Sync.Bulk;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Sync.Mirror;
 using Atoll.Api.Services.Sync.Refresh;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
-using Atoll.Api.Services.Search.Refresh;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Persistence;
+using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Microsoft.AspNetCore.Http.Json;
@@ -105,7 +106,8 @@ internal static class ServiceCollectionExtensions
         {
             services.AddSingleton<PackageIndexStore>();
             services.AddSingleton<PackageSearchService>();
-            services.AddSingleton<IAurMetadataRepository, AurMetadataRepository>();
+            services.AddSingleton<IAurMetadataRepository, MongoAurMetadataRepository>();
+            services.AddSingleton<AurMetadataClient>();
             services.AddSingleton<UpstreamPackageReconciler>();
             services.AddSingleton<PackageIndexUpdater>();
             services.AddHostedService<PackageIndexWorker>();

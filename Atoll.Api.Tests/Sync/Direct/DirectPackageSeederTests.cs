@@ -1,8 +1,8 @@
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Sync.Direct;
-using Atoll.Api.Services.Search;
-using Atoll.Api.Services.Search.Indexing;
+using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -65,7 +65,7 @@ public class DirectPackageSeederTests
     {
         // Split packages have pkgname != pkgbase; the clone source must see the base.
         var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages([
+        store.Replace(PackageIndexBuilder.BuildFromPackages([
             SampleMetadata("libfoo", "foo"),
             SampleMetadata("libfoo-devel", "foo")
         ]));
@@ -103,7 +103,7 @@ public class DirectPackageSeederTests
         // Split packages (e.g. "libfoo" / "libfoo-devel" under base "foo") have
         // pkgname != pkgbase; AUR Git URLs are keyed by pkgbase.
         var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages([
+        store.Replace(PackageIndexBuilder.BuildFromPackages([
             SampleMetadata("libfoo", "foo"),
             SampleMetadata("libfoo-devel", "foo")
         ]));
@@ -121,7 +121,7 @@ public class DirectPackageSeederTests
     public void ResolvePackageBase_non_split_package_returns_pkgname()
     {
         var store = new PackageIndexStore();
-        store.Replace(PackageDataLoader.BuildFromPackages([
+        store.Replace(PackageIndexBuilder.BuildFromPackages([
             SampleMetadata("shelly", "shelly")
         ]));
 
