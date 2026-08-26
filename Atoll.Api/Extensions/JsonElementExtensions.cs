@@ -77,7 +77,12 @@ public static class JsonElementExtensions
                 element.TryGetStringArray("License"),
                 element.TryGetStringArray("Keywords"),
                 element.TryGetStringArray("CoMaintainers")
-            );
+            )
+            {
+                CheckDepends = element.TryGetStringArray("CheckDepends"),
+                Groups = element.TryGetStringArray("Groups"),
+                Replaces = element.TryGetStringArray("Replaces")
+            };
         }
 
         private string[] TryGetStringArray(string property)

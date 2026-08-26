@@ -2,6 +2,7 @@ using System.Text;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Rpc;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
@@ -41,7 +42,7 @@ public class GitTransferServiceTests
         });
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
         var packages = new PackageService(repo, options, security, cache);
-        var git = new GitTransferService(repo, cache);
+        var git = new GitTransferService(repo, cache, new AurRpcService(new PackageIndexStore()));
         return (git, packages, cache, security, reposRoot);
     }
 

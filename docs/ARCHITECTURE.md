@@ -78,8 +78,10 @@ flowchart TD
   revisions only when content changes. Shares the mirror cache with Bulk seeding.
 - **PackageSecurityWorker:** Scans newly seeded or refreshed revisions using deterministic static analysis, gating
   content and Git access until verified.
-- **PackageSearchService:** Serves all search queries in-memory from `PackageIndexStore` snapshots with zero database
-  I/O.
+- **PackageSearchService:** Serves Atoll-native search queries in-memory from `PackageIndexStore` snapshots with zero
+  database I/O.
+- **AurRpcService:** Maps the same immutable metadata snapshot to the aurweb RPC v5 contract used by yay and paru. It
+  also resolves split-package `pkgbase` Git requests to seeded Atoll package names.
 - **Blazor Web UI:** Razor components under `Components/` provide a fast, responsive UI:
   - `PackageCatalogService`: Powers `/` with cached pre-sorted views, live filtering, and server-side pagination.
   - `PackageDetailsService`: Assembles package metadata, relations, file trees, and security verdicts.
@@ -103,9 +105,12 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - **Package CRUD:** `PackageService` delegates to `MongoPackageRepository`; seeding is orchestrated by
   `DirectPackageSeeder` (`Services/Sync/Direct`), which fetches the AUR Git tree to a temp directory, reads the
   files, and persists them to MongoDB via `IPackageService.SeedFilesAsync`.
+- **AUR RPC v5:** `AurRpcService` serves legacy `/rpc?v=5&type=…` and path-style `/rpc/v5/…` requests from the
+  in-memory catalog. Responses expose Atoll's standard `/{pkgbase}.git` aliases as `URLPath`.
 - **Git Smart HTTP:** `GitTransferService` asks `IGitRepositoryCache` for a current bare repository, then pipes
   stdin/stdout to `git upload-pack`. Materialization reads package revisions and scan status without mutating package
-  data.
+  data. Standard root-level `/{pkgbase}.git` aliases coexist with Atoll's `/packages/{name}.git` routes; split-package
+  bases resolve to the first seeded member in deterministic name order.
 
 ## State & Storage
 
@@ -157,6 +162,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | GET/HEAD | `/health` | Liveness only - does not check MongoDB or index readiness |
 | GET | `/metrics` | OpenTelemetry metrics in Prometheus format (see Operations) |
 | GET | `/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
+| GET | `/rpc?v=5&type=…` | aurweb-compatible RPC v5 endpoint for yay/paru |
+| GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint |
 | GET | `/packages` | List all seeded package names |
 | POST | `/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/packages/{name}` | Get head revision files |
@@ -167,6 +174,7 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | POST | `/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement |
 | POST | `/packages/{name}.git/git-upload-pack` | Git pack negotiation and transfer |
+| GET/POST | `/{pkgbase}.git/...` | AUR-compatible aliases for the same Git Smart HTTP operations |
 
 ### Web UI routes
 
@@ -177,6 +185,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | `/package/{name}/files` | Static SSR | PKGBUILD and source file viewer across revisions |
 | `/package/{name}/revisions` | Static SSR | Revision history list and static security analysis findings |
 | `/status` | Static SSR | Operational dashboard: index sync, workers, security scans, exclusions |
+
+Helper setup and RPC/Git compatibility details are documented in [Using yay and paru](AUR_HELPERS.md).
 
 `DELETE` removes derived scan/cache state before authoritative package data, so failures remain retryable. Cache cleanup
 and package deletion hold the same per-repository lock used by materialization, preventing a concurrent request from

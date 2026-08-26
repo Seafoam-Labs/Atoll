@@ -84,6 +84,18 @@ public class GitSmartHttpEndpointsTests
     }
 
     [Test]
+    public async Task RootInfoRefs_resolves_a_split_package_base_to_a_seeded_package()
+    {
+        await _packages.SeedFilesAsync("shelly-bin", SampleFiles);
+
+        var response = await _client.GetAsync("/shelly.git/info/refs?service=git-upload-pack");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var body = Encoding.ASCII.GetString(await response.Content.ReadAsByteArrayAsync());
+        Assert.That(body, Does.Contain("refs/heads/main"));
+    }
+
+    [Test]
     public async Task UploadPack_unknown_package_returns_404()
     {
         using var content = new ByteArrayContent([]);

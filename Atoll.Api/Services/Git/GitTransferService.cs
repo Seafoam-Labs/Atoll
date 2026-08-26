@@ -3,10 +3,14 @@ using Atoll.Api.Services.Packages;
 using CliWrap;
 using CliWrap.Exceptions;
 using Atoll.Api.Services.Packages.Persistence;
+using Atoll.Api.Services.Catalog.Rpc;
 
 namespace Atoll.Api.Services.Git;
 
-public sealed class GitTransferService(IPackageRepository packages, IGitRepositoryCache repositoryCache)
+public sealed class GitTransferService(
+    IPackageRepository packages,
+    IGitRepositoryCache repositoryCache,
+    AurRpcService rpc)
     : IGitTransferService
 {
     public async Task<GitTransferResult> AdvertiseRefsAsync(string name, Stream output, CancellationToken ct)
@@ -74,16 +78,19 @@ public sealed class GitTransferService(IPackageRepository packages, IGitReposito
 
     private async Task<string?> ResolveRepositoryAsync(string name, CancellationToken ct)
     {
-        if (!await packages.ExistsAsync(name, ct))
-            return null;
+        foreach (var candidate in rpc.ResolvePackageNames(name))
+        {
+            if (!await packages.ExistsAsync(candidate, ct))
+                continue;
 
-        await repositoryCache.EnsureRepositoryAsync(name, ct);
+            await repositoryCache.EnsureRepositoryAsync(candidate, ct);
 
-        var gitDir = repositoryCache.GetRepositoryPath(name);
-        if (gitDir is null || !Directory.Exists(gitDir))
-            return null;
+            var gitDir = repositoryCache.GetRepositoryPath(candidate);
+            if (gitDir is not null && Directory.Exists(gitDir))
+                return gitDir;
+        }
 
-        return gitDir;
+        return null;
     }
 
     private static async Task WritePacketLineAsync(Stream output, string line, CancellationToken ct)

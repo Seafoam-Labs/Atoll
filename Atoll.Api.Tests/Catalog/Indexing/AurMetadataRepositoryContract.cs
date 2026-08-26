@@ -100,7 +100,12 @@ public abstract class AurMetadataRepositoryContract
             ["provided"],
             ["MIT"],
             ["kw1", "kw2"],
-            ["bob", "alice"]);
+            ["bob", "alice"])
+        {
+            CheckDepends = ["check1"],
+            Groups = ["group1"],
+            Replaces = ["old-ghost"]
+        };
 
         await repo.SaveAsync([original], CancellationToken.None);
         var loaded = await repo.LoadAsync(CancellationToken.None);
@@ -133,6 +138,9 @@ public abstract class AurMetadataRepositoryContract
             Assert.That(pkg.License, Is.EquivalentTo(original.License));
             Assert.That(pkg.Keywords, Is.EquivalentTo(original.Keywords));
             Assert.That(pkg.CoMaintainers, Is.EquivalentTo(original.CoMaintainers));
+            Assert.That(pkg.CheckDepends, Is.EquivalentTo(original.CheckDepends));
+            Assert.That(pkg.Groups, Is.EquivalentTo(original.Groups));
+            Assert.That(pkg.Replaces, Is.EquivalentTo(original.Replaces));
         });
     }
 

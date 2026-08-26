@@ -58,6 +58,12 @@ public sealed class AurPackageMetadataDocument
 
     [BsonElement("co_maintainers")] public string[] CoMaintainers { get; set; } = null!;
 
+    [BsonElement("check_depends")] public string[] CheckDepends { get; set; } = [];
+
+    [BsonElement("groups")] public string[] Groups { get; set; } = [];
+
+    [BsonElement("replaces")] public string[] Replaces { get; set; } = [];
+
     public AurPackageMetadata ToMetadata()
     {
         return new AurPackageMetadata(
@@ -66,7 +72,12 @@ public sealed class AurPackageMetadataDocument
             FirstSubmitted, LastModified, UrlPath,
             Depends, MakeDepends, OptDepends, Conflicts, Provides, License,
             Keywords, CoMaintainers
-        );
+        )
+        {
+            CheckDepends = CheckDepends,
+            Groups = Groups,
+            Replaces = Replaces
+        };
     }
 }
 
@@ -109,7 +120,10 @@ public static class AurMetadataExtensions
             Provides = [.. p.Provides],
             License = [.. p.License],
             Keywords = [.. p.Keywords],
-            CoMaintainers = [.. p.CoMaintainers]
+            CoMaintainers = [.. p.CoMaintainers],
+            CheckDepends = [.. p.CheckDepends],
+            Groups = [.. p.Groups],
+            Replaces = [.. p.Replaces]
         };
     }
 }

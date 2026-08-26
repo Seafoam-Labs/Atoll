@@ -24,4 +24,9 @@ public sealed record AurPackageMetadata(
     IReadOnlyList<string> License,
     IReadOnlyList<string> Keywords,
     IReadOnlyList<string> CoMaintainers
-);
+)
+{
+    public IReadOnlyList<string> CheckDepends { get; init; } = [];
+    public IReadOnlyList<string> Groups { get; init; } = [];
+    public IReadOnlyList<string> Replaces { get; init; } = [];
+}

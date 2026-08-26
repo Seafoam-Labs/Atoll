@@ -10,6 +10,7 @@ history, exposes searchable package metadata, and serves package content over Gi
 - AUR metadata indexing and fast in-memory search
 - Package seeding, version history, and file browsing
 - Git-compatible clone/fetch access for seeded packages
+- AUR RPC v5 and standard clone URLs for yay/paru compatibility
 - Security-gated content access for refreshed or newly seeded revisions
 - Background workers for sync, refresh, and scanning
 - Local web UI for catalog, package details, file views, and status
@@ -55,6 +56,7 @@ For important, up-to-date implementation and operations details, use the docs in
 - [Architecture overview](docs/ARCHITECTURE.md) — system design, storage model, API surface, and architecture decisions
 - [Development setup](docs/DEVELOPMENT.md) — local tooling: Tailwind CLI, Docker, Terraform, and test/build flags
 - [Package seeding and refresh](docs/SYNC.md) — direct/bulk seeding, refresh behavior, config, and operational notes
+- [Using yay and paru](docs/AUR_HELPERS.md) — helper configuration, RPC/Git compatibility, and limitations
 - [Package security scanning](docs/SECURITY.md) — threat model, scan rules, queueing, and content gating
 - [Deployment](docs/DEPLOYMENT.md) — AWS/GitHub Actions and Terraform setup
 

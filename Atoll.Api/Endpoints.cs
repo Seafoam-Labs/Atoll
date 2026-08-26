@@ -2,6 +2,7 @@ using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Catalog;
+using Atoll.Api.Services.Catalog.Rpc;
 using Atoll.Api.Services.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -16,10 +17,12 @@ public static class Endpoints
     {
         app.MapMethods("/health", ["GET", "HEAD"], TypedResults.Ok);
         app.MapGet("/search", Search);
+        app.MapAurRpcEndpoints();
 
         var packages = app.MapGroup("/packages");
         MapPackageRoutes(packages);
         MapGitProtocolRoutes(packages);
+        MapGitProtocolRoutes(app.MapGroup(""));
     }
 
     private static Ok<AurPackageMetadata[]> Search(
