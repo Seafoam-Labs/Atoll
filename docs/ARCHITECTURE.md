@@ -93,7 +93,8 @@ history, provides fast in-memory search, and exposes each package as a cloneable
   **commit SHAs served over Git match Atoll revision IDs, not upstream AUR commit SHAs**.
 - **Package name semantics:** `{name}` in routes is always the AUR **pkgname**. When interacting with Git mirrors or
   AUR, Atoll maps `pkgname` to its parent **pkgbase** using the in-memory index
-  (`MongoPackageService.ResolvePackageBase`), correctly handling split packages.
+  (`DirectPackageSeeder.ResolvePackageBase` for manual/direct seeding; the bulk and refresh candidate planners
+  resolve it from the same index), correctly handling split packages.
 
 Request paths of note (everything else is standard Minimal API routing with `GlobalExceptionHandler` converting
 unhandled exceptions to RFC 9457 `ProblemDetails`):
@@ -103,8 +104,9 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   `PackageDetailsService`, and `StatusDashboardService`.
 - **Search:** `PackageSearchService` reads the current immutable `PackageIndexStore` snapshot and returns results with
   no I/O.
-- **Package CRUD:** `MongoPackageService` delegates to `MongoPackageRepository`; seeding clones the AUR Git repo to a
-  temp directory, reads the files, and persists them to MongoDB.
+- **Package CRUD:** `PackageService` delegates to `MongoPackageRepository`; seeding is orchestrated by
+  `DirectPackageSeeder` (`Services/Sync/Direct`), which fetches the AUR Git tree to a temp directory, reads the
+  files, and persists them to MongoDB via `IPackageService.SeedFilesAsync`.
 - **Git Smart HTTP:** `GitTransferService` ensures the on-disk bare repository exists and is current (materializing from
   MongoDB on first use or after a new revision), then pipes stdin/stdout to `git upload-pack`.
 

@@ -12,12 +12,12 @@ to refreshed revisions is documented in [Package security scanning](SECURITY.md)
 
 The application-level implementation is in:
 
-- `Atoll.Api/Services/Packages/Seed/DirectSeedWorker.cs`
-- `Atoll.Api/Services/Packages/Seed/PackageBulkSeedWorker.cs`
-- `Atoll.Api/Services/Packages/Seed/BulkSeedPlan.cs`
-- `Atoll.Api/Services/Packages/Refresh/PackageRefreshWorker.cs`
-- `Atoll.Api/Services/Packages/Refresh/RefreshPlan.cs`
-- `Atoll.Api/Services/Packages/Mirror/AurMirror.cs`
+- `Atoll.Api/Services/Sync/Direct/DirectSeedWorker.cs`
+- `Atoll.Api/Services/Sync/Bulk/PackageBulkSeedWorker.cs`
+- `Atoll.Api/Services/Sync/Bulk/BulkSeedPlan.cs`
+- `Atoll.Api/Services/Sync/Refresh/PackageRefreshWorker.cs`
+- `Atoll.Api/Services/Sync/Refresh/RefreshPlan.cs`
+- `Atoll.Api/Services/Sync/Mirror/AurMirror.cs`
 - `Atoll.Api/Services/Catalog/Refresh/PackageIndexUpdater.cs`
 - `Atoll.Api/Services/Catalog/Refresh/UpstreamPackageReconciler.cs`
 
@@ -114,8 +114,9 @@ finding and seeding missing packages. The Direct and Bulk configuration sections
 
 1. Reads the current metadata index and waits 15 seconds if it is empty.
 2. Lists packages already in the package repository and selects missing pkgnames.
-3. Calls the existing `IPackageService.SeedFromAurAsync` path once for each missing pkgname, which retrieves it from
-   `aur.archlinux.org`.
+3. Runs `DirectPackageSeeder` once per missing pkgname: it rejects packages already present, maps the pkgname to
+   its pkgbase via the index, fetches the tree from `aur.archlinux.org/{pkgbase}.git` through
+   `IAurPackageSource`/`AurGitPackageSource`, and persists it by delegating to `IPackageService.SeedFilesAsync`.
 4. Waits for `Atoll:Seed:Direct:SeedDelayMs` after every attempt, including a failed attempt or a conflict caused by
    another request seeding the package first.
 5. Checks again after one minute when all indexed packages are present, limiting the delay after a metadata refresh.
@@ -189,8 +190,8 @@ do not race to seed the same missing package. Set `Atoll:Seed:Mode` to `Off` to 
 trade-offs are documented in [Mirror transport](#shared-fetch-controls).
 
 `AurFallbackForNotOnMirror` applies only when a target pkgbase is absent from the mirror branch list. When enabled, each
-mapped pkgname is seeded through the existing direct-AUR path instead. It does not replace bisection for fetch failures
-among branches that were advertised by the mirror.
+mapped pkgname is seeded through `DirectPackageSeeder` (the direct-AUR path) instead. It does not replace bisection for
+fetch failures among branches that were advertised by the mirror.
 
 `GET /metrics` exposes `atoll_bulkseed_*` Prometheus metrics, including batch attempts/successes/failures, skipped and
 failed refs, seeded/skipped/excluded packages, and cycle timestamps. Each cycle-complete log line also reports the

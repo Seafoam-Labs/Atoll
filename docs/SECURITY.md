@@ -187,7 +187,7 @@ renaming a rule does not corrupt data but changes the ids visible in historical 
 
 The persisted `Pending` state is the durable work queue — there is no in-process queue. The pipeline is:
 
-1. A new revision is seeded (`MongoPackageService.SeedFilesAsync`) or a rescan is requested
+1. A new revision is seeded (`IPackageService.SeedFilesAsync`, implemented by `PackageService`) or a rescan is requested
    (`POST /packages/{name}/security/rescan`, optionally with `?revision={sha}`); both call `MarkPendingAsync`, which
    upserts the `(package, revision)` state document to `Pending` and clears any prior findings/lease for that revision.
    On public instances set `Atoll:Mutations:Enabled=false` to make the rescan endpoint return `403` and hide the button
@@ -369,8 +369,8 @@ the previous section resolving on its own after restart.
   is enough to catch ELF/NUL/control-byte content, but a legitimate text file containing a literal U+FFFD is retained
   as a non-blocking `Medium` finding (unencodable text). The inert-media magic matching works within the same
   constraint — signatures are anchored on the bytes that survive decoding, which is precise for the allowlisted formats
-  but weaker than raw-byte matching. Byte-exact detection would require the seed paths (`MongoPackageService`,
-  `AurMirror`) to surface raw bytes.
+  but weaker than raw-byte matching. Byte-exact detection would require the seed paths (`PackageService`,
+  `AurGitPackageSource`, `AurMirror`) to surface raw bytes.
 - **Heredoc prose can still block.** Quoted-delimiter heredoc bodies suppress only the non-blocking expansion rules;
   `sudo`/redirect-looking prose inside them can still yield blocking `High` findings. Extending suppression to
   blocking rules requires handling pipe-to-installer patterns (`cat <<EOF | sh`, `install < /dev/stdin`) safely first.
