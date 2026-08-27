@@ -153,6 +153,6 @@ public class StatusPageTests
         var response = await _client.GetAsync("/status");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(body, Does.Contain("/openapi/v1.json"));
+        Assert.That(body, Does.Contain("/scalar"));
     }
 }
