@@ -41,6 +41,9 @@ public class LocalSourceBinaryScannerTests
     [TestCase("OTTO", Description = "OpenType font")]
     [TestCase("wOFF", Description = "WOFF font")]
     [TestCase("wOF2", Description = "WOFF2 font")]
+    [TestCase("Extended Module: ", Description = "FastTracker 2 module")]
+    [TestCase("IMPM", Description = "Impulse Tracker module")]
+    [TestCase("slh!", Description = "Allegro packed datafile")]
     public void Ascii_magic_formats_are_medium(string magic)
     {
         var finding = LocalSourceBinaryScanner.Scan(magic + "\0\0binarydata", "file.bin");
@@ -75,6 +78,51 @@ public class LocalSourceBinaryScannerTests
 
         Assert.That(LocalSourceBinaryScanner.Scan(plainSize, "image.webp")!.Severity, Is.EqualTo(FindingSeverity.Medium));
         Assert.That(LocalSourceBinaryScanner.Scan(mergedSize, "image.webp")!.Severity, Is.EqualTo(FindingSeverity.Medium));
+    }
+
+    [Test]
+    public void S3m_signature_at_header_offset_is_medium()
+    {
+        // S3M modules carry the "SCRM" signature at byte offset 44, after the 28-byte title
+        // and the header fields.
+        var header = new byte[48];
+        header[16] = 0x10;
+        header[44] = (byte)'S';
+        header[45] = (byte)'C';
+        header[46] = (byte)'R';
+        header[47] = (byte)'M';
+
+        var finding = LocalSourceBinaryScanner.Scan(Bytes(header), "bgm.s3m");
+
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Medium));
+    }
+
+    [Test]
+    public void S3m_signature_shifted_by_multibyte_decoding_is_medium()
+    {
+        // A valid two-byte sequence before the signature decodes to one character, so the
+        // decoded offset lands below byte offset 44.
+        var header = new byte[48];
+        header[16] = 0x10;
+        header[42] = 0xC3;
+        header[43] = 0xA9;
+        header[44] = (byte)'S';
+        header[45] = (byte)'C';
+        header[46] = (byte)'R';
+        header[47] = (byte)'M';
+
+        var finding = LocalSourceBinaryScanner.Scan(Bytes(header), "bgm.s3m");
+
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Medium));
+    }
+
+    [Test]
+    public void Scrm_signature_beyond_the_header_window_stays_critical()
+    {
+        // Only the S3M header position counts; a match deeper in a binary does not clear it.
+        var finding = LocalSourceBinaryScanner.Scan(new string('\0', 64) + "SCRM", "data.bin");
+
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Critical));
     }
 
     [Test]

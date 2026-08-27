@@ -159,8 +159,9 @@ unrecognized binaries are `Critical` and block the package, while content that c
 as non-blocking `Medium`:
 
 - Inert media recognized by magic bytes on the (UTF-8-decoded) content — PNG, JPEG, GIF, BMP, ICO, WebP,
-  TrueType/OpenType/WOFF/WOFF2 fonts, PDF. Content-based, so renaming `.exe` to `.png` does not help. Archives are
-  deliberately not allowlisted: they can carry executables.
+  TrueType/OpenType/WOFF/WOFF2 fonts, PDF, tracker audio modules (S3M/XM/IT), and Allegro packed datafiles (game
+  asset containers). Content-based, so renaming `.exe` to `.png` does not help. Archives are deliberately not
+  allowlisted: they can carry executables.
 - Certificate/signature files by extension (`.sig`, `.asc`, `.gpg`, `.cer`, `.crt`, `.pem`) — inert data with no
   reliable magic bytes. ELF content still takes precedence and stays `Critical`.
 - Text whose only binary indicator is undecodable UTF-8 (U+FFFD from legacy encodings), with no NUL or control

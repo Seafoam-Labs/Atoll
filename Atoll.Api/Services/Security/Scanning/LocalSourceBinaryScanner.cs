@@ -50,6 +50,13 @@ internal static class LocalSourceBinaryScanner
             content.StartsWith("\0\u0001\0\0", StringComparison.Ordinal))
             return true;
 
+        // Tracker music modules and Allegro packed datafiles: audio/game asset containers
+        // that cannot execute on their own. All three magics are pure ASCII.
+        if (content.StartsWith("Extended Module: ", StringComparison.Ordinal) ||
+            content.StartsWith("IMPM", StringComparison.Ordinal) ||
+            content.StartsWith("slh!", StringComparison.Ordinal))
+            return true;
+
         // JPEG: FF D8 FF decodes to three replacements; JFIF/Exif marker at offset 6.
         if (content.Length >= 10 &&
             content.StartsWith("\uFFFD\uFFFD\uFFFD", StringComparison.Ordinal) &&
@@ -71,6 +78,12 @@ internal static class LocalSourceBinaryScanner
             if (webp is >= 4 and <= 12)
                 return true;
         }
+
+        // S3M tracker module: "SCRM" signature at byte offset 44. Multi-byte sequences can
+        // only merge during decoding, shifting the offset earlier, so the window is bounded.
+        var s3m = content.IndexOf("SCRM", StringComparison.Ordinal);
+        if (s3m is >= 0 and <= 44)
+            return true;
 
         return false;
     }
