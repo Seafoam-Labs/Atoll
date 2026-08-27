@@ -188,14 +188,12 @@ public class ShellSyntaxTests
         Assert.That(ShellSyntax.MatchesUnquotedTool("echo hello", "sudo"), Is.False);
     }
 
-    // ===== ContainsHiddenCharacter =====
-
     [Test]
-    public void ContainsHiddenCharacter_detects_bidi_and_zero_width_controls()
+    public void FindHiddenCharacters_detects_bidi_and_zero_width_controls()
     {
-        Assert.That(ShellSyntax.ContainsHiddenCharacter("rm\u200B -rf /"), Is.True);
-        Assert.That(ShellSyntax.ContainsHiddenCharacter("safe\u202Etext"), Is.True);
-        Assert.That(ShellSyntax.ContainsHiddenCharacter("plain text"), Is.False);
+        Assert.That(ShellSyntax.FindHiddenCharacters("rm\u200B -rf /"), Has.Count.EqualTo(1));
+        Assert.That(ShellSyntax.FindHiddenCharacters("safe\u202Etext"), Has.Count.EqualTo(1));
+        Assert.That(ShellSyntax.FindHiddenCharacters("plain text"), Is.Empty);
     }
 
     [TestCase("zwsp\u200B", true, Description = "zero-width space")]
@@ -210,9 +208,9 @@ public class ShellSyntaxTests
     [TestCase("rli\u2067", true, Description = "right-to-left isolate")]
     [TestCase("fsi\u2068", true, Description = "first strong isolate")]
     [TestCase("pdi\u2069", true, Description = "pop directional isolate")]
-    public void ContainsHiddenCharacter_flags_unicode_bidi_and_zero_width_controls(string text, bool expected)
+    public void FindHiddenCharacters_flags_unicode_bidi_and_zero_width_controls(string text, bool expected)
     {
-        Assert.That(ShellSyntax.ContainsHiddenCharacter(text), Is.EqualTo(expected));
+        Assert.That(ShellSyntax.FindHiddenCharacters(text), expected ? Is.Not.Empty : Is.Empty);
     }
 
     [TestCase("nul\u0000", true, Description = "null byte")]
@@ -220,9 +218,9 @@ public class ShellSyntaxTests
     [TestCase("del\u007F", true, Description = "delete")]
     [TestCase("c1\u0080", true, Description = "C1 control 0x80")]
     [TestCase("c1\u009F", true, Description = "C1 control 0x9F")]
-    public void ContainsHiddenCharacter_flags_control_characters(string text, bool expected)
+    public void FindHiddenCharacters_flags_control_characters(string text, bool expected)
     {
-        Assert.That(ShellSyntax.ContainsHiddenCharacter(text), Is.EqualTo(expected));
+        Assert.That(ShellSyntax.FindHiddenCharacters(text), expected ? Is.Not.Empty : Is.Empty);
     }
 
     [TestCase("tab\there", false, Description = "tab is allowed")]
@@ -230,15 +228,55 @@ public class ShellSyntaxTests
     [TestCase("plain ascii ~", false)]
     [TestCase("unicode emoji \uD83C\uDF89", false, Description = "surrogate pair (astral plane) is allowed")]
     [TestCase("nbsp\u00A0", false, Description = "non-breaking space (0xA0) is outside the C1 control range")]
-    public void ContainsHiddenCharacter_allows_whitespace_and_normal_text(string text, bool expected)
+    public void FindHiddenCharacters_allows_whitespace_and_normal_text(string text, bool expected)
     {
-        Assert.That(ShellSyntax.ContainsHiddenCharacter(text), Is.EqualTo(expected));
+        Assert.That(ShellSyntax.FindHiddenCharacters(text), expected ? Is.Not.Empty : Is.Empty);
+    }
+
+    [TestCase("green\u001b[32mtext", Description = "complete CSI sequence is skipped")]
+    [TestCase("\u001b[1;33;40m", Description = "multi-parameter sequence")]
+    [TestCase("a\u001b[0mb\u001b[96mc", Description = "several sequences on one line")]
+    public void FindHiddenCharacters_skips_complete_ansi_csi_sequences(string text)
+    {
+        Assert.That(ShellSyntax.FindHiddenCharacters(text), Is.Empty);
+    }
+
+    [TestCase("link \u001b]8;;http://x", Description = "OSC sequences are not CSI - the ESC is kept")]
+    [TestCase("cut \u001b[32", Description = "unterminated sequence - the ESC is kept")]
+    [TestCase("bare \u001bx", Description = "ESC without '[' is kept")]
+    public void FindHiddenCharacters_keeps_non_csi_escapes(string text)
+    {
+        Assert.That(ShellSyntax.FindHiddenCharacters(text), Is.Not.Empty);
     }
 
     [Test]
-    public void ContainsHiddenCharacter_returns_false_for_empty_string()
+    public void FindHiddenCharacters_returns_empty_for_empty_string()
     {
-        Assert.That(ShellSyntax.ContainsHiddenCharacter(""), Is.False);
+        Assert.That(ShellSyntax.FindHiddenCharacters(""), Is.Empty);
+    }
+
+    private static bool FirstHiddenCharacterIsBenign(string text)
+    {
+        var found = ShellSyntax.FindHiddenCharacters(text);
+        Assert.That(found, Is.Not.Empty, $"expected at least one hidden character in: {text}");
+        return ShellSyntax.IsBenignHiddenCharacter(text, found[0], ShellSyntax.ComputeQuotePositions(text));
+    }
+
+    [TestCase("rm\u200B -rf /", Description = "zero-width chars are inert even unquoted")]
+    [TestCase("echo 'x\u0016y'", Description = "control byte inside quotes is display data")]
+    [TestCase("mv {\u00d1\u0082.cfg,\u0442.cfg}", Description = "C1 byte next to a Latin-1 char is mojibake")]
+    public void IsBenignHiddenCharacter_accepts_inert_contexts(string text)
+    {
+        Assert.That(FirstHiddenCharacterIsBenign(text), Is.True);
+    }
+
+    [TestCase("evil\u202Esh", Description = "bidi overrides never qualify")]
+    [TestCase("echo x\u0016y", Description = "control byte outside quotes can alter the parsed word")]
+    [TestCase("x\u0082y", Description = "isolated C1 byte is not mojibake")]
+    [TestCase("echo \"\u001b]0;title\u0007\"", Description = "bare ESC (not CSI) drives terminal escapes even in quotes")]
+    public void IsBenignHiddenCharacter_rejects_genuinely_hidden_characters(string text)
+    {
+        Assert.That(FirstHiddenCharacterIsBenign(text), Is.False);
     }
 
     [Test]

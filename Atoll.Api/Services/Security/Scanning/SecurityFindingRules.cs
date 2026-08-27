@@ -61,6 +61,15 @@ internal static class SecurityFindingRules
         FindingSeverity.Critical,
         "Dynamic command execution - a command is decoded/evaluated and run, so its real behavior cannot be reviewed.");
 
+    // Same rule id as EvalIndirection, retained for review but non-blocking: the evaluated
+    // text is built from literal words plus tilde/variable expansion (eval echo ~$SUDO_USER),
+    // or comes from the output of well-known environment emitters and local file parsers -
+    // the same trust level as ordinary command substitution, which is rated Medium.
+    public static readonly SecurityFindingRule EvalIndirectionComputed = new(
+        "eval-indirection",
+        FindingSeverity.Medium,
+        "Dynamic command execution - the command is computed at runtime, but it is built from reviewable literal text or the output of local, well-known tools.");
+
     public static readonly SecurityFindingRule CommandSubstitution = new(
         "command-substitution",
         FindingSeverity.Medium,
@@ -85,6 +94,16 @@ internal static class SecurityFindingRules
         "hidden-character",
         FindingSeverity.Critical,
         "Hidden or bidirectional control characters detected - the visible code may not match what the shell actually executes.");
+
+    // Same rule id as HiddenCharacter, retained for review but non-blocking: zero-width
+    // characters are inert inside words - the shell never treats them as separators - so
+    // they cannot make executed code differ from the reviewed code. They only make names
+    // display differently from how they read (emoji joiners, Persian orthography,
+    // copy-paste artifacts).
+    public static readonly SecurityFindingRule HiddenCharacterZeroWidth = new(
+        "hidden-character",
+        FindingSeverity.Medium,
+        "Zero-width characters detected - they cannot change how the shell parses the line, but names may not read exactly as they display.");
 
     public static readonly SecurityFindingRule PrivilegeEscalation = new(
         "privilege-escalation",

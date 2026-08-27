@@ -139,11 +139,11 @@ The current rules, with their default severities:
 | --- | --- | --- |
 | `network-to-shell` | Critical | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell (`sh`, `bash`, …). |
 | `decode-to-shell` | Critical | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell. |
-| `eval-indirection` | Critical | `eval`/`source`/`.` fed by command substitution, backticks, or an echo/printf/base64 payload. |
+| `eval-indirection` | Critical (Medium for established idioms) | `eval`/`source`/`.` in command position, fed by command substitution, backticks, or an echo/printf/base64 payload. Display text and argument mentions are not flagged; established idioms are downgraded to Medium (see below). |
 | `network-execution` | High | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). |
 | `write-outside-build-root` | High | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). |
 | `privilege-escalation` | High | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.) |
-| `hidden-character` | Critical | Zero-width chars (U+200B/C/D), BOM (U+FEFF), bidi overrides/isolates (U+202A–E, U+2066–9), C0/C1 control bytes. |
+| `hidden-character` | Critical (Medium for zero-width chars) | Bidi overrides/isolates (U+202A–E, U+2066–9) and C0/C1 control bytes (outside quoted display text). Zero-width chars (U+200B/C/D, U+FEFF) are Medium; complete ANSI escape sequences are skipped (see below). |
 | `homograph` | High | Spoofing in PKGBUILD metadata values (`pkgname`, `depends`, `makedepends`, `url`, `source`): invisible/combining characters, Latin mixed with Cyrillic/Greek/Armenian, fullwidth ASCII lookalikes (U+FF01–FF5E), and non-ASCII that folds to an ASCII skeleton. PKGBUILD only. |
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
 | `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime). |
@@ -152,6 +152,31 @@ The current rules, with their default severities:
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after), not
 as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
+
+`eval-indirection` only fires when the `eval`/`source`/`.` keyword is a real invocation: unquoted and in command
+position (line start, after `;`/`&`/`|`/`(`/backtick/`{`, or after a control keyword such as `then`, `do`, or
+`sudo`). A quoted keyword (`printf "… source $(tput setaf 2)…"`) is display text, and a keyword after a plain word
+(`pkgdesc="An open source EchoLink proxy"`, `Description=Open Source EchoLink Proxy`) is an argument mention —
+neither is flagged. The established shell idioms are downgraded to a non-blocking `Medium` finding, at the same trust
+level as `command-substitution`: `eval echo …` / `eval printf …` where the evaluated text is literal words plus
+tilde/variable expansion (`SUDO_HOME=$(eval echo ~$SUDO_USER)`), and `eval $(…)` whose output comes from a
+well-known environment emitter (`opam env`, `makepkg -g`, `dbus-launch`, `pifpaf`, `perl -V:…`), a local file parser
+(`grep`, `awk`, `sed`, `cat`, `head`, `tail` — the classic key=value import from PKGBUILDs, Makefiles, and
+`/proc`), or a local path/variable invocation (`./get_latest`, `"${ENVY_BIN}" session`). Anything else —
+`eval $(curl …)`, `eval base64 …` — keeps its blocking severity. A corpus audit on 2026-08-27 found all 127 blocking
+`eval-indirection` findings were display text or these idioms.
+
+`hidden-character` distinguishes three tiers. Complete ANSI escape sequences (ESC `[` … final byte — terminal
+colors) are skipped entirely: they change how output looks, never how the shell parses the line. Zero-width
+characters (U+200B/C/D, U+FEFF) are a non-blocking `Medium` finding: the shell never treats them as separators, so
+they cannot make executed code differ from reviewed code — they only make names display differently from how they
+read (emoji ZWJ sequences, Persian ZWNJ orthography, copy-paste artifacts). Everything else stays `Critical`:
+bidi overrides/isolates (which can reorder displayed text and are the real trojan-source vector) in any position,
+and other C0/C1 control bytes outside quoted display text — except C1 bytes adjacent to Latin-1 supplement
+characters, which are mojibake from double-encoded UTF-8 file names, not deliberate obfuscation. A bare ESC that is
+not part of a complete CSI sequence (e.g. OSC terminal-title escapes) stays `Critical` even inside quotes. A corpus
+audit on 2026-08-27 found all 77 blocking `hidden-character` findings fell into the benign tiers (ANSI colors,
+zero-width display text, mojibake file names); no bidi overrides were present anywhere.
 
 `local-binary` is the one rule that is not a per-line shell check: it runs once per file on the whole content and
 applies to every file in the package regardless of extension. Only recognized **executable formats** — ELF
@@ -424,7 +449,7 @@ shelly's validators change meaningfully; the relevant files are `post_install_va
 | --- | --- | --- |
 | `post_install_validator.zig` risky tools | `risky-tool` (Medium) | Atoll adds a quoted-region exemption (shelly's tests document quoted-string FPs it accepts as advisory) |
 | `post_install_validator.zig` privilege tools | `privilege-escalation` (High, Critical when obfuscated) | Same; plus quote exemption and obfuscation escalation |
-| Bare `eval` token → critical | `eval-indirection` (Critical) | Atoll requires a dynamic operand — avoids `grep eval` FPs |
+| Bare `eval` token → critical | `eval-indirection` (Critical, Medium for established idioms) | Atoll requires a dynamic operand in command position — avoids `grep eval` and display-text FPs; established idioms (`eval echo ~$user`, `eval $(opam env)`, local parsers) are Medium — corpus-driven: 127/127 blocking hits were FPs |
 | Decode-to-shell | `decode-to-shell` (Critical) | Atoll superset (`openssl enc`, more shell targets) |
 | — | `network-to-shell` / `network-execution` | Atoll-only, shelly covers these only indirectly |
 | Command substitution / variable indirection (naive) | `command-substitution` / `variable-indirection` (Medium) | Atoll is quote-aware and heredoc-aware; shelly matches naive substrings |

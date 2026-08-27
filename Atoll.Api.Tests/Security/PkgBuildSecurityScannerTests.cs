@@ -342,13 +342,15 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
-    public void Zero_width_character_is_flagged_as_critical()
+    public void Zero_width_character_is_flagged_as_medium_and_does_not_block()
     {
-        // \u200B is a zero-width space embedded inside "rm".
+        // \u200B is a zero-width space embedded inside "rm". It cannot change how the shell
+        // tokenizes the line, so it is review-only.
         var result = Scan(("PKGBUILD", "echo rm\u200Brf\n"));
 
-        Assert.That(result.Findings.Any(f => f.RuleId == "hidden-character"), Is.True);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+        var finding = result.Findings.First(f => f.RuleId == "hidden-character");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
     }
 
     [Test]
