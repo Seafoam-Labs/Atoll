@@ -11,6 +11,7 @@ public sealed class AtollOptions
     public RefreshOptions Refresh { get; init; } = new();
     public SecurityOptions Security { get; init; } = new();
     public MutationsOptions Mutations { get; init; } = new();
+    public ProxyOptions Proxy { get; init; } = new();
     public UiOptions Ui { get; init; } = new();
 }
 
@@ -112,6 +113,29 @@ public sealed class RefreshOptions
 public sealed class MutationsOptions
 {
     public bool Enabled { get; init; } = true;
+}
+
+public sealed class ProxyOptions
+{
+    /// <summary>
+    ///     Comma-separated trusted proxy networks in CIDR notation.
+    ///     When empty, only the framework's loopback defaults are trusted.
+    /// </summary>
+    public string KnownNetworks { get; init; } = "";
+
+    /// <summary>Comma-separated trusted proxy IP addresses.</summary>
+    public string KnownProxies { get; init; } = "";
+
+    /// <summary>
+    ///     Header containing the original request scheme. Defaults to
+    ///     X-Forwarded-Proto.
+    /// </summary>
+    public string? ForwardedProtoHeaderName { get; init; }
+
+    /// <summary>
+    ///     Maximum number of forwarded entries to process. Defaults to 1.
+    /// </summary>
+    public int? ForwardLimit { get; init; }
 }
 
 public sealed class SecurityOptions

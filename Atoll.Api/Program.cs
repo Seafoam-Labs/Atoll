@@ -21,6 +21,9 @@ builder.Logging.AddOpenTelemetry();
 
 var app = builder.Build();
 
+// Apply forwarded values before middleware reads the request scheme or client IP.
+app.UseForwardedHeaders();
+
 app.UseExceptionHandler();
 app.UseResponseCompression();
 

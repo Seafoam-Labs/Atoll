@@ -170,11 +170,19 @@ resource "aws_ecs_task_definition" "app" {
           value = "https://${var.api_domain_name}"
         },
         {
-          # Host-injected forwarded-headers middleware: honor X-Forwarded-For /
-          # X-Forwarded-Proto from the ALB so the app sees real client IPs and
-          # https scheme.
-          name  = "ASPNETCORE_FORWARDEDHEADERS_ENABLED"
-          value = "true"
+          # Trust proxy hops within the VPC. The task security group only accepts ALB traffic.
+          name  = "Atoll__Proxy__KnownNetworks"
+          value = data.aws_vpc.default.cidr_block
+        },
+        {
+          # Use the scheme recorded before CloudFront forwards over HTTP.
+          name  = "Atoll__Proxy__ForwardedProtoHeaderName"
+          value = "CloudFront-Forwarded-Proto"
+        },
+        {
+          # Process both proxy hops to restore the client IP.
+          name  = "Atoll__Proxy__ForwardLimit"
+          value = "2"
         }
       ]
       secrets = [

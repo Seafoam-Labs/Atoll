@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Net;
 using System.Text.Json.Serialization;
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
@@ -16,7 +17,9 @@ using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
+using IPNetwork = System.Net.IPNetwork;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using OpenTelemetry;
@@ -46,6 +49,15 @@ internal static class ServiceCollectionExtensions
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
+            services.AddOptions<ProxyOptions>()
+                .Bind(configuration.GetSection("Atoll:Proxy"))
+                .Validate(options =>
+                    SplitProxyList(options.KnownNetworks).All(network => TryParseStrictCidr(network, out _)) &&
+                    SplitProxyList(options.KnownProxies).All(proxy => IPAddress.TryParse(proxy, out _)) &&
+                    options.ForwardLimit is null or >= 1,
+                    "Atoll:Proxy entries must be comma-separated CIDR networks (e.g. 172.31.0.0/16 with host bits zero) and IP addresses, with a ForwardLimit of at least 1.")
+                .ValidateOnStart();
+
             return services;
         }
 
@@ -53,6 +65,43 @@ internal static class ServiceCollectionExtensions
         {
             services.AddOpenApi();
             services.AddHttpClient();
+
+            // Restore the original client IP and scheme from trusted proxies.
+            // Without configuration, the framework trusts loopback only.
+            services.AddOptions<ForwardedHeadersOptions>()
+                .Configure<IOptions<ProxyOptions>>((forwarded, proxy) =>
+                {
+                    forwarded.ForwardedHeaders =
+                        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+                    if (!string.IsNullOrWhiteSpace(proxy.Value.ForwardedProtoHeaderName))
+                        forwarded.ForwardedProtoHeaderName = proxy.Value.ForwardedProtoHeaderName;
+
+                    if (proxy.Value.ForwardLimit is { } forwardLimit)
+                        forwarded.ForwardLimit = forwardLimit;
+
+                    var knownNetworks = SplitProxyList(proxy.Value.KnownNetworks);
+                    var knownProxies = SplitProxyList(proxy.Value.KnownProxies);
+
+                    if (knownNetworks.Length == 0 && knownProxies.Length == 0)
+                        return;
+
+                    // Replace the loopback defaults with the configured trust list.
+                    forwarded.KnownIPNetworks.Clear();
+                    forwarded.KnownProxies.Clear();
+
+                    foreach (var network in knownNetworks)
+                    {
+                        if (!TryParseStrictCidr(network, out var ipNetwork))
+                            throw new InvalidOperationException(
+                                $"Atoll:Proxy:KnownNetworks entry '{network}' is not strict CIDR notation (expected e.g. 172.31.0.0/16 with the host bits set to zero).");
+
+                        forwarded.KnownIPNetworks.Add(ipNetwork);
+                    }
+
+                    foreach (var proxyAddress in knownProxies)
+                        forwarded.KnownProxies.Add(IPAddress.Parse(proxyAddress));
+                });
 
             services.AddResponseCompression(options =>
             {
@@ -205,5 +254,25 @@ internal static class ServiceCollectionExtensions
 
             return services;
         }
+    }
+
+    private static string[] SplitProxyList(string? value) =>
+        value?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) ?? [];
+
+    /// <summary>
+    ///     IPNetwork.TryParse silently masks off host bits ("172.31.0.1/16"
+    ///     becomes 172.31.0.0/16), which would quietly widen trust. Require the
+    ///     network address itself so typos fail at startup instead.
+    /// </summary>
+    private static bool TryParseStrictCidr(string? network, out IPNetwork ipNetwork)
+    {
+        if (network is not null &&
+            IPNetwork.TryParse(network, out ipNetwork) &&
+            IPAddress.TryParse(network[..network.LastIndexOf('/')], out var supplied) &&
+            ipNetwork.BaseAddress.Equals(supplied))
+            return true;
+
+        ipNetwork = default;
+        return false;
     }
 }

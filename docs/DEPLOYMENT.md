@@ -64,6 +64,24 @@ The production store is a DocumentDB cluster (`terraform/docdb.tf`):
 DocumentDB is MongoDB wire-compatible but not MongoDB; if you use features it does not support
 (change streams, some aggregation stages), the app code needs adjusting.
 
+## Reverse proxies and forwarded headers
+
+The app processes forwarded client IP and scheme values from trusted proxies. Configure the
+`Atoll:Proxy` section directly or with environment variables:
+
+| Env var | Purpose |
+| --- | --- |
+| `Atoll__Proxy__KnownNetworks` | Comma-separated trusted networks in CIDR notation |
+| `Atoll__Proxy__KnownProxies` | Comma-separated trusted proxy IP addresses |
+| `Atoll__Proxy__ForwardedProtoHeaderName` | Scheme header name; defaults to `X-Forwarded-Proto` |
+| `Atoll__Proxy__ForwardLimit` | Maximum forwarded entries to process; defaults to `1` |
+
+Only configure networks and proxies that can reach the application directly. Invalid CIDRs fail
+at startup.
+
+The current AWS deployment uses the VPC CIDR, a limit of `2`, and
+`CloudFront-Forwarded-Proto`. Its CloudFront policy forwards that generated header to the origin.
+
 ## Decommissioning the old account
 
 The move is a fresh deploy — nothing is imported. When the new deployment is verified, tear down
