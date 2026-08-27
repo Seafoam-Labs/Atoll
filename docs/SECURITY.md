@@ -138,10 +138,10 @@ The current rules, with their default severities:
 
 | Rule id | Severity (default) | What it detects |
 | --- | --- | --- |
-| `network-to-shell` | Critical | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell (`sh`, `bash`, …). |
-| `decode-to-shell` | Critical | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell. |
+| `network-to-shell` | Critical | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell (`sh`, `bash`, …). Matches whose pipe sits inside quoted display text are not flagged (see below). |
+| `decode-to-shell` | Critical | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell. Quoted-display matches and pipes into a shell that reads a script file argument are not flagged (see below). |
 | `eval-indirection` | Critical (Medium for established idioms) | `eval`/`source`/`.` in command position, fed by command substitution, backticks, or an echo/printf/base64 payload. Display text and argument mentions are not flagged; established idioms are downgraded to Medium (see below). |
-| `network-execution` | High | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). |
+| `network-execution` | High | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). Quoted-display matches and pipes into a `perl` running inline `-e` code are not flagged (see below). |
 | `write-outside-build-root` | High (Medium in `.install` scriptlets) | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). Matches inside `.install` scriptlets are downgraded to Medium (see below). |
 | `privilege-escalation` | High (Medium in `.install` scriptlets) | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.) Matches inside `.install` scriptlets are downgraded to Medium (see below). |
 | `hidden-character` | Critical (Medium for zero-width chars) | Bidi overrides/isolates (U+202A–E, U+2066–9) and C0/C1 control bytes (outside quoted display text). Zero-width chars (U+200B/C/D, U+FEFF) are Medium; complete ANSI escape sequences are skipped (see below). |
@@ -153,6 +153,20 @@ The current rules, with their default severities:
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after), not
 as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
+
+The three pipe rules only fire when the connector actually pipes. A `|` inside a quoted string is printed, not fed to
+a shell, so matches whose pipe sits in a single- or double-quoted region are dropped: uninstall help text
+(`echo "    curl … | bash"` in `.install` scriptlets), optdepends notes, and usage strings
+(`echo "Usage: $0 {g|sh|ag}"`). A pipe inside a command substitution stays live even when the substitution itself is
+quoted — `echo "$(curl … | sh)"` executes. Two structural exemptions apply to plainly visible constructs (obfuscated
+matches keep their Critical escalation): `network-execution` drops a `perl` that receives its program from inline
+`-e`/`-E` code (`curl … | perl -pe 's/tag/…/'` release-tag scraping — the download arrives as stdin *data* for the
+reviewable inline program; a bare `perl`, a lone `-`, module flags, or a script file keep the finding), and
+`decode-to-shell` drops a pipe whose shell reads its script from a file argument (`echo yes | bash ./install.sh`
+feeding an answer to an interactive installer — the executed code is the reviewable local file, not the piped text).
+A corpus audit on 2026-08-27 verified all 11 blocking `decode-to-shell` findings, 12/20 `network-to-shell`, and
+19/28 `network-execution` findings as these benign classes; the remaining matches are genuine bootstraps
+(`curl … | sh` rustup/ghcup installs, `curl … | python` pip bootstrap) and stay flagged.
 
 Both `privilege-escalation` and `write-outside-build-root` take the file context into account. ALPM runs `.install`
 scriptlets as root as part of the transaction, so inside a scriptlet an escalation tool is redundant rather than an
@@ -465,8 +479,8 @@ shelly's validators change meaningfully; the relevant files are `post_install_va
 | `post_install_validator.zig` risky tools | `risky-tool` (Medium) | Atoll adds a quoted-region exemption (shelly's tests document quoted-string FPs it accepts as advisory) |
 | `post_install_validator.zig` privilege tools | `privilege-escalation` (High, Critical when obfuscated; Medium in `.install` scriptlets) | Same; plus quote exemption, obfuscation escalation, and the scriptlet-context downgrade (scriptlets already run as root — corpus-driven: 1,411 blocking scriptlet hits were FPs) |
 | Bare `eval` token → critical | `eval-indirection` (Critical, Medium for established idioms) | Atoll requires a dynamic operand in command position — avoids `grep eval` and display-text FPs; established idioms (`eval echo ~$user`, `eval $(opam env)`, local parsers) are Medium — corpus-driven: 127/127 blocking hits were FPs |
-| Decode-to-shell | `decode-to-shell` (Critical) | Atoll superset (`openssl enc`, more shell targets) |
-| — | `network-to-shell` / `network-execution` | Atoll-only, shelly covers these only indirectly |
+| Decode-to-shell | `decode-to-shell` (Critical) | Atoll superset (`openssl enc`, more shell targets); quoted-display pipes and pipes into a shell with a script file argument are suppressed (corpus-driven: 11/11 blocking hits were FPs) |
+| — | `network-to-shell` / `network-execution` | Atoll-only, shelly covers these only indirectly; quoted-display pipes suppressed and `perl -e` text filters exempted (corpus-driven: 12/20 and 19/28 blocking hits were FPs) |
 | Command substitution / variable indirection (naive) | `command-substitution` / `variable-indirection` (Medium) | Atoll is quote-aware and heredoc-aware; shelly matches naive substrings |
 | — | `write-outside-build-root` (High; Medium in `.install` scriptlets) | Atoll-only; scriptlet writes are downgraded (corpus-driven: 488 blocking scriptlet hits were FPs) while the helper-script bucket keeps High — it holds the genuine alarms |
 | `homograph_validator.zig` | `homograph` (High, `HomographScanner`) | Ported conceptually: same four checks, field-scoped to PKGBUILD metadata; CJK/Hangul excluded from the mixed-script check, no accented Latin in the confusables table (corpus-driven precision choices) |
