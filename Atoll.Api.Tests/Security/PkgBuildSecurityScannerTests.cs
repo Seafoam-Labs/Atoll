@@ -215,7 +215,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
-    public void Local_elf_and_binary_source_files_are_critical_and_flag_package()
+    public void Local_elf_is_critical_while_binary_data_is_medium()
     {
         // Repository files reach the scanner as UTF-8-decoded strings, so decode
         // real on-disk bytes instead of relying on string escapes. This mirrors
@@ -233,8 +233,8 @@ public class PkgBuildSecurityScannerTests
         Assert.That(findings[0].Severity, Is.EqualTo(FindingSeverity.Critical));
         Assert.That(findings[0].Message, Does.Contain("ELF executable"));
         Assert.That(findings[0].Snippet, Is.EqualTo("tool"));
-        Assert.That(findings[1].Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(findings[1].Message, Does.Contain("binary"));
+        Assert.That(findings[1].Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(findings[1].Message, Does.Contain("binary data"));
         Assert.That(findings[1].Snippet, Is.EqualTo("data.bin"));
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
     }
@@ -479,13 +479,15 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
-    public void Unrecognized_binary_source_files_remain_critical_and_block()
+    public void Unrecognized_binary_source_files_are_medium_and_do_not_block()
     {
+        // Only recognized executable formats (ELF, PE) block; opaque binary data is
+        // retained for review at Medium.
         var result = Scan(("payload.bin", "abc\0def\n"));
 
         var finding = result.Findings.Single(f => f.RuleId == "local-binary");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
     }
 
     [Test]

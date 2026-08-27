@@ -8,13 +8,25 @@ internal static class LocalSourceBinaryScanner
 
     public static SecurityFinding? Scan(string content, string path)
     {
+        var hasBinaryCharacters = HasBinaryCharacters(content);
         var isElf = content.StartsWith("\u007fELF", StringComparison.Ordinal);
-        if (!isElf && !HasBinaryCharacters(content))
+        // "MZ" is ASCII and can open an ordinary text file, so it only counts as a PE
+        // header when the content is binary anyway.
+        var isWindowsExecutable = hasBinaryCharacters && content.StartsWith("MZ", StringComparison.Ordinal);
+        if (!isElf && !isWindowsExecutable && !hasBinaryCharacters)
             return null;
 
         if (isElf)
             return CreateFinding(SecurityFindingRules.LocalBinary, path,
                 string.Format(SecurityFindingRules.LocalBinary.Description, path, "an ELF executable"));
+
+        if (isWindowsExecutable)
+            return CreateFinding(SecurityFindingRules.LocalBinary, path,
+                string.Format(SecurityFindingRules.LocalBinary.Description, path, "a Windows executable"));
+
+        if (IsArchive(content))
+            return CreateFinding(SecurityFindingRules.LocalBinaryArchive, path,
+                string.Format(SecurityFindingRules.LocalBinaryArchive.Description, path));
 
         if (IsInertMedia(content) || IsCertificateOrSignature(path))
             return CreateFinding(SecurityFindingRules.LocalBinaryInertMedia, path,
@@ -24,15 +36,15 @@ internal static class LocalSourceBinaryScanner
             return CreateFinding(SecurityFindingRules.LocalBinaryUnencodableText, path,
                 string.Format(SecurityFindingRules.LocalBinaryUnencodableText.Description, path));
 
-        return CreateFinding(SecurityFindingRules.LocalBinary, path,
-            string.Format(SecurityFindingRules.LocalBinary.Description, path, "a binary"));
+        return CreateFinding(SecurityFindingRules.LocalBinaryData, path,
+            string.Format(SecurityFindingRules.LocalBinaryData.Description, path));
     }
 
     /// <summary>
     ///     Recognizes inert media formats by their magic bytes. Content reaches the scanner
     ///     UTF-8-decoded, so signatures are anchored on the parts that survive decoding:
     ///     undecodable lead bytes arrive as U+FFFD, low bytes (NUL, control, ASCII) verbatim.
-    ///     Archives are deliberately absent - they can carry executables.
+    ///     Archives are recognized separately by <see cref="IsArchive" />.
     /// </summary>
     private static bool IsInertMedia(string content)
     {
@@ -86,6 +98,34 @@ internal static class LocalSourceBinaryScanner
             return true;
 
         return false;
+    }
+
+    /// <summary>
+    ///     Recognizes archive formats by their magic bytes so they can be downgraded to a
+    ///     non-blocking finding: an archive cannot execute on its own and is versioned in
+    ///     the repository, making it more auditable than an equivalent remote source URL.
+    ///     Signatures are anchored the same way as <see cref="IsInertMedia" /> - on the
+    ///     parts that survive UTF-8 decoding.
+    /// </summary>
+    private static bool IsArchive(string content)
+    {
+        if (content.Length < 4)
+            return false;
+
+        if (content.StartsWith("\u001F\uFFFD", StringComparison.Ordinal) || // gzip: 1F 8B
+            content.StartsWith("BZh", StringComparison.Ordinal) || // bzip2
+            content.StartsWith("PK\u0003\u0004", StringComparison.Ordinal) || // zip local header
+            content.StartsWith("PK\u0005\u0006", StringComparison.Ordinal) || // zip end-of-central-directory
+            content.StartsWith("Rar!\u001A\u0007", StringComparison.Ordinal) || // RAR
+            content.StartsWith("7z\uFFFD\uFFFD'\u001C", StringComparison.Ordinal) || // 7z: BC AF 27 1C
+            content.StartsWith("\uFFFD7zXZ\u0000", StringComparison.Ordinal) || // xz: FD "7zXZ" 00
+            content.StartsWith("(\uFFFD/\uFFFD", StringComparison.Ordinal)) // zstd: 28 B5 2F FD
+            return true;
+
+        // tar: "ustar" at byte offset 257. Multi-byte sequences in the preceding header can
+        // only merge during decoding, shifting the offset earlier, so the window is bounded.
+        var ustar = content.IndexOf("ustar", StringComparison.Ordinal);
+        return ustar is >= 0 and <= 257;
     }
 
     private static bool IsCertificateOrSignature(string path)

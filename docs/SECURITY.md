@@ -25,10 +25,10 @@ The application-level implementation is in:
   (PKGBUILD only).
 - `Atoll.Api/Services/Security/Scanning/PackageBuildFileClassifier.cs` — decides which files are scannable
   (`PKGBUILD` plus script-like companion extensions).
-- `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — classifies source files that are ELF
-  executables or contain binary bytes: blocking `Critical` for ELF/unrecognized binaries, non-blocking `Medium` for
-  inert media, certificate/signature files, and unencodable text (applies to every file, not just script-like
-  extensions).
+- `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — classifies source files that contain binary
+  bytes: blocking `Critical` only for recognized executable formats (ELF, PE/`MZ`), non-blocking `Medium` for
+  archives, inert media, certificate/signature files, unencodable text, and other non-executable binary data
+  (applies to every file, not just script-like extensions).
 - `Atoll.Api/Services/Security/PackageSecurityWorker.cs`
 - `Atoll.Api/Services/Security/MongoPackageSecurityRepository.cs`
 - `Atoll.Api/Services/Security/PackageSecurityAccess.cs`
@@ -148,24 +148,32 @@ The current rules, with their default severities:
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
 | `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime). |
 | `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
-| `local-binary` | Critical (Medium for inert content) | A source file that is an ELF executable or contains binary bytes (NUL, control, undecodable UTF-8). Whole-file check; severity split by content, see below. |
+| `local-binary` | Critical (Medium for non-executable content) | A source file that contains binary bytes (NUL, control, undecodable UTF-8). Whole-file check; only recognized executable formats (ELF, PE/`MZ`) block, see below. |
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after), not
 as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
 
 `local-binary` is the one rule that is not a per-line shell check: it runs once per file on the whole content and
-applies to every file in the package regardless of extension. Its severity is split by content: ELF executables and
-unrecognized binaries are `Critical` and block the package, while content that cannot execute on its own is retained
-as non-blocking `Medium`:
+applies to every file in the package regardless of extension. Only recognized **executable formats** — ELF
+executables and Windows PE images (`MZ` header) — are `Critical` and block the package. Everything else binary is
+retained as a non-blocking `Medium` finding, because content that is not itself an executable cannot run without
+PKGBUILD commands (which the shell rules scan), and a binary committed to the repository is more auditable than an
+equivalent remote archive URL (rated Medium by `suspicious-source-url`):
 
+- Binary archives recognized by magic bytes — gzip, bzip2, xz, zstd, zip, 7z, RAR, and tar (`ustar` at offset 257).
+  Committed archives (vendored assets, source snapshots, `.svgz`) are a common, legitimate AUR pattern; a corpus
+  audit on 2026-08-27 showed ~97% of blocking `local-binary` findings were non-executable binaries, overwhelmingly
+  archives and patches.
 - Inert media recognized by magic bytes on the (UTF-8-decoded) content — PNG, JPEG, GIF, BMP, ICO, WebP,
   TrueType/OpenType/WOFF/WOFF2 fonts, PDF, tracker audio modules (S3M/XM/IT), and Allegro packed datafiles (game
-  asset containers). Content-based, so renaming `.exe` to `.png` does not help. Archives are deliberately not
-  allowlisted: they can carry executables.
+  asset containers). Content-based, so renaming `.exe` to `.png` does not help — and renaming an executable to any
+  other extension does not help either, because the ELF/`MZ` magic check runs before anything else.
 - Certificate/signature files by extension (`.sig`, `.asc`, `.gpg`, `.cer`, `.crt`, `.pem`) — inert data with no
   reliable magic bytes. ELF content still takes precedence and stays `Critical`.
 - Text whose only binary indicator is undecodable UTF-8 (U+FFFD from legacy encodings), with no NUL or control
   characters.
+- Any other binary content (e.g. patches with stray binary bytes, opaque data blobs) — `Medium` "binary data":
+  no executable format was recognized.
 
 `homograph` is the other non-shell rule: it runs only on the PKGBUILD and inspects the extracted values of the
 `pkgname`, `depends`, `makedepends`, `url`, and `source` assignments (including indented ones inside `package()`
@@ -422,7 +430,7 @@ shelly's validators change meaningfully; the relevant files are `post_install_va
 | Command substitution / variable indirection (naive) | `command-substitution` / `variable-indirection` (Medium) | Atoll is quote-aware and heredoc-aware; shelly matches naive substrings |
 | — | `write-outside-build-root` (High) | Atoll-only |
 | `homograph_validator.zig` | `homograph` (High, `HomographScanner`) | Ported conceptually: same four checks, field-scoped to PKGBUILD metadata; CJK/Hangul excluded from the mixed-script check, no accented Latin in the confusables table (corpus-driven precision choices) |
-| `local_source_validator.zig` (ELF, first 64 bytes of `source=` files) | `local-binary` (Critical/Medium, `LocalSourceBinaryScanner`) | Atoll checks every file, whole content, with a magic-byte severity split for inert media |
+| `local_source_validator.zig` (ELF, first 64 bytes of `source=` files) | `local-binary` (Critical/Medium, `LocalSourceBinaryScanner`) | Atoll checks every file, whole content; blocks only on executable magic (ELF, PE/`MZ`), archives and inert media are Medium — corpus-driven: ~97% of Critical hits were non-executable binaries |
 | Obfuscation normalization (edge + intra-word quotes) | `NormalizeForMatching` (intra-word quotes only) | Edge-quote stripping would re-introduce quoted-string FPs in Atoll's blocking model |
 | `shell_scan.zig` segmentation (`split_shell_segments`, heredocs) | `ShellSyntax` quoted masks + heredoc tracking in `ShellContentScanner` | Adopted for FP suppression; shelly's validators themselves don't suppress on it |
 | `suspicious-source-url`-style URL validation | `suspicious-source-url` (Medium) | Atoll's host-only extension matching is deliberate and test-pinned |

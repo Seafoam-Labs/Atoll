@@ -16,6 +16,15 @@ internal static class SecurityFindingRules
         FindingSeverity.Medium,
         "Local source file '{0}' is binary content that appears to be inert media or data - it cannot be reviewed as text, but it cannot execute on its own.");
 
+    // Same rule id as LocalBinary, retained for review but non-blocking. A committed
+    // archive is more auditable than a remote one fetched at build time (which the
+    // suspicious-source-url rule rates Medium), so blocking on it blocks far more
+    // legitimate packages (vendored assets, source snapshots) than malicious ones.
+    public static readonly SecurityFindingRule LocalBinaryArchive = new(
+        "local-binary",
+        FindingSeverity.Medium,
+        "Local source file '{0}' is a binary archive - its contents cannot be reviewed as text, but it cannot execute on its own and is versioned in the repository.");
+
     // Same rule id as LocalBinary, retained for review but non-blocking: the only binary
     // indicator is undecodable bytes (U+FFFD) - no NUL or control characters - so the file
     // is treated as text in an unrecognized encoding rather than unreviewable binary.
@@ -23,6 +32,14 @@ internal static class SecurityFindingRules
         "local-binary",
         FindingSeverity.Medium,
         "Local source file '{0}' contains text in an unrecognized encoding - parts of it cannot be reviewed, but it contains no binary control characters.");
+
+    // Same rule id as LocalBinary, retained for review but non-blocking: binary content
+    // that matches no recognized executable format (ELF, PE) cannot run on its own, and
+    // anything the PKGBUILD does with it is covered by the shell-level rules.
+    public static readonly SecurityFindingRule LocalBinaryData = new(
+        "local-binary",
+        FindingSeverity.Medium,
+        "Local source file '{0}' is binary data that cannot be reviewed as text - no executable format was recognized, so it cannot execute on its own.");
 
     public static readonly SecurityFindingRule SuspiciousSourceUrl = new(
         "suspicious-source-url",

@@ -117,12 +117,14 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Test]
-    public void Scrm_signature_beyond_the_header_window_stays_critical()
+    public void Scrm_signature_beyond_the_header_window_falls_back_to_medium()
     {
-        // Only the S3M header position counts; a match deeper in a binary does not clear it.
+        // Only the S3M header position counts; a match deeper in a binary does not clear it,
+        // but unrecognized binary data is non-blocking anyway.
         var finding = LocalSourceBinaryScanner.Scan(new string('\0', 64) + "SCRM", "data.bin");
 
-        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("binary data"));
     }
 
     [Test]
@@ -146,31 +148,72 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Test]
-    public void Executable_renamed_to_media_extension_stays_critical()
+    public void Windows_executable_magic_is_critical()
     {
-        // No magic match: renaming does not defeat the check.
         var exe = "MZ" + Bytes(0x90, 0x00, 0x03);
 
         var finding = LocalSourceBinaryScanner.Scan(exe, "icon.png");
 
         Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding.Message, Does.Contain("Windows executable"));
     }
 
     [Test]
-    public void Archive_magics_are_not_downgraded()
+    public void Text_starting_with_mz_is_not_an_executable()
     {
-        // Compressed streams carry NUL/control bytes after the magic, which keeps them
-        // Critical even when the magic itself decodes without control characters.
+        // "MZ" is ASCII, so it only counts as a PE header when the content is binary.
+        Assert.That(LocalSourceBinaryScanner.Scan("MZ initials in a comment\n", "notes.txt"), Is.Null);
+    }
+
+    [Test]
+    public void Archive_magics_are_medium_and_non_blocking()
+    {
+        // Archives cannot execute on their own and are versioned in the repository, so they
+        // are retained for review without blocking - unlike a recognized executable format.
         var gzip = Bytes(0x1F, 0x8B, 0x08, 0x00);
         var zip = Bytes((byte)'P', (byte)'K', 0x03, 0x04, 0x00);
         var zstd = Bytes(0x28, 0xB5, 0x2F, 0xFD, 0x04, 0x00, 0x91, 0x22);
         var xz = Bytes([0xFD, .. Encoding.UTF8.GetBytes("7zXZ"), 0x00]);
+        var bzip2 = Bytes((byte)'B', (byte)'Z', (byte)'h', 0x31) + "\0data";
+        var sevenZip = "7z" + Bytes(0xBC, 0xAF, 0x27, 0x1C) + "\0data";
+        var rar = "Rar!" + Bytes(0x1A, 0x07, 0x00) + "data";
 
-        // gzip would also match a renamed .svgz - it must stay blocking.
-        Assert.That(LocalSourceBinaryScanner.Scan(gzip, "image.svgz")!.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(LocalSourceBinaryScanner.Scan(zip, "files.zip")!.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(LocalSourceBinaryScanner.Scan(zstd, "files.tar.zst")!.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(LocalSourceBinaryScanner.Scan(xz, "files.tar.xz")!.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(LocalSourceBinaryScanner.Scan(gzip, "image.svgz")!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(LocalSourceBinaryScanner.Scan(zip, "files.zip")!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(LocalSourceBinaryScanner.Scan(zstd, "files.tar.zst")!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(LocalSourceBinaryScanner.Scan(xz, "files.tar.xz")!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(LocalSourceBinaryScanner.Scan(bzip2, "files.tar.bz2")!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(LocalSourceBinaryScanner.Scan(sevenZip, "files.7z")!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(LocalSourceBinaryScanner.Scan(rar, "files.rar")!.Severity, Is.EqualTo(FindingSeverity.Medium));
+    }
+
+    [Test]
+    public void Tar_magic_at_header_offset_is_medium()
+    {
+        // POSIX tar carries "ustar" at byte offset 257, after the first header block.
+        var header = new byte[512];
+        header[257] = (byte)'u';
+        header[258] = (byte)'s';
+        header[259] = (byte)'t';
+        header[260] = (byte)'a';
+        header[261] = (byte)'r';
+        header[300] = 0x00;
+
+        var finding = LocalSourceBinaryScanner.Scan(Bytes(header), "files.tar");
+
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("binary archive"));
+    }
+
+    [Test]
+    public void Archive_magic_wins_over_a_suspicious_extension()
+    {
+        var gzip = Bytes(0x1F, 0x8B, 0x08, 0x00);
+
+        var finding = LocalSourceBinaryScanner.Scan(gzip, "payload.bin");
+
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("binary archive"));
     }
 
     // ===== Certificates and signatures: extension-based Medium =====
@@ -212,12 +255,12 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Test]
-    public void Content_with_control_characters_stays_critical()
+    public void Content_with_control_characters_is_medium_binary_data()
     {
         var finding = LocalSourceBinaryScanner.Scan("abc\0def", "data.bin");
 
-        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(finding.Message, Does.Contain("a binary"));
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("binary data"));
     }
 
     [Test]
