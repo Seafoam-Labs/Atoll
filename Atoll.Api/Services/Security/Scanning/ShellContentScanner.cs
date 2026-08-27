@@ -46,6 +46,7 @@ internal static class ShellContentScanner
     {
         Heredoc? activeHeredoc = null;
         var pendingHeredocs = new Queue<Heredoc>();
+        var isInstallScriptlet = PackageBuildFileClassifier.IsInstallScriptlet(path);
 
         foreach (var rawLine in content.Split('\n'))
         {
@@ -60,7 +61,7 @@ internal static class ShellContentScanner
                 }
 
                 // Heredoc bodies are data, not code lines: no comment stripping.
-                foreach (var finding in ScanLine(bodyLine, rawLine, path))
+                foreach (var finding in ScanLine(bodyLine, rawLine, path, isInstallScriptlet, IsHeredocCommentLine(bodyLine)))
                     if (!activeHeredoc.Suppress || !IsHeredocSuppressedRule(finding.RuleId))
                         yield return finding;
 
@@ -72,7 +73,7 @@ internal static class ShellContentScanner
                 continue;
 
             var positions = ShellSyntax.ComputeQuotePositions(line);
-            foreach (var finding in ScanLine(line, positions, rawLine, path))
+            foreach (var finding in ScanLine(line, positions, rawLine, path, isInstallScriptlet, isHeredocCommentLine: false))
                 yield return finding;
 
             foreach (var declaration in ParseHeredocDeclarations(line, positions))
@@ -87,16 +88,23 @@ internal static class ShellContentScanner
         }
     }
 
-    private static IEnumerable<SecurityFinding> ScanLine(string line, string rawLine, string path)
+    private static IEnumerable<SecurityFinding> ScanLine(
+        string line,
+        string rawLine,
+        string path,
+        bool isInstallScriptlet,
+        bool isHeredocCommentLine)
     {
-        return ScanLine(line, ShellSyntax.ComputeQuotePositions(line), rawLine, path);
+        return ScanLine(line, ShellSyntax.ComputeQuotePositions(line), rawLine, path, isInstallScriptlet, isHeredocCommentLine);
     }
 
     private static IEnumerable<SecurityFinding> ScanLine(
         string line,
         ShellSyntax.QuotePosition[] positions,
         string rawLine,
-        string path)
+        string path,
+        bool isInstallScriptlet,
+        bool isHeredocCommentLine)
     {
         if (line.Length == 0)
             yield break;
@@ -131,38 +139,86 @@ internal static class ShellContentScanner
                 continue;
             }
 
-            var obfuscated = !rule.Regex.IsMatch(line) &&
-                             !ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, match.Index, match.Length);
+            if (rule.Definition.Id == SecurityFindingRules.WriteOutsideBuildRoot.Id)
+            {
+                // A '#' line in a heredoc body is a comment or documentation text - a
+                // redirect on it can never run, in a live body as much as in a data body.
+                if (isHeredocCommentLine)
+                    continue;
+
+                var obfuscated = !rule.Regex.IsMatch(line) &&
+                                 !ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, match.Index, match.Length);
+
+                // Scriptlets run as root under alpm's control: writing system files from
+                // one is its ordinary job, so the finding is kept for review but does not
+                // block - obfuscated constructs included, since the context, not the
+                // syntax, is what makes the write benign.
+                if (isInstallScriptlet)
+                {
+                    var scriptletRule = SecurityFindingRules.WriteOutsideBuildRootScriptlet;
+                    yield return Finding(scriptletRule, rawLine, path,
+                        message: obfuscated
+                            ? scriptletRule.Description + " The construct was also obfuscated, but scriptlets run as root under alpm's control either way."
+                            : null);
+                    continue;
+                }
+
+                yield return Finding(rule.Definition, rawLine, path,
+                    obfuscated ? FindingSeverity.Critical : null,
+                    obfuscated
+                        ? rule.Definition.Description + " The construct was also obfuscated, which is a strong sign of malicious intent."
+                        : null);
+                continue;
+            }
+
+            var obfuscatedMatch = !rule.Regex.IsMatch(line) &&
+                                  !ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, match.Index, match.Length);
             yield return Finding(rule.Definition, rawLine, path,
-                obfuscated ? FindingSeverity.Critical : null,
-                obfuscated
+                obfuscatedMatch ? FindingSeverity.Critical : null,
+                obfuscatedMatch
                     ? rule.Definition.Description + " The construct was also obfuscated, which is a strong sign of malicious intent."
                     : null);
         }
 
-        foreach (var tool in PrivilegeEscalationTools)
-        {
-            var index = ShellSyntax.FindUnquotedTool(normalized, tool);
-            if (index < 0)
-                continue;
-
-            if (ShellSyntax.MatchesUnquotedTool(line, tool))
+        // '#' lines in heredoc bodies are comments or documentation text: no privilege
+        // tool on one can ever run, obfuscated or not.
+        if (!isHeredocCommentLine)
+            foreach (var tool in PrivilegeEscalationTools)
             {
-                var rule = SecurityFindingRules.PrivilegeEscalation;
-                yield return Finding(rule, rawLine, path, message: string.Format(rule.Description, tool));
-                continue;
+                var index = ShellSyntax.FindUnquotedTool(normalized, tool);
+                if (index < 0)
+                    continue;
+
+                if (ShellSyntax.MatchesUnquotedTool(line, tool))
+                {
+                    // Scriptlets already run as root under alpm's control, so an escalation
+                    // tool inside one is redundant rather than an escalation.
+                    var rule = isInstallScriptlet
+                        ? SecurityFindingRules.PrivilegeEscalationScriptlet
+                        : SecurityFindingRules.PrivilegeEscalation;
+                    yield return Finding(rule, rawLine, path, message: string.Format(rule.Description, tool));
+                    continue;
+                }
+
+                // Only visible after de-obfuscation. A match that maps entirely inside quoted
+                // regions of the original line is an escape-stripping artifact (display text
+                // like "\$(sudo ...)" where the backslash prevents execution), not hidden
+                // intent: suppress it instead of escalating.
+                if (ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, index, tool.Length))
+                    continue;
+
+                if (isInstallScriptlet)
+                {
+                    var scriptletRule = SecurityFindingRules.PrivilegeEscalationScriptlet;
+                    yield return Finding(scriptletRule, rawLine, path,
+                        message: string.Format(scriptletRule.Description, tool) +
+                                 " The tool name was also obfuscated, but scriptlets run as root under alpm's control either way.");
+                    continue;
+                }
+
+                yield return Finding(SecurityFindingRules.PrivilegeEscalation, rawLine, path, FindingSeverity.Critical,
+                    $"Privilege escalation tool '{tool}' is invoked via obfuscated shell syntax - the tool name was deliberately hidden, which is a strong sign of malicious intent.");
             }
-
-            // Only visible after de-obfuscation. A match that maps entirely inside quoted
-            // regions of the original line is an escape-stripping artifact (display text
-            // like "\$(sudo ...)" where the backslash prevents execution), not hidden
-            // intent: suppress it instead of escalating.
-            if (ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, index, tool.Length))
-                continue;
-
-            yield return Finding(SecurityFindingRules.PrivilegeEscalation, rawLine, path, FindingSeverity.Critical,
-                $"Privilege escalation tool '{tool}' is invoked via obfuscated shell syntax - the tool name was deliberately hidden, which is a strong sign of malicious intent.");
-        }
 
         foreach (var tool in RiskyTools)
         {
@@ -421,6 +477,24 @@ internal static class ShellContentScanner
     {
         return ruleId == SecurityFindingRules.CommandSubstitution.Id ||
                ruleId == SecurityFindingRules.VariableIndirection.Id;
+    }
+
+    /// <summary>
+    ///     True when the first non-blank character of a heredoc body line is '#'. Such a line
+    ///     is a comment in a live body and documentation text in a data body - either way
+    ///     nothing on it is ever executed as a command.
+    /// </summary>
+    private static bool IsHeredocCommentLine(string line)
+    {
+        foreach (var c in line)
+        {
+            if (c is ' ' or '\t')
+                continue;
+
+            return c == '#';
+        }
+
+        return false;
     }
 
     private static IEnumerable<HeredocDeclaration> ParseHeredocDeclarations(

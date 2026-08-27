@@ -186,6 +186,46 @@ public class ShellContentScannerTests
         Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
     }
 
+    [TestCase("sudo systemctl enable foo.service", Description = "redundant sudo")]
+    [TestCase("su $user -c 'systemctl --user daemon-reload'", Description = "su")]
+    [TestCase("pkexec modprobe acpi_call", Description = "pkexec")]
+    public void Privilege_escalation_in_install_scriptlet_is_downgraded_to_medium(string content)
+    {
+        // Scriptlets already run as root under alpm's control: the call is redundant,
+        // not an escalation.
+        var finding = SingleFinding(content, "privilege-escalation", "foo.install");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("scriptlet").IgnoreCase);
+    }
+
+    [Test]
+    public void Obfuscated_privilege_escalation_in_install_scriptlet_is_downgraded_to_medium()
+    {
+        // The downgrade is contextual, not syntactic: scriptlets run as root whether or not
+        // the tool name is obfuscated.
+        var finding = SingleFinding("s''u''d''o rm -rf /", "privilege-escalation", "foo.install");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
+    [TestCase("helper.sh", Description = "voluntarily-run helper script")]
+    [TestCase("PKGBUILD", Description = "build-time invocation")]
+    public void Privilege_escalation_outside_install_scriptlets_stays_high(string path)
+    {
+        AssertHasFinding("sudo systemctl enable foo.service", "privilege-escalation", FindingSeverity.High, path);
+    }
+
+    [Test]
+    public void Obfuscated_privilege_escalation_outside_install_scriptlets_stays_critical()
+    {
+        var finding = SingleFinding("s''u''d''o rm -rf /", "privilege-escalation", "helper.sh");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
     [TestCase("npm install x")]
     [TestCase("npx create-app")]
     [TestCase("yarn add x")]
@@ -439,6 +479,46 @@ public class ShellContentScannerTests
         AssertHasFinding(content, "write-outside-build-root", FindingSeverity.High);
     }
 
+    [TestCase("echo /bin/zsh >> /etc/shells", Description = "shell registration")]
+    [TestCase("openssl rand 32 > /usr/share/foo/key", Description = "generated key")]
+    [TestCase("echo config | tee /etc/foo.conf", Description = "config write via tee")]
+    public void Write_outside_build_root_in_install_scriptlet_is_downgraded_to_medium(string content)
+    {
+        // Scriptlets run as root under alpm's control; writing system files from one is
+        // the ordinary job of a scriptlet.
+        var finding = SingleFinding(content, "write-outside-build-root", "foo.install");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("scriptlet").IgnoreCase);
+    }
+
+    [Test]
+    public void Obfuscated_write_in_install_scriptlet_is_downgraded_to_medium()
+    {
+        // upak-style: the backslash before '/' makes the match visible only after
+        // normalization, but the scriptlet context still applies.
+        var finding = SingleFinding("echo \"/opt/x/upak/doc\" > \\/root/upak_help_path", "write-outside-build-root", "upak.install");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
+    [TestCase("helper.sh", Description = "voluntarily-run helper script")]
+    [TestCase("PKGBUILD", Description = "build-time write")]
+    public void Write_outside_build_root_outside_install_scriptlets_stays_high(string path)
+    {
+        AssertHasFinding("echo /bin/zsh >> /etc/shells", "write-outside-build-root", FindingSeverity.High, path);
+    }
+
+    [Test]
+    public void Obfuscated_write_outside_install_scriptlets_stays_critical()
+    {
+        var finding = SingleFinding("echo x > \\/root/marker", "write-outside-build-root", "helper.sh");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
     [Test]
     public void Escaped_redirect_operator_is_not_flagged()
     {
@@ -670,5 +750,35 @@ public class ShellContentScannerTests
 
         Assert.That(suppressed.Any(f => f.RuleId == "command-substitution"), Is.False);
         Assert.That(flagged.Any(f => f.RuleId == "command-substitution"), Is.True);
+    }
+
+    [TestCase("cat <<'EOF'\n# run: sudo systemctl restart foo\nEOF\n", Description = "quoted body")]
+    [TestCase("cat <<EOF\n# run: sudo systemctl restart foo\nEOF\n", Description = "unquoted body")]
+    [TestCase("cat <<-'EOF'\n\t# run: sudo systemctl restart foo\nEOF\n", Description = "tab-indented comment in tab-stripping body")]
+    public void Privilege_escalation_on_heredoc_comment_lines_is_suppressed(string content)
+    {
+        // A '#' line is a shell comment in a live body and help text in a data body -
+        // nothing on it ever runs as a command.
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False,
+            $"Unexpected privilege-escalation finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Write_outside_build_root_on_heredoc_comment_lines_is_suppressed()
+    {
+        var findings = Scan("cat <<'EOF'\n#   $ echo x | sudo tee /etc/foo\nEOF\n");
+
+        Assert.That(findings.Any(f => f.RuleId == "write-outside-build-root"), Is.False);
+        Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
+    }
+
+    [TestCase("cat <<'EOF'\nsudo rm -rf /\nEOF\n", "privilege-escalation")]
+    [TestCase("cat <<'EOF'\necho x > /etc/passwd\nEOF\n", "write-outside-build-root")]
+    public void Non_comment_heredoc_body_lines_are_still_flagged(string content, string ruleId)
+    {
+        // A heredoc body can be piped to an interpreter or written into an installed
+        // script, so live-looking lines in it keep their findings.
+        AssertHasFinding(content, ruleId, FindingSeverity.High);
     }
 }
