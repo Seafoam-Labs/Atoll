@@ -275,12 +275,28 @@ The persisted `Pending` state is the durable work queue — there is no in-proce
 5. If the scan throws, the worker records `Error` for that revision. Errors block serving until a successful re-scan.
 
 Leases make the queue crash-safe: if a worker dies mid-scan, the lease expires and another worker (or the same instance
-after restart) reclaims it after 5 minutes. On startup the worker also runs `EnsureExistingPackagesArePendingAsync`.
-Rather than touching every package on every boot, it computes the set difference between seeded packages and packages
-that already have a scan document (via `ListPackageNamesAsync`), then calls `EnsurePendingAsync` (upsert with
-`SetOnInsert`) only for the missing ones — packages that predate the security feature or lost their scan document get a
-`Pending` entry without overwriting an existing completed scan. In steady state this is two queries, so restarts no
-longer re-check the whole catalog.
+after restart) reclaims it after 5 minutes.
+
+### Scan Versioning & Startup Lifecycle
+
+Security scanner rules evolve over time (e.g., adding new detection patterns or relaxing false positives). Persisted
+scan results are stamped with a monotonically increasing integer policy version
+(`PkgBuildSecurityScanner.CurrentPolicyVersion`, stored in `policyVersion` on `PackageSecurityScanDocument`). Increment
+this version
+whenever a scanner change requires existing verdicts to be recomputed; versions must never be reused or decremented.
+
+On startup, `PackageSecurityWorker` executes the following sequence before polling begins:
+
+1. **Requeue Outdated Scans (`RequeueOutdatedAsync`):** The worker executes one `UpdateManyAsync` operation on MongoDB
+   that matches all non-`Pending` documents where `policyVersion` is `null` (legacy scans) or lower than the worker's
+   current policy version (`policyVersion < scanner.PolicyVersion`). Each matching document is atomically reset to
+   `Status = Pending` with cleared findings, timestamps, leases, and version. Results from a newer policy are preserved,
+   which prevents an older worker from downgrading them during a rolling deployment.
+2. **Backfill Missing Scan Documents (`EnsureExistingPackagesArePendingAsync`):** Computes the set difference between
+   seeded packages and packages that already have a scan document (via `ListPackageNamesAsync`), then calls
+   `EnsurePendingAsync` (upsert with `SetOnInsert`) only for the missing ones — packages that predate the security
+   feature or lost their scan document get a `Pending` entry without overwriting an existing completed scan. In steady
+   state this is two queries, so restarts no longer re-check the whole catalog.
 
 `ScannerConcurrency`, `PollIntervalMs`, and `Enabled` are validated by Data Annotations at startup. The worker is a
 hosted service registered in `Program.cs`; it starts with the API and stops on shutdown.

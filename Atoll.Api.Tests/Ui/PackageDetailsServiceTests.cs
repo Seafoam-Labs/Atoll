@@ -316,7 +316,8 @@ public class PackageDetailsServiceTests
         await _securityRepository.MarkPendingAsync(Name, sha, isHead: true);
         var claim = await _securityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
         await _securityRepository.CompleteScanAsync(
-            Name, sha, claim!.LeaseOwner!, new ScanResult(status.Value, []));
+            Name, sha, claim!.LeaseOwner!, new ScanResult(status.Value, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
     }
 
     private async Task InsertDocWithRevisionAsync(string sha, string message, Dictionary<string, PackageFile> files)

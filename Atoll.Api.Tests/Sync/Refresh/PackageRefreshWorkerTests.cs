@@ -129,7 +129,7 @@ public class PackageRefreshWorkerTests
         // Simulate the old head being scanned clean.
         await security.TryClaimPendingScanAsync("scanner", TimeSpan.FromMinutes(1));
         await security.CompleteScanAsync("shelly", originalHead, "scanner",
-            new ScanResult(SecurityStatus.Verified, []));
+            new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion);
 
         var mirror = new FakeRefreshMirror
         {

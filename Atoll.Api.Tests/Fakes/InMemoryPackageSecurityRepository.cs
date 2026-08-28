@@ -99,6 +99,32 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         }
     }
 
+    public Task<long> RequeueOutdatedAsync(int currentPolicyVersion, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            var outdated = _scans.Values
+                .Where(scan => scan.Status != SecurityStatus.Pending
+                    && (scan.PolicyVersion is null || scan.PolicyVersion < currentPolicyVersion))
+                .ToList();
+
+            foreach (var scan in outdated)
+            {
+                _scans[scan.Id] = scan with
+                {
+                    Status = SecurityStatus.Pending,
+                    Findings = [],
+                    PolicyVersion = null,
+                    ScannedAt = null,
+                    LeaseUntil = null,
+                    LeaseOwner = null
+                };
+            }
+
+            return Task.FromResult((long)outdated.Count);
+        }
+    }
+
     public Task MarkPendingAsync(
         string packageName,
         string revisionId,
@@ -113,7 +139,12 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
                 PackageName = packageName,
                 RevisionId = revisionId,
                 IsHead = isHead,
-                Status = SecurityStatus.Pending
+                Status = SecurityStatus.Pending,
+                Findings = [],
+                PolicyVersion = null,
+                ScannedAt = null,
+                LeaseUntil = null,
+                LeaseOwner = null
             };
             return Task.CompletedTask;
         }
@@ -165,6 +196,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         string revisionId,
         string owner,
         ScanResult result,
+        int policyVersion,
         CancellationToken ct = default)
     {
         lock (_gate)
@@ -175,6 +207,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
                 {
                     Status = result.Status,
                     Findings = [.. result.Findings],
+                    PolicyVersion = policyVersion,
                     ScannedAt = DateTimeOffset.UtcNow,
                     LeaseUntil = null,
                     LeaseOwner = null
@@ -188,6 +221,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         string packageName,
         string revisionId,
         string owner,
+        int policyVersion,
         CancellationToken ct = default)
     {
         lock (_gate)
@@ -198,6 +232,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
                 {
                     Status = SecurityStatus.Error,
                     Findings = [],
+                    PolicyVersion = policyVersion,
                     ScannedAt = DateTimeOffset.UtcNow,
                     LeaseUntil = null,
                     LeaseOwner = null

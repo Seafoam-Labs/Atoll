@@ -92,6 +92,28 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         return await _scans.CountDocumentsAsync(x => x.Status == SecurityStatus.Pending, cancellationToken: ct);
     }
 
+    public async Task<long> RequeueOutdatedAsync(int currentPolicyVersion, CancellationToken ct = default)
+    {
+        var filter = Builders<PackageSecurityScanDocument>.Filter.And(
+            Builders<PackageSecurityScanDocument>.Filter.Ne(x => x.Status, SecurityStatus.Pending),
+            Builders<PackageSecurityScanDocument>.Filter.Or(
+                Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.PolicyVersion, null),
+                Builders<PackageSecurityScanDocument>.Filter.Lt(x => x.PolicyVersion, currentPolicyVersion)
+            )
+        );
+
+        var update = Builders<PackageSecurityScanDocument>.Update
+            .Set(x => x.Status, SecurityStatus.Pending)
+            .Set(x => x.Findings, [])
+            .Unset(x => x.PolicyVersion)
+            .Unset(x => x.ScannedAt)
+            .Unset(x => x.LeaseUntil)
+            .Unset(x => x.LeaseOwner);
+
+        var result = await _scans.UpdateManyAsync(filter, update, cancellationToken: ct);
+        return result.ModifiedCount;
+    }
+
     public async Task MarkPendingAsync(
         string packageName,
         string revisionId,
@@ -104,6 +126,7 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             .Set(x => x.IsHead, isHead)
             .Set(x => x.Status, SecurityStatus.Pending)
             .Set(x => x.Findings, [])
+            .Unset(x => x.PolicyVersion)
             .Unset(x => x.ScannedAt)
             .Unset(x => x.LeaseUntil)
             .Unset(x => x.LeaseOwner);
@@ -162,6 +185,7 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         string revisionId,
         string owner,
         ScanResult result,
+        int policyVersion,
         CancellationToken ct = default)
     {
         var filter = Builders<PackageSecurityScanDocument>.Filter.And(
@@ -171,6 +195,7 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         var update = Builders<PackageSecurityScanDocument>.Update
             .Set(x => x.Status, result.Status)
             .Set(x => x.Findings, [.. result.Findings])
+            .Set(x => x.PolicyVersion, policyVersion)
             .Set(x => x.ScannedAt, DateTimeOffset.UtcNow)
             .Unset(x => x.LeaseUntil)
             .Unset(x => x.LeaseOwner);
@@ -182,6 +207,7 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         string packageName,
         string revisionId,
         string owner,
+        int policyVersion,
         CancellationToken ct = default)
     {
         var filter = Builders<PackageSecurityScanDocument>.Filter.And(
@@ -191,6 +217,7 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         var update = Builders<PackageSecurityScanDocument>.Update
             .Set(x => x.Status, SecurityStatus.Error)
             .Set(x => x.Findings, [])
+            .Set(x => x.PolicyVersion, policyVersion)
             .Set(x => x.ScannedAt, DateTimeOffset.UtcNow)
             .Unset(x => x.LeaseUntil)
             .Unset(x => x.LeaseOwner);

@@ -140,7 +140,8 @@ public class PackageCatalogServiceTests
 
         await _securityRepository.TryClaimPendingScanAsync("owner", TimeSpan.FromMinutes(1));
         await _securityRepository.CompleteScanAsync(
-            "shelly-bin", "rev-1", "owner", new ScanResult(SecurityStatus.Verified, []));
+            "shelly-bin", "rev-1", "owner", new ScanResult(SecurityStatus.Verified, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
 
         var verifiedAfter = await CreateService().SearchAsync(
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified,

@@ -18,15 +18,17 @@ public interface IPackageSecurityRepository
 
     Task<long> CountPendingAsync(CancellationToken ct = default);
 
+    Task<long> RequeueOutdatedAsync(int currentPolicyVersion, CancellationToken ct = default);
+
     Task MarkPendingAsync(string packageName, string revisionId, bool isHead, CancellationToken ct = default);
 
     Task EnsurePendingAsync(string packageName, string revisionId, bool isHead, CancellationToken ct = default);
 
     Task<PackageSecurityScanDocument?> TryClaimPendingScanAsync(string owner, TimeSpan leaseDuration, CancellationToken ct = default);
 
-    Task CompleteScanAsync(string packageName, string revisionId, string owner, ScanResult result, CancellationToken ct = default);
+    Task CompleteScanAsync(string packageName, string revisionId, string owner, ScanResult result, int policyVersion, CancellationToken ct = default);
 
-    Task MarkScanErrorAsync(string packageName, string revisionId, string owner, CancellationToken ct = default);
+    Task MarkScanErrorAsync(string packageName, string revisionId, string owner, int policyVersion, CancellationToken ct = default);
 
     Task ReleaseScanClaimAsync(string packageName, string revisionId, string owner, CancellationToken ct = default);
 

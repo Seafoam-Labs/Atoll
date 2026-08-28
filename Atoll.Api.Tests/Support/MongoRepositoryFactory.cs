@@ -1,9 +1,8 @@
-using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Catalog.Persistence;
+using Atoll.Api.Services.Packages.Persistence;
+using Atoll.Api.Services.Security;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
-using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Support;
 
@@ -31,6 +30,11 @@ internal static class MongoRepositoryFactory
     public static MongoPackageRepository CreatePackageRepository(IMongoClient client, string database)
     {
         return new MongoPackageRepository(client, CreateOptions(database));
+    }
+
+    public static MongoPackageSecurityRepository CreatePackageSecurityRepository(IMongoClient client, string database)
+    {
+        return new MongoPackageSecurityRepository(client, CreateOptions(database));
     }
 
     public static MongoAurMetadataRepository CreateAurMetadataRepository(IMongoClient client, string database)

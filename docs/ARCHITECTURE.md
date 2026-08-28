@@ -77,7 +77,8 @@ flowchart TD
 - **PackageRefreshWorker:** Periodically checks already-seeded packages against upstream Git HEADs, appending new
   revisions only when content changes. Shares the mirror cache with Bulk seeding.
 - **PackageSecurityWorker:** Scans newly seeded or refreshed revisions using deterministic static analysis, gating
-  content and Git access until verified.
+  content and Git access until verified. On startup, automatically invalidates and requeues scan results from older
+  or unversioned policy versions.
 - **PackageSearchService:** Serves Atoll-native search queries in-memory from `PackageIndexStore` snapshots with zero
   database I/O.
 - **AurRpcService:** Maps the same immutable metadata snapshot to the aurweb RPC v5 contract used by yay and paru. It
@@ -105,8 +106,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - **Package CRUD:** `PackageService` delegates to `MongoPackageRepository`; seeding is orchestrated by
   `DirectPackageSeeder` (`Services/Sync/Direct`), which fetches the AUR Git tree to a temp directory, reads the
   files, and persists them to MongoDB via `IPackageService.SeedFilesAsync`.
-- **AUR RPC v5:** `AurRpcService` serves legacy GET or form-encoded POST requests at `/rpc` and path-style
-  `/rpc/v5/…` requests from the in-memory catalog. Responses expose Atoll's standard `/{pkgbase}.git` aliases as `URLPath`.
+- **AUR RPC v5:** `AurRpcService` serves legacy GET or form-encoded POST requests at `/rpc` and path-style `/rpc/v5/…`
+  requests from the in-memory catalog. Responses expose Atoll's standard `/{pkgbase}.git` aliases as `URLPath`.
 - **Git Smart HTTP:** `GitTransferService` asks `IGitRepositoryCache` for a current bare repository, then pipes
   stdin/stdout to `git upload-pack`. Materialization reads package revisions and scan status without mutating package
   data. Standard root-level `/{pkgbase}.git` aliases coexist with Atoll's `/packages/{name}.git` routes; split-package

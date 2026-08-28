@@ -73,7 +73,9 @@ public class SecurityGatingEndpointsTests
         if (status != SecurityStatus.Pending)
         {
             await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
-            await _factory.SecurityRepository.CompleteScanAsync("pkg", "rev-1", "test", new ScanResult(status, []));
+            await _factory.SecurityRepository.CompleteScanAsync(
+                "pkg", "rev-1", "test", new ScanResult(status, []),
+                PkgBuildSecurityScanner.CurrentPolicyVersion);
         }
     }
 
@@ -198,9 +200,13 @@ public class SecurityGatingEndpointsTests
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false);
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true);
         await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
-        await _factory.SecurityRepository.CompleteScanAsync("pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []));
+        await _factory.SecurityRepository.CompleteScanAsync(
+            "pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
-        await _factory.SecurityRepository.CompleteScanAsync("pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []));
+        await _factory.SecurityRepository.CompleteScanAsync(
+            "pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
 
         var flagged = await _client.GetAsync("/packages/pkg/versions/rev-2");
         var clean = await _client.GetAsync("/packages/pkg/versions/rev-1");

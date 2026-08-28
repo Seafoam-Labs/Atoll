@@ -73,7 +73,8 @@ public class UiPagesTests
 
         await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
         await _factory.SecurityRepository.CompleteScanAsync(
-            name, "rev-1", "test", new ScanResult(status, findings ?? []));
+            name, "rev-1", "test", new ScanResult(status, findings ?? []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
     }
 
     /// <summary>
@@ -107,7 +108,8 @@ public class UiPagesTests
 
         await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
         await _factory.SecurityRepository.CompleteScanAsync(
-            name, sha, "test", new ScanResult(status, findings ?? []));
+            name, sha, "test", new ScanResult(status, findings ?? []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
     }
 
     private static PackageRevisionContentDocument RevisionContent(
@@ -251,7 +253,8 @@ public class UiPagesTests
             await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true);
             await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
             await disabled.SecurityRepository.CompleteScanAsync(
-                "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []));
+                "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
+                PkgBuildSecurityScanner.CurrentPolicyVersion);
 
             var response = await client.GetAsync("/package/shelly-bin");
             var body = await response.Content.ReadAsStringAsync();
@@ -301,7 +304,8 @@ public class UiPagesTests
         await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true);
         await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
         await factory.SecurityRepository.CompleteScanAsync(
-            "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []));
+            "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
 
         var response = await client.GetAsync("/package/shelly-bin");
         var body = await response.Content.ReadAsStringAsync();

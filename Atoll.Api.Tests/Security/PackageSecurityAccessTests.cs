@@ -54,7 +54,8 @@ public class PackageSecurityAccessTests
         {
             var result = new ScanResult(status, []);
             _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
-            await security.CompleteScanAsync("pkg", "rev-1", "test", result);
+            await security.CompleteScanAsync(
+                "pkg", "rev-1", "test", result, PkgBuildSecurityScanner.CurrentPolicyVersion);
         }
 
         var access = Create(packages, security);
@@ -110,9 +111,13 @@ public class PackageSecurityAccessTests
         await security.MarkPendingAsync("pkg", "rev-1", false);
         await security.MarkPendingAsync("pkg", "rev-2", true);
         _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
-        await security.CompleteScanAsync("pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []));
+        await security.CompleteScanAsync(
+            "pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
         _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
-        await security.CompleteScanAsync("pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []));
+        await security.CompleteScanAsync(
+            "pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
 
         var access = Create(packages, security);
 

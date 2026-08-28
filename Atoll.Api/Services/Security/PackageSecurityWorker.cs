@@ -30,6 +30,14 @@ public sealed class PackageSecurityWorker(
             return;
         }
 
+        var requeued = await securityRepo.RequeueOutdatedAsync(scanner.PolicyVersion, stoppingToken);
+        if (requeued > 0)
+        {
+            logger.LogInformation(
+                "Requeued {Count} outdated security scans for policy version {Version}.",
+                requeued, scanner.PolicyVersion);
+        }
+
         await EnsureExistingPackagesArePendingAsync(stoppingToken);
 
         var pollInterval = TimeSpan.FromMilliseconds(_security.PollIntervalMs);
@@ -132,7 +140,8 @@ public sealed class PackageSecurityWorker(
 
             var files = revision.Files.ToDictionary(kv => kv.Key, kv => kv.Value.Content, StringComparer.Ordinal);
             var result = scanner.Scan(files);
-            await securityRepo.CompleteScanAsync(claim.PackageName, claim.RevisionId, _owner, result, ct);
+            await securityRepo.CompleteScanAsync(
+                claim.PackageName, claim.RevisionId, _owner, result, scanner.PolicyVersion, ct);
             status.RecordScanCompleted(result.Status);
 
             if (result.Status == SecurityStatus.Flagged)
@@ -177,7 +186,8 @@ public sealed class PackageSecurityWorker(
     {
         try
         {
-            await securityRepo.MarkScanErrorAsync(claim.PackageName, claim.RevisionId, _owner, CancellationToken.None);
+            await securityRepo.MarkScanErrorAsync(
+                claim.PackageName, claim.RevisionId, _owner, scanner.PolicyVersion, CancellationToken.None);
         }
         catch (Exception ex)
         {
