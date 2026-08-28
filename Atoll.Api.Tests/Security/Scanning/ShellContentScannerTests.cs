@@ -79,6 +79,8 @@ public class ShellContentScannerTests
     [TestCase("eval $(perl -V:sitearch)")]
     [TestCase("eval $(grep -E '^arch=' PKGBUILD)")]
     [TestCase("eval $(cat /proc/meminfo | awk '/^MemTotal/ {print $2}')")]
+    [TestCase("eval $(sensors 2>/dev/null | sed 's/  */ /g' | awk '{print $1}')",
+        Description = "hardware monitor output feeding local parsers (baraction.sh)")]
     [TestCase("eval $(./get_latest $archs)")]
     [TestCase("eval $(\"${ENVY_BIN}\" session)")]
     [TestCase("eval $(cat cmd)")]
@@ -284,17 +286,51 @@ public class ShellContentScannerTests
         Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
     }
 
-    [TestCase("helper.sh", Description = "voluntarily-run helper script")]
+    [TestCase("sudo systemctl restart foo.service", "check.sh", Description = "voluntarily-run helper script")]
+    [TestCase("sudo apt update", "makedeb.bash", Description = ".bash helper script")]
+    public void Privilege_escalation_in_helper_scripts_is_downgraded_to_medium(string content, string path)
+    {
+        // Helper scripts ship in the package and only run when the user invokes them
+        // voluntarily, typically as root: the escalation tool grants nothing the user
+        // did not already hand over.
+        var finding = SingleFinding(content, "privilege-escalation", path);
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("helper").IgnoreCase);
+    }
+
+    [Test]
+    public void Obfuscated_privilege_escalation_in_helper_scripts_is_downgraded_to_medium()
+    {
+        // The downgrade is contextual, like the scriptlet one: helper scripts run only
+        // when invoked voluntarily, obfuscated tool name or not.
+        var finding = SingleFinding("s''u''d''o rm -rf /", "privilege-escalation", "check.sh");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
+    [Test]
+    public void Write_outside_build_root_in_helper_scripts_stays_high()
+    {
+        // The helper downgrade is scoped to privilege escalation: system writes from
+        // helper scripts (sudoers grants, authorized_keys injection) are the most
+        // serious content in the corpus and keep blocking.
+        AssertHasFinding("echo 'yay ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers",
+            "write-outside-build-root", FindingSeverity.High, "dockerscript.sh");
+    }
+
     [TestCase("PKGBUILD", Description = "build-time invocation")]
-    public void Privilege_escalation_outside_install_scriptlets_stays_high(string path)
+    [TestCase("update.py", Description = "non-shell helper keeps the finding")]
+    public void Privilege_escalation_outside_install_and_helper_scripts_stays_high(string path)
     {
         AssertHasFinding("sudo systemctl enable foo.service", "privilege-escalation", FindingSeverity.High, path);
     }
 
     [Test]
-    public void Obfuscated_privilege_escalation_outside_install_scriptlets_stays_critical()
+    public void Obfuscated_privilege_escalation_outside_install_and_helper_scripts_stays_critical()
     {
-        var finding = SingleFinding("s''u''d''o rm -rf /", "privilege-escalation", "helper.sh");
+        var finding = SingleFinding("s''u''d''o rm -rf /", "privilege-escalation", "PKGBUILD");
 
         Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
         Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);

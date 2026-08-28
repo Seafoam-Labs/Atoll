@@ -107,7 +107,7 @@ public class HomographScannerTests
         var finding = SingleFinding("url=\"https://g\u0456thub.com/x\"");
 
         Assert.That(finding.RuleId, Is.EqualTo("homograph"));
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
         Assert.That(finding.Snippet, Is.EqualTo("url=\"https://g\u0456thub.com/x\""));
         Assert.That(finding.File, Is.EqualTo("PKGBUILD"));
     }

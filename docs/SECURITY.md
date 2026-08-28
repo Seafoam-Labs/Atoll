@@ -143,9 +143,9 @@ The current rules, with their default severities:
 | `eval-indirection` | Critical (Medium for established idioms) | `eval`/`source`/`.` in command position, fed by command substitution, backticks, or an echo/printf/base64 payload. Display text and argument mentions are not flagged; established idioms are downgraded to Medium (see below). |
 | `network-execution` | High | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). Quoted-display matches and pipes into a `perl` running inline `-e` code are not flagged (see below). |
 | `write-outside-build-root` | High (Medium in `.install` scriptlets) | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). Matches inside `.install` scriptlets are downgraded to Medium (see below). |
-| `privilege-escalation` | High (Medium in `.install` scriptlets) | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.) Matches inside `.install` scriptlets are downgraded to Medium (see below). |
+| `privilege-escalation` | High (Medium in `.install` scriptlets and shell helper scripts) | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.) Matches inside `.install` scriptlets and `.sh`/`.bash`/`.csh`/`.zsh` helper scripts are downgraded to Medium (see below). |
 | `hidden-character` | Critical (Medium for zero-width chars) | Bidi overrides/isolates (U+202A–E, U+2066–9) and C0/C1 control bytes (outside quoted display text). Zero-width chars (U+200B/C/D, U+FEFF) are Medium; complete ANSI escape sequences are skipped (see below). |
-| `homograph` | High | Spoofing in PKGBUILD metadata values (`pkgname`, `depends`, `makedepends`, `url`, `source`): invisible/combining characters, Latin mixed with Cyrillic/Greek/Armenian, fullwidth ASCII lookalikes (U+FF01–FF5E), and non-ASCII that folds to an ASCII skeleton. PKGBUILD only. |
+| `homograph` | Medium | Spoofing in PKGBUILD metadata values (`pkgname`, `depends`, `makedepends`, `url`, `source`): invisible/combining characters, Latin mixed with Cyrillic/Greek/Armenian, fullwidth ASCII lookalikes (U+FF01–FF5E), and non-ASCII that folds to an ASCII skeleton. PKGBUILD only. |
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
 | `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime). |
 | `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
@@ -173,14 +173,15 @@ scriptlets as root as part of the transaction, so inside a scriptlet an escalati
 escalation, and writing system files (`>> /etc/shells`, generated keys, `tee`'d config) is the ordinary job of the
 scriptlet rather than an escape from the build sandbox. Matches in `*.install` files are therefore kept for review as
 non-blocking `Medium` findings — obfuscated constructs included, since it is the context, not the syntax, that makes
-them benign. Everywhere else the blocking severities stand: PKGBUILD build-time invocations (`sudo make install`,
-`sudo install -Dm755 … /usr/bin/…`) genuinely run as the building user, and helper scripts run outside alpm's
-control entirely. That helper-script bucket is deliberately left untouched — a corpus audit on 2026-08-27 found it
-holds the corpus's most genuinely alarming content (NOPASSWD sudoers writes, root `authorized_keys` injection,
-`/etc/os-release` overwrites), while all 1,411 scriptlet privilege-escalation findings and 488 scriptlet
-write-outside-build-root findings (including the two obfuscated Criticals from `upak`, a harmless `\/`-escaped doc
-path) were verified benign. Heredoc bodies get the same treatment on `#` lines only: a tool name or redirect on a
-comment line can never run, so both rules suppress it there, while live-looking body lines keep their findings.
+them benign. Packaged helper scripts (`.sh`, `.bash`, `.csh`, `.zsh`) get the same downgrade for `privilege-escalation`
+only: they ship inside the package and run solely when the user invokes them voluntarily — typically as root — so the
+escalation tool confers nothing the user did not hand over (the `check.sh`/`setup.sh`/`update.sh` class; a corpus audit
+on 2026-08-27 verified ~580 such findings benign). `write-outside-build-root` deliberately keeps its blocking severity
+in helper scripts: that bucket holds the corpus's most genuinely alarming content (NOPASSWD sudoers writes, root
+`authorized_keys` injection, `/etc/os-release` overwrites). PKGBUILD build-time invocations (`sudo make install`,
+`sudo install -Dm755 … /usr/bin/…`) genuinely run as the building user and stay High. Heredoc bodies get the same
+treatment on `#` lines only: a tool name or redirect on a comment line can never run, so both rules suppress it
+there, while live-looking body lines keep their findings.
 
 `eval-indirection` only fires when the `eval`/`source`/`.` keyword is a real invocation: unquoted and in command
 position (line start, after `;`/`&`/`|`/`(`/backtick/`{`, or after a control keyword such as `then`, `do`, or
@@ -191,9 +192,11 @@ level as `command-substitution`: `eval echo …` / `eval printf …` where the e
 tilde/variable expansion (`SUDO_HOME=$(eval echo ~$SUDO_USER)`), and `eval $(…)` whose output comes from a
 well-known environment emitter (`opam env`, `makepkg -g`, `dbus-launch`, `pifpaf`, `perl -V:…`), a local file parser
 (`grep`, `awk`, `sed`, `cat`, `head`, `tail` — the classic key=value import from PKGBUILDs, Makefiles, and
-`/proc`), or a local path/variable invocation (`./get_latest`, `"${ENVY_BIN}" session`). Anything else —
-`eval $(curl …)`, `eval base64 …` — keeps its blocking severity. A corpus audit on 2026-08-27 found all 127 blocking
-`eval-indirection` findings were display text or these idioms.
+`/proc`), a read-only local hardware monitor (`sensors`, whose output only feeds further local parsing — status-bar
+scripts like `baraction.sh`), or a local path/variable invocation (`./get_latest`, `"${ENVY_BIN}" session`).
+Anything else — `eval $(curl …)`, `eval base64 …` — keeps its blocking severity. A corpus audit on 2026-08-27 found
+all 127 blocking `eval-indirection` findings were display text or these idioms, with `sensors` (added 2026-08-28)
+covering the single residual hit.
 
 `hidden-character` distinguishes three tiers. Complete ANSI escape sequences (ESC `[` … final byte — terminal
 colors) are skipped entirely: they change how output looks, never how the shell parses the line. Zero-width
@@ -238,6 +241,9 @@ value — checked on the NFC-normalized value so decomposed accents are not mist
 with Cyrillic/Greek/Armenian (other scripts such as CJK and Hangul are ignored: they cannot spoof ASCII and are
 legitimate in internationalized names), fullwidth ASCII lookalikes, and confusable-skeleton folding (a ~45-entry
 Cyrillic/Greek table without accented Latin letters). Free prose (`pkgdesc`, comments) is deliberately out of scope.
+The rule's findings are `Medium` and do not block: the 2026-08-27 corpus audit found every stored homograph finding
+benign (a real internationalized domain `π.duncano.de`, a U+0670 encoding artifact before a `url=` scheme), and the
+mirror displays the raw metadata values, so lookalikes stay visible for review without gating the package.
 
 The remaining rules are shell-line rules and only run on scannable script files.
 
@@ -477,13 +483,13 @@ shelly's validators change meaningfully; the relevant files are `post_install_va
 | Shelly validator/concept | Atoll counterpart | Divergence (intentional) |
 | --- | --- | --- |
 | `post_install_validator.zig` risky tools | `risky-tool` (Medium) | Atoll adds a quoted-region exemption (shelly's tests document quoted-string FPs it accepts as advisory) |
-| `post_install_validator.zig` privilege tools | `privilege-escalation` (High, Critical when obfuscated; Medium in `.install` scriptlets) | Same; plus quote exemption, obfuscation escalation, and the scriptlet-context downgrade (scriptlets already run as root — corpus-driven: 1,411 blocking scriptlet hits were FPs) |
+| `post_install_validator.zig` privilege tools | `privilege-escalation` (High, Critical when obfuscated; Medium in `.install` scriptlets and shell helper scripts) | Same; plus quote exemption, obfuscation escalation, and the scriptlet/helper context downgrades (scriptlets already run as root; helper scripts run only when invoked voluntarily — corpus-driven: 1,411 scriptlet and ~580 helper-script blocking hits were FPs) |
 | Bare `eval` token → critical | `eval-indirection` (Critical, Medium for established idioms) | Atoll requires a dynamic operand in command position — avoids `grep eval` and display-text FPs; established idioms (`eval echo ~$user`, `eval $(opam env)`, local parsers) are Medium — corpus-driven: 127/127 blocking hits were FPs |
 | Decode-to-shell | `decode-to-shell` (Critical) | Atoll superset (`openssl enc`, more shell targets); quoted-display pipes and pipes into a shell with a script file argument are suppressed (corpus-driven: 11/11 blocking hits were FPs) |
 | — | `network-to-shell` / `network-execution` | Atoll-only, shelly covers these only indirectly; quoted-display pipes suppressed and `perl -e` text filters exempted (corpus-driven: 12/20 and 19/28 blocking hits were FPs) |
 | Command substitution / variable indirection (naive) | `command-substitution` / `variable-indirection` (Medium) | Atoll is quote-aware and heredoc-aware; shelly matches naive substrings |
 | — | `write-outside-build-root` (High; Medium in `.install` scriptlets) | Atoll-only; scriptlet writes are downgraded (corpus-driven: 488 blocking scriptlet hits were FPs) while the helper-script bucket keeps High — it holds the genuine alarms |
-| `homograph_validator.zig` | `homograph` (High, `HomographScanner`) | Ported conceptually: same four checks, field-scoped to PKGBUILD metadata; CJK/Hangul excluded from the mixed-script check, no accented Latin in the confusables table (corpus-driven precision choices) |
+| `homograph_validator.zig` | `homograph` (Medium, `HomographScanner`) | Ported conceptually: same four checks, field-scoped to PKGBUILD metadata; CJK/Hangul excluded from the mixed-script check, no accented Latin in the confusables table (corpus-driven precision choices); Medium not blocking — all 3 stored hits were benign FPs |
 | `local_source_validator.zig` (ELF, first 64 bytes of `source=` files) | `local-binary` (Critical/Medium, `LocalSourceBinaryScanner`) | Atoll checks every file, whole content; blocks only on executable magic (ELF, PE/`MZ`), archives and inert media are Medium — corpus-driven: ~97% of Critical hits were non-executable binaries |
 | Obfuscation normalization (edge + intra-word quotes) | `NormalizeForMatching` (intra-word quotes only) | Edge-quote stripping would re-introduce quoted-string FPs in Atoll's blocking model |
 | `shell_scan.zig` segmentation (`split_shell_segments`, heredocs) | `ShellSyntax` quoted masks + heredoc tracking in `ShellContentScanner` | Adopted for FP suppression; shelly's validators themselves don't suppress on it |

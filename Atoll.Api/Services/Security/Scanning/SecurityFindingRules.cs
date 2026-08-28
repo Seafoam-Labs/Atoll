@@ -128,13 +128,27 @@ internal static class SecurityFindingRules
         FindingSeverity.Medium,
         "Privilege escalation tool '{0}' is invoked inside the package's .install scriptlet - scriptlets already run as root under alpm's control, so the call is redundant rather than an escalation.");
 
+    // Same rule id as PrivilegeEscalation, retained for review but non-blocking: helper
+    // scripts ship inside the package and only run when the user invokes them voluntarily,
+    // typically with root already granted, so the tool confers nothing the user did not
+    // hand over. Writes to system files from such scripts stay covered by
+    // write-outside-build-root, which is not downgraded for helper scripts.
+    public static readonly SecurityFindingRule PrivilegeEscalationHelperScript = new(
+        "privilege-escalation",
+        FindingSeverity.Medium,
+        "Privilege escalation tool '{0}' is invoked inside a packaged helper script - helper scripts only run when the user invokes them voluntarily, typically with the privileges they already hold.");
+
     public static readonly SecurityFindingRule RiskyTool = new(
         "risky-tool",
         FindingSeverity.Medium,
         "'{0}' is invoked - this fetches/executes external code outside alpm's control.");
 
+    // Medium, not blocking: the corpus shows homograph matches in AUR metadata are benign
+    // (real IDN domains, encoding artifacts) rather than spoofing attacks, and the mirror
+    // displays the raw values, so a user can see the exact characters before building.
+    // The finding is kept for review so genuine lookalike hosts remain visible.
     public static readonly SecurityFindingRule Homograph = new(
         "homograph",
-        FindingSeverity.High,
+        FindingSeverity.Medium,
         "A package metadata value contains suspicious non-ASCII characters - it may spoof a trusted name or hide content (homograph attack).");
 }

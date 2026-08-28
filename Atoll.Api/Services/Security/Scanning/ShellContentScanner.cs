@@ -47,6 +47,7 @@ internal static class ShellContentScanner
         Heredoc? activeHeredoc = null;
         var pendingHeredocs = new Queue<Heredoc>();
         var isInstallScriptlet = PackageBuildFileClassifier.IsInstallScriptlet(path);
+        var isHelperScript = PackageBuildFileClassifier.IsHelperScript(path);
 
         foreach (var rawLine in content.Split('\n'))
         {
@@ -61,7 +62,7 @@ internal static class ShellContentScanner
                 }
 
                 // Heredoc bodies are data, not code lines: no comment stripping.
-                foreach (var finding in ScanLine(bodyLine, rawLine, path, isInstallScriptlet, IsHeredocCommentLine(bodyLine)))
+                foreach (var finding in ScanLine(bodyLine, rawLine, path, isInstallScriptlet, isHelperScript, IsHeredocCommentLine(bodyLine)))
                     if (!activeHeredoc.Suppress || !IsHeredocSuppressedRule(finding.RuleId))
                         yield return finding;
 
@@ -73,7 +74,7 @@ internal static class ShellContentScanner
                 continue;
 
             var positions = ShellSyntax.ComputeQuotePositions(line);
-            foreach (var finding in ScanLine(line, positions, rawLine, path, isInstallScriptlet, isHeredocCommentLine: false))
+            foreach (var finding in ScanLine(line, positions, rawLine, path, isInstallScriptlet, isHelperScript, isHeredocCommentLine: false))
                 yield return finding;
 
             foreach (var declaration in ParseHeredocDeclarations(line, positions))
@@ -93,9 +94,10 @@ internal static class ShellContentScanner
         string rawLine,
         string path,
         bool isInstallScriptlet,
+        bool isHelperScript,
         bool isHeredocCommentLine)
     {
-        return ScanLine(line, ShellSyntax.ComputeQuotePositions(line), rawLine, path, isInstallScriptlet, isHeredocCommentLine);
+        return ScanLine(line, ShellSyntax.ComputeQuotePositions(line), rawLine, path, isInstallScriptlet, isHelperScript, isHeredocCommentLine);
     }
 
     private static IEnumerable<SecurityFinding> ScanLine(
@@ -104,6 +106,7 @@ internal static class ShellContentScanner
         string rawLine,
         string path,
         bool isInstallScriptlet,
+        bool isHelperScript,
         bool isHeredocCommentLine)
     {
         if (line.Length == 0)
@@ -205,10 +208,16 @@ internal static class ShellContentScanner
                 if (ShellSyntax.MatchesUnquotedTool(line, tool))
                 {
                     // Scriptlets already run as root under alpm's control, so an escalation
-                    // tool inside one is redundant rather than an escalation.
-                    var rule = isInstallScriptlet
-                        ? SecurityFindingRules.PrivilegeEscalationScriptlet
-                        : SecurityFindingRules.PrivilegeEscalation;
+                    // tool inside one is redundant rather than an escalation. Helper scripts
+                    // ship in the package and only run when the user invokes them voluntarily,
+                    // typically as root, so the tool grants nothing the user did not grant.
+                    SecurityFindingRule rule;
+                    if (isInstallScriptlet)
+                        rule = SecurityFindingRules.PrivilegeEscalationScriptlet;
+                    else if (isHelperScript)
+                        rule = SecurityFindingRules.PrivilegeEscalationHelperScript;
+                    else
+                        rule = SecurityFindingRules.PrivilegeEscalation;
                     yield return Finding(rule, rawLine, path, message: string.Format(rule.Description, tool));
                     continue;
                 }
@@ -226,6 +235,15 @@ internal static class ShellContentScanner
                     yield return Finding(scriptletRule, rawLine, path,
                         message: string.Format(scriptletRule.Description, tool) +
                                  " The tool name was also obfuscated, but scriptlets run as root under alpm's control either way.");
+                    continue;
+                }
+
+                if (isHelperScript)
+                {
+                    var helperRule = SecurityFindingRules.PrivilegeEscalationHelperScript;
+                    yield return Finding(helperRule, rawLine, path,
+                        message: string.Format(helperRule.Description, tool) +
+                                 " The tool name was also obfuscated, but helper scripts only run when the user invokes them voluntarily either way.");
                     continue;
                 }
 
@@ -265,11 +283,12 @@ internal static class ShellContentScanner
     };
 
     // Commands whose output is meant to be eval'd: environment emitters (opam env,
-    // makepkg -g, dbus-launch, pifpaf) and the classic local-file parsers used to import
-    // key=value assignments from PKGBUILDs, Makefiles and /proc.
+    // makepkg -g, dbus-launch, pifpaf), the classic local-file parsers used to import
+    // key=value assignments from PKGBUILDs, Makefiles and /proc, and read-only local
+    // hardware monitors (sensors) whose output only feeds further parsing.
     private static readonly HashSet<string> ReviewableEvalCommands = new(StringComparer.OrdinalIgnoreCase)
     {
-        "opam", "makepkg", "dbus-launch", "pifpaf", "grep", "awk", "sed", "cat", "head", "tail"
+        "opam", "makepkg", "dbus-launch", "pifpaf", "sensors", "grep", "awk", "sed", "cat", "head", "tail"
     };
 
     /// <summary>
