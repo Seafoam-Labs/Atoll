@@ -180,14 +180,14 @@ else if (_result is not null)
                                         {
                                             <div class="text-ink-faint text-[13px] truncate -mt-1" title="base: @package.PackageBase">base: @package.PackageBase</div>
                                         }
-                                        @if (row.IsSeeded || row.Head is not null)
+                                        @if (!row.IsSeeded || row.Head is not null)
                                         {
                                             <div class="flex flex-wrap gap-1 -ml-1">
-                                                @if (row.IsSeeded)
+                                                @if (!row.IsSeeded)
                                                 {
-                                                    <span class="badge badge-seeded">seeded</span>
+                                                    <span class="badge badge-pending">Index-only</span>
                                                 }
-                                                @if (row.Head is not null)
+                                                @if (row.Head is not null && row.Head.Status != SecurityStatus.Verified)
                                                 {
                                                     <span class="badge @UiFormatting.BadgeClass(row.Head.Status)">@row.Head.Status.ToString().ToLowerInvariant()</span>
                                                 }

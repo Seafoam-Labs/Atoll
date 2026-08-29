@@ -189,16 +189,21 @@ public class UiPagesTests
     }
 
     [Test]
-    public async Task RootPageDecoratesSeededRowsWithBadges()
+    public async Task RootPageDecoratesRowsWithBadges()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
+        await SeedAsync("portable-pro", SecurityStatus.Flagged);
 
         var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
 
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("badge-seeded"));
-            Assert.That(body, Does.Contain("badge-verified"));
+            // Unseeded catalog rows are index-only.
+            Assert.That(body, Does.Contain("badge-pending"));
+            Assert.That(body, Does.Contain("Index-only"));
+            // A non-verified head status is surfaced; a verified seeded row stays clean.
+            Assert.That(body, Does.Contain("badge-flagged"));
+            Assert.That(body, Does.Not.Contain("badge-verified"));
         });
     }
 
