@@ -68,10 +68,10 @@ public class UiPagesTests
     private async Task SeedAsync(string name, SecurityStatus status, IReadOnlyList<SecurityFinding>? findings = null)
     {
         await _factory.Repository.InsertSeedAsync(Doc(name), SeedRevision(name));
-        await _factory.SecurityRepository.MarkPendingAsync(name, "rev-1", true);
+        await _factory.SecurityRepository.MarkPendingAsync(name, "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
         if (status == SecurityStatus.Pending) return;
 
-        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _factory.SecurityRepository.CompleteScanAsync(
             name, "rev-1", "test", new ScanResult(status, findings ?? []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);
@@ -103,10 +103,10 @@ public class UiPagesTests
     private async Task CompleteScanAsync(
         string name, string sha, SecurityStatus status, IReadOnlyList<SecurityFinding>? findings = null)
     {
-        await _factory.SecurityRepository.MarkPendingAsync(name, sha, true);
+        await _factory.SecurityRepository.MarkPendingAsync(name, sha, true, PkgBuildSecurityScanner.CurrentPolicyVersion);
         if (status == SecurityStatus.Pending) return;
 
-        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _factory.SecurityRepository.CompleteScanAsync(
             name, sha, "test", new ScanResult(status, findings ?? []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);
@@ -255,8 +255,8 @@ public class UiPagesTests
         try
         {
             await disabled.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-            await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true);
-            await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+            await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+            await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
             await disabled.SecurityRepository.CompleteScanAsync(
                 "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
                 PkgBuildSecurityScanner.CurrentPolicyVersion);
@@ -306,8 +306,8 @@ public class UiPagesTests
         using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
         using var client = factory.CreateClient();
         await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true);
-        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
         await factory.SecurityRepository.CompleteScanAsync(
             "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);

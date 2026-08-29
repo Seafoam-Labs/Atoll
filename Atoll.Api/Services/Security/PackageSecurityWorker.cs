@@ -70,7 +70,7 @@ public sealed class PackageSecurityWorker(
             {
                 var headRevisionId = await packageRepository.GetHeadRevisionIdAsync(packageName, token);
                 if (!string.IsNullOrEmpty(headRevisionId))
-                    await securityRepo.EnsurePendingAsync(packageName, headRevisionId, true, token);
+                    await securityRepo.EnsurePendingAsync(packageName, headRevisionId, true, scanner.PolicyVersion, token);
             });
     }
 
@@ -121,7 +121,7 @@ public sealed class PackageSecurityWorker(
 
     private async Task<bool> ClaimAndScanOneAsync(CancellationToken ct)
     {
-        var claim = await securityRepo.TryClaimPendingScanAsync(_owner, LeaseDuration, ct);
+        var claim = await securityRepo.TryClaimPendingScanAsync(_owner, LeaseDuration, scanner.PolicyVersion, ct);
         if (claim is null)
             return false;
 
@@ -140,8 +140,14 @@ public sealed class PackageSecurityWorker(
 
             var files = revision.Files.ToDictionary(kv => kv.Key, kv => kv.Value.Content, StringComparer.Ordinal);
             var result = scanner.Scan(files);
-            await securityRepo.CompleteScanAsync(
+            var persisted = await securityRepo.CompleteScanAsync(
                 claim.PackageName, claim.RevisionId, _owner, result, scanner.PolicyVersion, ct);
+            if (!persisted)
+            {
+                LogStaleClaim(claim);
+                return true;
+            }
+
             status.RecordScanCompleted(result.Status);
 
             if (result.Status == SecurityStatus.Flagged)
@@ -162,8 +168,10 @@ public sealed class PackageSecurityWorker(
         {
             logger.LogWarning(ex, "Security scan failed for {PackageName} revision {RevisionId}; marking as Error.",
                 claim.PackageName, claim.RevisionId);
-            await MarkScanErrorQuietlyAsync(claim);
-            status.RecordScanErrored();
+            if (await TryMarkScanErrorAsync(claim))
+                status.RecordScanErrored();
+            else
+                LogStaleClaim(claim);
         }
 
         return true;
@@ -182,17 +190,26 @@ public sealed class PackageSecurityWorker(
         }
     }
 
-    private async Task MarkScanErrorQuietlyAsync(PackageSecurityScanDocument claim)
+    private async Task<bool> TryMarkScanErrorAsync(PackageSecurityScanDocument claim)
     {
         try
         {
-            await securityRepo.MarkScanErrorAsync(
+            return await securityRepo.MarkScanErrorAsync(
                 claim.PackageName, claim.RevisionId, _owner, scanner.PolicyVersion, CancellationToken.None);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to mark {PackageName} revision {RevisionId} as security Error.",
                 claim.PackageName, claim.RevisionId);
+            return false;
         }
+    }
+
+    private void LogStaleClaim(PackageSecurityScanDocument claim)
+    {
+        // A policy mismatch is normal during a rolling deployment, not a scan failure.
+        logger.LogInformation(
+            "Discarded security scan result for {PackageName} revision {RevisionId}: the claim became stale (lease lost or required policy version raised).",
+            claim.PackageName, claim.RevisionId);
     }
 }

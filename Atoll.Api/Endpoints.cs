@@ -135,6 +135,7 @@ public static class Endpoints
         [FromQuery(Name = "revision")] string? revision,
         [FromServices] IPackageRepository packages,
         [FromServices] IPackageSecurityRepository security,
+        [FromServices] IPackageSecurityScanner scanner,
         [FromServices] IOptions<AtollOptions> options)
     {
         if (!options.Value.Mutations.Enabled)
@@ -148,7 +149,7 @@ public static class Endpoints
         if (package.Revisions.All(r => r.RevisionId != revisionId))
             return TypedResults.NotFound();
 
-        await security.MarkPendingAsync(name, revisionId, revisionId == package.HeadRevisionId);
+        await security.MarkPendingAsync(name, revisionId, revisionId == package.HeadRevisionId, scanner.PolicyVersion);
         return TypedResults.Accepted($"/packages/{name}/security?revision={revisionId}");
     }
 

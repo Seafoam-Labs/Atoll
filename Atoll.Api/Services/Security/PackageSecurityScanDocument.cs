@@ -29,6 +29,8 @@ public sealed record PackageSecurityScanDocument
 
     [BsonElement("policyVersion")] public int? PolicyVersion { get; init; }
 
+    [BsonElement("requiredPolicyVersion")] public int? RequiredPolicyVersion { get; init; }
+
     [BsonElement("scannedAt")] public DateTimeOffset? ScannedAt { get; init; }
 
     [BsonElement("leaseUntil")] public DateTimeOffset? LeaseUntil { get; init; }

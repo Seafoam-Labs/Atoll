@@ -1,6 +1,7 @@
 @rendermode InteractiveServer
 @inject DirectPackageSeeder Seeder
 @inject IPackageSecurityRepository SecurityRepository
+@inject IPackageSecurityScanner SecurityScanner
 @inject PackageCatalogService Catalog
 @inject NavigationManager Navigation
 @inject IOptions<AtollOptions> Atoll
@@ -92,7 +93,7 @@
         _error = null;
         try
         {
-            await SecurityRepository.MarkPendingAsync(Name, HeadRevisionId, isHead: true);
+            await SecurityRepository.MarkPendingAsync(Name, HeadRevisionId, isHead: true, SecurityScanner.PolicyVersion);
             Catalog.InvalidateSnapshot();
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }

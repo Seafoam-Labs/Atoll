@@ -9,6 +9,7 @@ public sealed class PackageService(
     IPackageRepository repo,
     IOptions<AtollOptions> options,
     IPackageSecurityRepository securityRepository,
+    IPackageSecurityScanner scanner,
     IGitRepositoryCache gitCache) : IPackageService
 {
     private readonly AtollOptions _options = options.Value;
@@ -77,7 +78,7 @@ public sealed class PackageService(
         };
 
         await repo.InsertSeedAsync(doc, snapshot.Content);
-        await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true);
+        await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true, scanner.PolicyVersion);
     }
 
     public async Task<bool> AppendRevisionFromUpstreamAsync(
@@ -99,7 +100,7 @@ public sealed class PackageService(
 
         await repo.AppendRevisionAsync(packageName, snapshot.Content, _options.Mongo.MaxRevisions, ct);
 
-        await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true, ct);
+        await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true, scanner.PolicyVersion, ct);
         await securityRepository.PromoteHeadAsync(packageName, snapshot.RevisionId, ct);
 
         return true;

@@ -49,11 +49,11 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
         await SeedPackageAsync(packages);
-        await security.MarkPendingAsync("pkg", "rev-1", true);
+        await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
         if (status != SecurityStatus.Pending)
         {
             var result = new ScanResult(status, []);
-            _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+            _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
             await security.CompleteScanAsync(
                 "pkg", "rev-1", "test", result, PkgBuildSecurityScanner.CurrentPolicyVersion);
         }
@@ -83,7 +83,7 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         await SeedPackageAsync(packages);
         var security = new InMemoryPackageSecurityRepository();
-        await security.MarkPendingAsync("pkg", "rev-1", true);
+        await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
 
         var result = await Create(packages, security, false).CheckAsync("pkg");
 
@@ -108,13 +108,13 @@ public class PackageSecurityAccessTests
             },
             10);
 
-        await security.MarkPendingAsync("pkg", "rev-1", false);
-        await security.MarkPendingAsync("pkg", "rev-2", true);
-        _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await security.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await security.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
         await security.CompleteScanAsync(
             "pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);
-        _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
         await security.CompleteScanAsync(
             "pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);

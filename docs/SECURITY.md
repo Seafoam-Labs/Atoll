@@ -194,17 +194,24 @@ ids visible in historical documents.
 The persisted `Pending` state is the durable work queue — there is no in-process queue:
 
 1. A new revision is seeded or a rescan is requested (`POST /packages/{name}/security/rescan`, optionally
-   `?revision={sha}`); both call `MarkPendingAsync`, which upserts the `(package, revision)` document to `Pending`
-   and clears prior findings/lease. On public instances set `Atoll:Mutations:Enabled=false` to make the rescan
-   endpoint return `403` and hide the UI button (this also applies to the seed and delete endpoints).
+   `?revision={sha}`); both call `MarkPendingAsync`, which upserts the `(package, revision)` document to `Pending`,
+   clears prior findings/lease, and stamps `requiredPolicyVersion` with the enqueuing scanner's current policy
+   version (monotonic: an existing requirement is never lowered). On public instances set
+   `Atoll:Mutations:Enabled=false` to make the rescan endpoint return `403` and hide the UI button (this also applies
+   to the seed and delete endpoints).
 2. `PackageSecurityWorker` runs `ScannerConcurrency` poll loops. Each atomically (`FindOneAndUpdate`) leases one
-   `Pending` document whose lease has expired or is unset, stamping `leaseUntil = now + 5m`.
+   `Pending` document whose lease has expired or is unset **and whose `requiredPolicyVersion` the worker's policy
+   satisfies**, stamping `leaseUntil = now + 5m`. An older worker can never claim work that a newer deployment
+   marked as requiring a newer policy.
 3. The worker re-reads the claimed revision. If it is no longer retained (aged out of `MaxRevisions`, or the package
    was deleted) the claim is deleted — a result must never be written for content that can no longer be served.
-4. Otherwise the files are scanned and the result written with `CompleteScanAsync`, guarded by `(id, leaseOwner)` so
-   only the claim owner can complete it. The claim is keyed by revision, so a head swap mid-scan does not disturb
-   the in-flight scan.
-5. If the scan throws, the revision is recorded `Error`.
+4. Otherwise the files are scanned and the result written with `CompleteScanAsync`, guarded by
+   `(id, pending, leaseOwner, requiredPolicyVersion <= worker policy)` so only the claim owner can complete it and a
+   requirement raised mid-scan rejects the write. The method returns whether MongoDB modified a document; on a
+   rejected (stale) write the worker logs the discarded result and does not count it as completed or errored — a
+   policy mismatch during rollout is expected, not a scan failure. The claim is keyed by revision, so a head swap
+   mid-scan does not disturb the in-flight scan.
+5. If the scan throws, the revision is recorded `Error` through the same fenced write.
 
 Leases make the queue crash-safe: if a worker dies mid-scan, the lease expires and another worker (or the same
 instance after restart) reclaims it after 5 minutes.
@@ -215,15 +222,26 @@ Persisted results are stamped with a monotonically increasing integer policy ver
 (`PkgBuildSecurityScanner.CurrentPolicyVersion`, stored as `policyVersion`). Increment it whenever a scanner change
 requires existing verdicts to be recomputed; versions must never be reused or decremented.
 
+Every pending document additionally carries `requiredPolicyVersion` — the minimum scanner policy allowed to claim
+and persist it. It is retained after completion and only ever raised (`$max` semantics in both enqueue and
+reconciliation, so an older reconciler cannot lower work a newer one already claimed). A missing value is treated as
+legacy/unconstrained during the rollout; every enqueue path and reconciliation populates it.
+
 On startup, before polling, the worker:
 
-1. **Requeues outdated scans** (`RequeueOutdatedAsync`): one `UpdateManyAsync` resetting every non-`Pending`
-   document whose `policyVersion` is null (legacy) or lower than the current version back to `Pending`, clearing
-   findings, timestamps, and leases. Results from a *newer* policy are preserved, so an older worker cannot downgrade
-   them during a rolling deployment.
+1. **Requeues outdated scans** (`RequeueOutdatedAsync`): completed/`Error` documents whose `policyVersion` is null
+   (legacy) or lower than the current version are reset to `Pending` (clearing findings, timestamps, and leases) and
+   their requirement raised to the current version; pending documents whose `requiredPolicyVersion` is null or lower
+   are raised to the current version and their lease cleared. Clearing a lease fences a lower-version worker that
+   claimed the document before the requirement was raised. Results from a *newer* policy and requirements already
+   above the current version are preserved, so an older worker cannot downgrade them during a rolling deployment.
 2. **Backfills missing scan documents** (`EnsureExistingPackagesArePendingAsync`): computes the set difference
    between seeded packages and existing scan documents and upserts a `Pending` entry only for the missing ones —
    without overwriting completed scans.
+
+Startup reconciliation plus claim/completion fencing covers the rolling-deployment race: a stale result written
+before reconciliation is requeued by it, a result written after the requirement was raised is rejected by the
+completion fence, and an older policy-aware reconciler cannot lower a newer requirement.
 
 Configuration is validated by Data Annotations at startup. The worker is a hosted service registered in
 `Program.cs`; it starts with the API and stops on shutdown.

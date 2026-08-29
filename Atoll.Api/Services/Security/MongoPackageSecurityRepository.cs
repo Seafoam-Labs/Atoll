@@ -94,42 +94,64 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
 
     public async Task<long> RequeueOutdatedAsync(int currentPolicyVersion, CancellationToken ct = default)
     {
-        var filter = Builders<PackageSecurityScanDocument>.Filter.And(
-            Builders<PackageSecurityScanDocument>.Filter.Ne(x => x.Status, SecurityStatus.Pending),
-            Builders<PackageSecurityScanDocument>.Filter.Or(
-                Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.PolicyVersion, null),
-                Builders<PackageSecurityScanDocument>.Filter.Lt(x => x.PolicyVersion, currentPolicyVersion)
-            )
-        );
+        var filter = Builders<PackageSecurityScanDocument>.Filter;
+        var outdatedResult = filter.And(
+            filter.Ne(x => x.Status, SecurityStatus.Pending),
+            filter.Or(
+                filter.Eq(x => x.PolicyVersion, null),
+                filter.Lt(x => x.PolicyVersion, currentPolicyVersion)));
+        long modified = 0;
 
-        var update = Builders<PackageSecurityScanDocument>.Update
-            .Set(x => x.Status, SecurityStatus.Pending)
-            .Set(x => x.Findings, [])
-            .Unset(x => x.PolicyVersion)
-            .Unset(x => x.ScannedAt)
-            .Unset(x => x.LeaseUntil)
-            .Unset(x => x.LeaseOwner);
+        // Completed results whose outcome predates the current policy: requeue and raise the
+        // requirement to the current version. Max semantics: a requirement already at or above
+        // the current version is kept untouched so an older reconciler cannot lower newer work.
+        var raiseRequirement = await _scans.UpdateManyAsync(
+            filter.And(outdatedResult, filter.Or(
+                filter.Eq(x => x.RequiredPolicyVersion, null),
+                filter.Lt(x => x.RequiredPolicyVersion, currentPolicyVersion))),
+            PendingResetUpdate().Max(x => x.RequiredPolicyVersion, currentPolicyVersion),
+            cancellationToken: ct);
+        modified += raiseRequirement.ModifiedCount;
 
-        var result = await _scans.UpdateManyAsync(filter, update, cancellationToken: ct);
-        return result.ModifiedCount;
+        var keepRequirement = await _scans.UpdateManyAsync(
+            filter.And(outdatedResult, filter.Gte(x => x.RequiredPolicyVersion, currentPolicyVersion)),
+            PendingResetUpdate(),
+            cancellationToken: ct);
+        modified += keepRequirement.ModifiedCount;
+
+        // Pending documents whose requirement predates the current policy: raise the requirement
+        // and clear the lease, fencing a lower-version worker that claimed before the requirement rose.
+        var raisePending = await _scans.UpdateManyAsync(
+            filter.And(
+                filter.Eq(x => x.Status, SecurityStatus.Pending),
+                filter.Or(
+                    filter.Eq(x => x.RequiredPolicyVersion, null),
+                    filter.Lt(x => x.RequiredPolicyVersion, currentPolicyVersion))),
+            Builders<PackageSecurityScanDocument>.Update
+                .Max(x => x.RequiredPolicyVersion, currentPolicyVersion)
+                .Unset(x => x.LeaseUntil)
+                .Unset(x => x.LeaseOwner),
+            cancellationToken: ct);
+        modified += raisePending.ModifiedCount;
+
+        return modified;
     }
 
     public async Task MarkPendingAsync(
         string packageName,
         string revisionId,
         bool isHead,
+        int requiredPolicyVersion,
         CancellationToken ct = default)
     {
-        var update = Builders<PackageSecurityScanDocument>.Update
+        // $max gives monotonic semantics in a single atomic update: an existing requirement at or
+        // above the requested version is kept, everything else is raised. The upsert never raises
+        // a duplicate-key conflict because it only fires when no document with this id exists.
+        var update = PendingResetUpdate()
             .SetOnInsert(x => x.PackageName, packageName)
             .SetOnInsert(x => x.RevisionId, revisionId)
             .Set(x => x.IsHead, isHead)
-            .Set(x => x.Status, SecurityStatus.Pending)
-            .Set(x => x.Findings, [])
-            .Unset(x => x.PolicyVersion)
-            .Unset(x => x.ScannedAt)
-            .Unset(x => x.LeaseUntil)
-            .Unset(x => x.LeaseOwner);
+            .Max(x => x.RequiredPolicyVersion, requiredPolicyVersion);
 
         await _scans.UpdateOneAsync(
             x => x.Id == PackageSecurityScanDocument.ComposeId(packageName, revisionId),
@@ -142,6 +164,7 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         string packageName,
         string revisionId,
         bool isHead,
+        int requiredPolicyVersion,
         CancellationToken ct = default)
     {
         var update = Builders<PackageSecurityScanDocument>.Update
@@ -149,7 +172,8 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             .SetOnInsert(x => x.RevisionId, revisionId)
             .SetOnInsert(x => x.IsHead, isHead)
             .SetOnInsert(x => x.Status, SecurityStatus.Pending)
-            .SetOnInsert(x => x.Findings, []);
+            .SetOnInsert(x => x.Findings, [])
+            .SetOnInsert(x => x.RequiredPolicyVersion, requiredPolicyVersion);
 
         await _scans.UpdateOneAsync(
             x => x.Id == PackageSecurityScanDocument.ComposeId(packageName, revisionId),
@@ -161,26 +185,30 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
     public async Task<PackageSecurityScanDocument?> TryClaimPendingScanAsync(
         string owner,
         TimeSpan leaseDuration,
+        int workerPolicyVersion,
         CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
-        var filter = Builders<PackageSecurityScanDocument>.Filter.And(
-            Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.Status, SecurityStatus.Pending),
-            Builders<PackageSecurityScanDocument>.Filter.Or(
-                Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.LeaseUntil, null),
-                Builders<PackageSecurityScanDocument>.Filter.Lt(x => x.LeaseUntil, now)));
+        var filter = Builders<PackageSecurityScanDocument>.Filter;
         var update = Builders<PackageSecurityScanDocument>.Update
             .Set(x => x.LeaseUntil, now.Add(leaseDuration))
             .Set(x => x.LeaseOwner, owner);
 
         return await _scans.FindOneAndUpdateAsync(
-            filter,
+            filter.And(
+                filter.Eq(x => x.Status, SecurityStatus.Pending),
+                filter.Or(
+                    filter.Eq(x => x.LeaseUntil, null),
+                    filter.Lt(x => x.LeaseUntil, now)),
+                filter.Or(
+                    filter.Eq(x => x.RequiredPolicyVersion, null),
+                    filter.Lte(x => x.RequiredPolicyVersion, workerPolicyVersion))),
             update,
             new FindOneAndUpdateOptions<PackageSecurityScanDocument> { ReturnDocument = ReturnDocument.After },
             ct);
     }
 
-    public async Task CompleteScanAsync(
+    public async Task<bool> CompleteScanAsync(
         string packageName,
         string revisionId,
         string owner,
@@ -188,10 +216,6 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         int policyVersion,
         CancellationToken ct = default)
     {
-        var filter = Builders<PackageSecurityScanDocument>.Filter.And(
-            Builders<PackageSecurityScanDocument>.Filter.Eq(
-                x => x.Id, PackageSecurityScanDocument.ComposeId(packageName, revisionId)),
-            Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.LeaseOwner, owner));
         var update = Builders<PackageSecurityScanDocument>.Update
             .Set(x => x.Status, result.Status)
             .Set(x => x.Findings, [.. result.Findings])
@@ -200,20 +224,16 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             .Unset(x => x.LeaseUntil)
             .Unset(x => x.LeaseOwner);
 
-        await _scans.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return await UpdateClaimedScanAsync(packageName, revisionId, owner, policyVersion, update, ct);
     }
 
-    public async Task MarkScanErrorAsync(
+    public async Task<bool> MarkScanErrorAsync(
         string packageName,
         string revisionId,
         string owner,
         int policyVersion,
         CancellationToken ct = default)
     {
-        var filter = Builders<PackageSecurityScanDocument>.Filter.And(
-            Builders<PackageSecurityScanDocument>.Filter.Eq(
-                x => x.Id, PackageSecurityScanDocument.ComposeId(packageName, revisionId)),
-            Builders<PackageSecurityScanDocument>.Filter.Eq(x => x.LeaseOwner, owner));
         var update = Builders<PackageSecurityScanDocument>.Update
             .Set(x => x.Status, SecurityStatus.Error)
             .Set(x => x.Findings, [])
@@ -222,7 +242,34 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             .Unset(x => x.LeaseUntil)
             .Unset(x => x.LeaseOwner);
 
-        await _scans.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return await UpdateClaimedScanAsync(packageName, revisionId, owner, policyVersion, update, ct);
+    }
+
+    /// <summary>
+    ///     Persists a terminal scan state only while the caller still owns a pending claim whose
+    ///     required policy version it satisfies. Reconciliation can raise the requirement while a
+    ///     scan is running, so claiming alone cannot fence the write.
+    /// </summary>
+    private async Task<bool> UpdateClaimedScanAsync(
+        string packageName,
+        string revisionId,
+        string owner,
+        int policyVersion,
+        UpdateDefinition<PackageSecurityScanDocument> update,
+        CancellationToken ct)
+    {
+        var filter = Builders<PackageSecurityScanDocument>.Filter;
+        var result = await _scans.UpdateOneAsync(
+            filter.And(
+                filter.Eq(x => x.Id, PackageSecurityScanDocument.ComposeId(packageName, revisionId)),
+                filter.Eq(x => x.Status, SecurityStatus.Pending),
+                filter.Eq(x => x.LeaseOwner, owner),
+                filter.Or(
+                    filter.Eq(x => x.RequiredPolicyVersion, null),
+                    filter.Lte(x => x.RequiredPolicyVersion, policyVersion))),
+            update,
+            cancellationToken: ct);
+        return result.ModifiedCount > 0;
     }
 
     public async Task ReleaseScanClaimAsync(
@@ -274,13 +321,27 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         await _scans.DeleteManyAsync(x => x.PackageName == packageName, ct);
     }
 
+    /// <summary>Resets result and lease fields, moving a document back to the pending queue.</summary>
+    private static UpdateDefinition<PackageSecurityScanDocument> PendingResetUpdate()
+    {
+        return Builders<PackageSecurityScanDocument>.Update
+            .Set(x => x.Status, SecurityStatus.Pending)
+            .Set(x => x.Findings, [])
+            .Unset(x => x.PolicyVersion)
+            .Unset(x => x.ScannedAt)
+            .Unset(x => x.LeaseUntil)
+            .Unset(x => x.LeaseOwner);
+    }
+
     private void EnsureIndexes()
     {
         var keys = Builders<PackageSecurityScanDocument>.IndexKeys;
         _scans.Indexes.CreateMany(
         [
+            // Serves the policy-aware pending claim: workers scan (status, requiredPolicyVersion,
+            // leaseUntil) and only claim work their policy version satisfies.
             new CreateIndexModel<PackageSecurityScanDocument>(
-                keys.Ascending(x => x.Status).Ascending(x => x.LeaseUntil)),
+                keys.Ascending(x => x.Status).Ascending(x => x.RequiredPolicyVersion).Ascending(x => x.LeaseUntil)),
             new CreateIndexModel<PackageSecurityScanDocument>(
                 keys.Ascending(x => x.PackageName).Ascending(x => x.IsHead)),
             new CreateIndexModel<PackageSecurityScanDocument>(
@@ -290,5 +351,16 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
             new CreateIndexModel<PackageSecurityScanDocument>(
                 keys.Ascending(x => x.IsHead).Ascending(x => x.Status))
         ]);
+
+        // The pre-policy-aware claim index (status, leaseUntil) is superseded; drop it when an
+        // older deployment left it behind.
+        try
+        {
+            _scans.Indexes.DropOne("status_1_leaseUntil_1");
+        }
+        catch (MongoCommandException)
+        {
+            // IndexNotFound — nothing to clean up.
+        }
     }
 }

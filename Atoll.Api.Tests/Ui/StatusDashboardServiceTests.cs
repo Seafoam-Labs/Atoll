@@ -71,7 +71,7 @@ public class StatusDashboardServiceTests
     {
         var store = IndexWithPackages(Meta("one"), Meta("two"), Meta("three"));
         var security = new InMemoryPackageSecurityRepository();
-        await security.MarkPendingAsync("one", "rev-1", true);
+        await security.MarkPendingAsync("one", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
         var exclusions = new InMemorySeedExclusionRepository();
         await exclusions.RecordDocumentTooLargeAsync("big-base", ["big-base"], 20_000_000);
 

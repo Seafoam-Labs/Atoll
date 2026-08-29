@@ -49,7 +49,7 @@ public class GitRepositoryMaterializationTests
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        return (new PackageService(repo, options, security, cache), cache, security, reposRoot);
+        return (new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache), cache, security, reposRoot);
     }
 
     [SetUp]
@@ -169,7 +169,7 @@ public class GitRepositoryMaterializationTests
         });
         var security = new InMemoryPackageSecurityRepository();
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repo, options, security, cache);
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 
@@ -209,7 +209,7 @@ public class GitRepositoryMaterializationTests
 
             // Rescan the flagged head to Verified; the marker must change and the lazy
             // rebuild must restore the revision to the cloneable history.
-            await security.MarkPendingAsync("shelly", flaggedRevision, true);
+            await security.MarkPendingAsync("shelly", flaggedRevision, true, PkgBuildSecurityScanner.CurrentPolicyVersion);
             await security.MarkHeadVerifiedAsync("shelly");
 
             await cache.EnsureRepositoryAsync("shelly");
@@ -339,7 +339,7 @@ public class GitRepositoryMaterializationTests
         });
         var hidingRepo = new RevisionHidingRepository(repo, "rev-1");
         var cache = new GitRepositoryCache(hidingRepo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(hidingRepo, options, security, cache);
+        var service = new PackageService(hidingRepo, options, security, new PkgBuildSecurityScanner(), cache);
         try
         {
             await repo.InsertSeedAsync(
@@ -375,9 +375,9 @@ public class GitRepositoryMaterializationTests
                 }
             }, 10);
 
-            await security.MarkPendingAsync("pkg", "rev-1", true);
+            await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
             await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
-            await security.MarkPendingAsync("pkg", "rev-2", true);
+            await security.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
             await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
 
             await cache.EnsureRepositoryAsync("pkg");

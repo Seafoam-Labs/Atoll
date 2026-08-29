@@ -26,7 +26,7 @@ public class PackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         });
-        return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
     }
 
     [Test]
@@ -104,7 +104,7 @@ public class PackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 1_024, MaxRevisions = 10 }
         });
-        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
 
         var big = new Dictionary<string, string>
         {
@@ -125,7 +125,7 @@ public class PackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         var files = new Dictionary<string, string>
         {
             ["large-1.txt"] = new('x', 9_000_000),
@@ -151,7 +151,7 @@ public class PackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         await service.SeedFilesAsync("pkg", SampleFiles);
         var history = await service.GetHistoryAsync("pkg");
         var originalHead = history[0].Sha;
@@ -253,7 +253,7 @@ public class PackageServiceTests
         {
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
-        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
         var files = new Dictionary<string, string>
         {
             ["large-1.txt"] = new('x', perFile),
@@ -284,9 +284,9 @@ public class PackageServiceTests
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repo, options, security, cache);
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
         var failingOnce = new ThrowOnceOnDeleteRepository(repo);
-        var retryService = new PackageService(failingOnce, options, security, cache);
+        var retryService = new PackageService(failingOnce, options, security, new PkgBuildSecurityScanner(), cache);
 
         try
         {

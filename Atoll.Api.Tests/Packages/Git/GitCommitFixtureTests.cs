@@ -72,7 +72,7 @@ public class GitCommitFixtureTests
                 Git = new GitOptions { RepositoriesPath = reposRoot }
             });
             var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-            var service = new PackageService(repo, options, security, cache);
+            var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
 
             await InsertVerifiedHistoryAsync(repo, security);
             await cache.EnsureRepositoryAsync("fixture");
@@ -155,7 +155,7 @@ public class GitCommitFixtureTests
 
     private static async Task VerifyAsync(InMemoryPackageSecurityRepository security, string revisionId)
     {
-        await security.MarkPendingAsync("fixture", revisionId, true);
+        await security.MarkPendingAsync("fixture", revisionId, true, PkgBuildSecurityScanner.CurrentPolicyVersion);
         // Claims the just-marked pending scan and completes it Verified, like the scan worker.
         await security.CompleteScanAsync("fixture", SecurityStatus.Verified);
     }

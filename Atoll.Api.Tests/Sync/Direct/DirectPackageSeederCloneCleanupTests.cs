@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Sync.Direct;
@@ -34,7 +35,7 @@ public class DirectPackageSeederCloneCleanupTests
         });
         var security = new InMemoryPackageSecurityRepository();
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repo, options, security, cache);
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
         var seeder = new DirectPackageSeeder(repo, new PackageIndexStore(), new AurGitPackageSource(), service);
 
         // A space in the package name makes the clone URL malformed, which git rejects

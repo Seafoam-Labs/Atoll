@@ -124,7 +124,7 @@ public class PackageCatalogServiceTests
     public async Task SecurityFilterNarrowsToSeededPackagesWithMatchingHeadStatus()
     {
         _seededNames = ["shelly-bin"];
-        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-1", isHead: true);
+        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-1", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion);
 
         var pending = await CreateService().SearchAsync(
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Pending,
@@ -138,7 +138,7 @@ public class PackageCatalogServiceTests
         Assert.That(pending.Rows.Single().Head!.Status, Is.EqualTo(SecurityStatus.Pending));
         Assert.That(verifiedBefore.Rows, Is.Empty);
 
-        await _securityRepository.TryClaimPendingScanAsync("owner", TimeSpan.FromMinutes(1));
+        await _securityRepository.TryClaimPendingScanAsync("owner", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _securityRepository.CompleteScanAsync(
             "shelly-bin", "rev-1", "owner", new ScanResult(SecurityStatus.Verified, []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);

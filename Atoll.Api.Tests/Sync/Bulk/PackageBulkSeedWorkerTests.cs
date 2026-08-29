@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Persistence;
@@ -63,7 +64,7 @@ public class PackageBulkSeedWorkerTests
         var options = Options.Create(BulkOptions());
         var security = new InMemoryPackageSecurityRepository();
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repo, options, security, cache);
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
         var seeder = new DirectPackageSeeder(repo, store, new AurGitPackageSource(), service);
         exclusions ??= new InMemorySeedExclusionRepository();
         return new PackageBulkSeedWorker(
@@ -205,7 +206,7 @@ public class PackageBulkSeedWorkerTests
         var repo = new InMemoryPackageRepository();
         var options = Options.Create(BulkOptions());
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, options, security,
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(),
             new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance));
         await service.SeedFilesAsync("shelly", BaseFiles); // pre-seeded
 

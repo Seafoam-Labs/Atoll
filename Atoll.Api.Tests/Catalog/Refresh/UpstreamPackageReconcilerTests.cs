@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Catalog.Indexing;
@@ -31,7 +32,7 @@ public class UpstreamPackageReconcilerTests
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
         var cache = new GitRepositoryCache(repository, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repository, options, security, cache);
+        var service = new PackageService(repository, options, security, new PkgBuildSecurityScanner(), cache);
         var reconciler = new UpstreamPackageReconciler(
             service,
             options,
@@ -77,7 +78,7 @@ public class UpstreamPackageReconcilerTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = string.Empty }
         });
-        var service = new PackageService(repository, options, security, new GitRepositoryCache(repository, security, options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repository, options, security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repository, security, options, NullLogger<GitRepositoryCache>.Instance));
         var reconciler = new UpstreamPackageReconciler(
             service,
             options,
@@ -108,7 +109,7 @@ public class UpstreamPackageReconcilerTests
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
             Git = new GitOptions { RepositoriesPath = string.Empty }
         });
-        var service = new PackageService(repository, options, security, new GitRepositoryCache(repository, security, options, NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repository, options, security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repository, security, options, NullLogger<GitRepositoryCache>.Instance));
         var reconciler = new UpstreamPackageReconciler(
             service,
             options,

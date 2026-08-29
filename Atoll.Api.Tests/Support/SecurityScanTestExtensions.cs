@@ -14,7 +14,7 @@ internal static class SecurityScanTestExtensions
         SecurityStatus status,
         params SecurityFinding[] findings)
     {
-        var claim = await security.TryClaimPendingScanAsync("test-owner", TimeSpan.FromMinutes(1))
+        var claim = await security.TryClaimPendingScanAsync("test-owner", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion)
             ?? throw new InvalidOperationException("expected a pending scan to be claimable");
         await security.CompleteScanAsync(packageName, claim.RevisionId, "test-owner",
             new ScanResult(status, [.. findings]), PkgBuildSecurityScanner.CurrentPolicyVersion);

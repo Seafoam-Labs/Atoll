@@ -313,8 +313,8 @@ public class PackageDetailsServiceTests
         if (status is null)
             return;
 
-        await _securityRepository.MarkPendingAsync(Name, sha, isHead: true);
-        var claim = await _securityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1));
+        await _securityRepository.MarkPendingAsync(Name, sha, isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        var claim = await _securityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _securityRepository.CompleteScanAsync(
             Name, sha, claim!.LeaseOwner!, new ScanResult(status.Value, []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);

@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Security;
 using System.Net;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Tests.Support;
@@ -68,7 +69,7 @@ public class StatusPageTests
     public async Task StatusPageRendersOverviewStatsAndWorkerCards()
     {
         await _factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-        await _factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true);
+        await _factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _factory.SeedExclusions.RecordDocumentTooLargeAsync("huge-base", ["huge-base"], 20_000_000);
 
         var response = await _client.GetAsync("/status");

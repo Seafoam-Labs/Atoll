@@ -78,7 +78,9 @@ flowchart TD
   revisions only when content changes. Shares the mirror cache with Bulk seeding.
 - **PackageSecurityWorker:** Scans newly seeded or refreshed revisions using deterministic static analysis, gating
   content and Git access until verified. On startup, automatically invalidates and requeues scan results from older
-  or unversioned policy versions.
+  or unversioned policy versions. The pending queue is policy-aware: each document carries the minimum scanner
+  policy that may claim and persist it, so a rolling deployment cannot let an older worker claim, complete, or
+  downgrade work that a newer policy already claimed.
 - **PackageSearchService:** Serves Atoll-native search queries in-memory from `PackageIndexStore` snapshots with zero
   database I/O.
 - **AurRpcService:** Maps the same immutable metadata snapshot to the aurweb RPC v5 contract used by yay and paru. It
@@ -123,7 +125,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
     `{packageName}:{revisionId}`). History length does not bloat root package documents; snapshots are capped by
     MongoDB's 16 MiB BSON limit.
   - `package-security-scans` — Security state and findings per revision (keyed by `{packageName}:{revisionId}`).
-    Indexed on `(status, leaseUntil)` for the scanner work queue and `(packageName, isHead)` for head lookups.
+    Indexed on `(status, requiredPolicyVersion, leaseUntil)` for the policy-aware scanner work queue and
+    `(packageName, isHead)` for head lookups.
   - `seed-exclusions` — Records pkgbases whose revision content exceeds the 16 MiB document limit, preventing endless
     retries during seed and refresh.
   - `aur-metadata` — Raw AUR metadata dump snapshots.

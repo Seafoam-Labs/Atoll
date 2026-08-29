@@ -103,25 +103,38 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
     {
         lock (_gate)
         {
-            var outdated = _scans.Values
-                .Where(scan => scan.Status != SecurityStatus.Pending
-                    && (scan.PolicyVersion is null || scan.PolicyVersion < currentPolicyVersion))
-                .ToList();
-
-            foreach (var scan in outdated)
+            long modified = 0;
+            foreach (var scan in _scans.Values.ToList())
             {
-                _scans[scan.Id] = scan with
+                if (scan.Status != SecurityStatus.Pending
+                    && (scan.PolicyVersion is null || scan.PolicyVersion < currentPolicyVersion))
                 {
-                    Status = SecurityStatus.Pending,
-                    Findings = [],
-                    PolicyVersion = null,
-                    ScannedAt = null,
-                    LeaseUntil = null,
-                    LeaseOwner = null
-                };
+                    _scans[scan.Id] = scan with
+                    {
+                        Status = SecurityStatus.Pending,
+                        Findings = [],
+                        PolicyVersion = null,
+                        ScannedAt = null,
+                        LeaseUntil = null,
+                        LeaseOwner = null,
+                        RequiredPolicyVersion = Math.Max(scan.RequiredPolicyVersion ?? 0, currentPolicyVersion)
+                    };
+                    modified++;
+                }
+                else if (scan.Status == SecurityStatus.Pending
+                    && (scan.RequiredPolicyVersion is null || scan.RequiredPolicyVersion < currentPolicyVersion))
+                {
+                    _scans[scan.Id] = scan with
+                    {
+                        RequiredPolicyVersion = currentPolicyVersion,
+                        LeaseUntil = null,
+                        LeaseOwner = null
+                    };
+                    modified++;
+                }
             }
 
-            return Task.FromResult((long)outdated.Count);
+            return Task.FromResult(modified);
         }
     }
 
@@ -129,19 +142,23 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         string packageName,
         string revisionId,
         bool isHead,
+        int requiredPolicyVersion,
         CancellationToken ct = default)
     {
         lock (_gate)
         {
-            _scans[PackageSecurityScanDocument.ComposeId(packageName, revisionId)] = new PackageSecurityScanDocument
+            var id = PackageSecurityScanDocument.ComposeId(packageName, revisionId);
+            var required = Math.Max(_scans.GetValueOrDefault(id)?.RequiredPolicyVersion ?? 0, requiredPolicyVersion);
+            _scans[id] = new PackageSecurityScanDocument
             {
-                Id = PackageSecurityScanDocument.ComposeId(packageName, revisionId),
+                Id = id,
                 PackageName = packageName,
                 RevisionId = revisionId,
                 IsHead = isHead,
                 Status = SecurityStatus.Pending,
                 Findings = [],
                 PolicyVersion = null,
+                RequiredPolicyVersion = required,
                 ScannedAt = null,
                 LeaseUntil = null,
                 LeaseOwner = null
@@ -154,6 +171,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         string packageName,
         string revisionId,
         bool isHead,
+        int requiredPolicyVersion,
         CancellationToken ct = default)
     {
         lock (_gate)
@@ -165,7 +183,8 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
                     PackageName = packageName,
                     RevisionId = revisionId,
                     IsHead = isHead,
-                    Status = SecurityStatus.Pending
+                    Status = SecurityStatus.Pending,
+                    RequiredPolicyVersion = requiredPolicyVersion
                 };
 
             return Task.CompletedTask;
@@ -175,13 +194,15 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
     public Task<PackageSecurityScanDocument?> TryClaimPendingScanAsync(
         string owner,
         TimeSpan leaseDuration,
+        int workerPolicyVersion,
         CancellationToken ct = default)
     {
         lock (_gate)
         {
             var pending = _scans.Values.FirstOrDefault(scan =>
                 scan.Status == SecurityStatus.Pending &&
-                (scan.LeaseUntil is null || scan.LeaseUntil < DateTimeOffset.UtcNow));
+                (scan.LeaseUntil is null || scan.LeaseUntil < DateTimeOffset.UtcNow) &&
+                (scan.RequiredPolicyVersion is null || scan.RequiredPolicyVersion <= workerPolicyVersion));
             if (pending is null)
                 return Task.FromResult<PackageSecurityScanDocument?>(null);
 
@@ -191,7 +212,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         }
     }
 
-    public Task CompleteScanAsync(
+    public Task<bool> CompleteScanAsync(
         string packageName,
         string revisionId,
         string owner,
@@ -202,7 +223,8 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         lock (_gate)
         {
             var id = PackageSecurityScanDocument.ComposeId(packageName, revisionId);
-            if (_scans.TryGetValue(id, out var scan) && scan.LeaseOwner == owner)
+            if (_scans.TryGetValue(id, out var scan) && IsClaimedBy(scan, owner, policyVersion))
+            {
                 _scans[id] = scan with
                 {
                     Status = result.Status,
@@ -212,12 +234,14 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
                     LeaseUntil = null,
                     LeaseOwner = null
                 };
+                return Task.FromResult(true);
+            }
 
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
     }
 
-    public Task MarkScanErrorAsync(
+    public Task<bool> MarkScanErrorAsync(
         string packageName,
         string revisionId,
         string owner,
@@ -227,7 +251,8 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         lock (_gate)
         {
             var id = PackageSecurityScanDocument.ComposeId(packageName, revisionId);
-            if (_scans.TryGetValue(id, out var scan) && scan.LeaseOwner == owner)
+            if (_scans.TryGetValue(id, out var scan) && IsClaimedBy(scan, owner, policyVersion))
+            {
                 _scans[id] = scan with
                 {
                     Status = SecurityStatus.Error,
@@ -237,9 +262,18 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
                     LeaseUntil = null,
                     LeaseOwner = null
                 };
+                return Task.FromResult(true);
+            }
 
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
+    }
+
+    private static bool IsClaimedBy(PackageSecurityScanDocument scan, string owner, int policyVersion)
+    {
+        return scan.Status == SecurityStatus.Pending
+            && scan.LeaseOwner == owner
+            && (scan.RequiredPolicyVersion is null || scan.RequiredPolicyVersion <= policyVersion);
     }
 
     public Task ReleaseScanClaimAsync(
