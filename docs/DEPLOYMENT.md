@@ -82,6 +82,15 @@ at startup.
 The current AWS deployment uses the VPC CIDR, a limit of `2`, and
 `CloudFront-Forwarded-Proto`. Its CloudFront policy forwards that generated header to the origin.
 
+## Transport security & response compression
+
+Atoll enables in-app response compression (Brotli/Gzip) for dynamic HTML and API responses. ASP.NET Core disables
+compression for HTTPS by default (`EnableForHttps = false`), which matches Atoll's standard deployment: TLS is
+terminated at the proxy/ALB and the proxy-to-Kestrel hop is plain HTTP, so compression applies without exposing
+CRIME/BREACH side channels. If TLS is ever terminated directly in Kestrel with `EnableForHttps = true`, pages
+containing per-user secrets or tokens need BREACH mitigations (randomized padding, antiforgery token masking);
+residual risk is low for the current public-metadata mirror.
+
 ## Decommissioning the old account
 
 The move is a fresh deploy — nothing is imported. When the new deployment is verified, tear down

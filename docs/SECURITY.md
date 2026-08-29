@@ -1,337 +1,230 @@
 # Package security scanning
 
-This document describes Atoll's package security scanning and gating. It is intended for maintainers changing a scanner
-rule, the scan worker, or the access gate, and for operators diagnosing why a package is blocked or never scanned.
+This document describes Atoll's package security scanning and gating. It is intended for maintainers changing a
+scanner rule, the scan worker, or the access gate, and for operators diagnosing why a package is blocked or never
+scanned.
 
 Seeded AUR content is user-submitted and can execute arbitrary shell at build or install time. Atoll never executes it;
-instead it runs deterministic static analysis on the stored files and gates read access to package content and Git on
-the result. Search and the package list are never gated — they only expose public AUR metadata.
+it runs deterministic static analysis on the stored files and gates read access to package content and Git on the
+result. Search, package lists, and version history are never gated — they only expose public AUR metadata.
 
-The application-level implementation is in:
+The implementation is in:
 
-- `Atoll.Api/Services/Security/PkgBuildSecurityScanner.cs` — thin facade: iterates files, delegates to the
-  components below, and reduces their findings into the final `ScanResult`.
-- `Atoll.Api/Services/Security/Scanning/ShellContentScanner.cs` — owns the rule set and the risky/privilege tool lists,
-  and runs the per-line scan loop (rule matching, tool detection, obfuscation escalation), quote-aware match
-  suppression, and heredoc body tracking.
+- `Atoll.Api/Services/Security/PkgBuildSecurityScanner.cs` — facade: iterates files, delegates to the components
+  below, reduces their findings into the final `ScanResult`.
+- `Atoll.Api/Services/Security/Scanning/ShellContentScanner.cs` — owns the rule set and the risky/privilege tool
+  lists; runs the per-line scan loop (rule matching, tool detection, obfuscation escalation, heredoc tracking).
 - `Atoll.Api/Services/Security/Scanning/ShellSyntax.cs` — shell-aware primitives shared across rules: comment
-  stripping, de-obfuscation normalization with a source map back to the original line, quote-region tracking,
-  tool-boundary matching, hidden-codepoint detection.
-- `Atoll.Api/Services/Security/Scanning/PkgBuildSourceUrlScanner.cs` — inspects `source=` declarations for suspicious
-  archive/executable URLs (PKGBUILD only).
-- `Atoll.Api/Services/Security/Scanning/HomographScanner.cs` — detects homograph spoofing in PKGBUILD metadata fields
-  (`pkgname`, `depends`, `makedepends`, `url`, `source`): hidden/invisible characters including combining marks,
-  Latin mixed with Cyrillic/Greek/Armenian, fullwidth ASCII lookalikes, and confusable-skeleton folding
-  (PKGBUILD only).
-- `Atoll.Api/Services/Security/Scanning/PackageBuildFileClassifier.cs` — decides which files are scannable
-  (`PKGBUILD` plus script-like companion extensions).
-- `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — classifies source files that contain binary
-  bytes: blocking `Critical` only for recognized executable formats (ELF, PE/`MZ`), non-blocking `Medium` for
-  archives, inert media, certificate/signature files, unencodable text, and other non-executable binary data
-  (applies to every file, not just script-like extensions).
-- `Atoll.Api/Services/Security/PackageSecurityWorker.cs`
-- `Atoll.Api/Services/Security/MongoPackageSecurityRepository.cs`
-- `Atoll.Api/Services/Security/PackageSecurityAccess.cs`
-- `Atoll.Api/Services/Security/PackageSecurityFilter.cs` (the `IEndpointFilter` that gates content routes)
-- `Atoll.Api/Endpoints.cs` (route registration; the content routes are grouped under
-  `AddEndpointFilter<PackageSecurityFilter>()`)
+  stripping, de-obfuscation normalization with a source map, quote-region tracking, tool-boundary matching,
+  hidden-codepoint detection.
+- `Atoll.Api/Services/Security/Scanning/PkgBuildSourceUrlScanner.cs` — inspects `source=` URLs (PKGBUILD only).
+- `Atoll.Api/Services/Security/Scanning/HomographScanner.cs` — detects homograph spoofing in PKGBUILD metadata
+  fields (PKGBUILD only).
+- `Atoll.Api/Services/Security/Scanning/PackageBuildFileClassifier.cs` — decides which files are scannable.
+- `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — classifies binary source files.
+- `Atoll.Api/Services/Security/PackageSecurityWorker.cs`, `MongoPackageSecurityRepository.cs`,
+  `PackageSecurityAccess.cs`, `PackageSecurityFilter.cs` (the `IEndpointFilter` gating content routes), and
+  `Endpoints.cs` (route registration).
 
-The `Scanning/` types are `internal static` and are covered by focused unit tests under
-`Atoll.Api.Tests/Security/Scanning/` (`ShellSyntaxTests`, `ShellContentScannerTests`, `HomographScannerTests`,
-`PkgBuildSourceUrlScannerTests`, `LocalSourceBinaryScannerTests`, `PackageBuildFileClassifierTests`). The facade
-itself is covered end-to-end by `Atoll.Api.Tests/Security/PkgBuildSecurityScannerTests`, which doubles as a regression
-fixture (it pins the behavior of a real-world `shelly` PKGBUILD).
+The `Scanning/` types are `internal static` with focused unit tests under `Atoll.Api.Tests/Security/Scanning/`; the
+facade is covered end-to-end by `PkgBuildSecurityScannerTests`, which doubles as a regression fixture on a real-world
+`shelly` PKGBUILD.
 
 ## Scope and threat model
 
 Atoll is a private, read-only AUR mirror. The security layer is **defense-in-depth static analysis**, not a shell
-sandbox or a guarantee that a package is safe. Concretely it defends against:
+sandbox. It detects:
 
-- Network downloads piped straight into a shell (`curl … | sh`).
-- Decoded or evaluated payloads run at build/install time (`base64 -d | bash`, `eval $(…)`).
-- Writes to system paths outside the build roots (`$pkgdir`/`$srcdir`), e.g. `> /etc/…`.
+- Downloads piped into a shell (`curl … | sh`) or an interpreter.
+- Decoded or evaluated payloads (`base64 -d | bash`, `eval $(…)`).
+- Writes outside the build roots (`> /etc/…`).
 - Privilege escalation (`sudo`, `doas`, `run0`, `su`, …).
-- Obfuscation intended to hide any of the above (quote-split tool names like `c''u''rl` and `c'u'rl`,
-  backslash-escaped tokens).
-- Homograph spoofing: hidden/invisible characters (zero-width, BOM, bidi overrides, control bytes) anywhere in script
-  content, and field-level checks on PKGBUILD metadata (`pkgname`, `depends`, `makedepends`, `url`, `source`) against
-  lookalike download hosts and typosquatted dependency names — invisible/combining characters, Latin mixed with
-  Cyrillic/Greek/Armenian, fullwidth ASCII, and ASCII-foldable confusables.
-- Suspicious source URLs pointing at raw executables/archives.
-- Local source files shipped as ELF executables or binary blobs, which cannot be reviewed as text.
+- Obfuscation hiding any of the above (quote-split tool names like `c''u''rl`, backslash escapes).
+- Homograph spoofing: hidden/invisible characters in script content, and lookalike metadata values
+  (`pkgname`, `depends`, `makedepends`, `url`, `source`) — invisible/combining characters, Latin mixed with
+  Cyrillic/Greek/Armenian, fullwidth ASCII, confusables.
+- Suspicious `source=` URLs pointing at raw executables/archives.
+- Local source files shipped as ELF executables or binary blobs.
 
-It does **not** defend against: malicious shell that avoids the matched patterns, malicious code hidden inside a binary
-(even though the binary itself is now flagged on presence), supply-chain compromise of upstream sources, or anything
-that only becomes dangerous after the package is actually built and installed. Treat `Verified` as "no obvious red
-flags", never as "safe".
+It does **not** defend against: malicious shell that avoids the matched patterns, malicious code hidden inside a
+binary, supply-chain compromise of upstream sources, or anything that only becomes dangerous after the package is
+built and installed. Treat `Verified` as "no obvious red flags", never as "safe".
 
-When security is disabled (`Atoll:Security:Enabled=false`) every package is served regardless of status, including
-packages that were previously `Flagged`. Disabling the feature is a bypass, not a relaxed mode.
+With `Atoll:Security:Enabled=false` every package is served regardless of status, including previously `Flagged`
+ones. Disabling the feature is a bypass, not a relaxed mode.
 
 ## Status model
 
-Each retained package revision has its own security-state document in the `package-security-scans` collection, keyed by
-the composite id `{packageName}:{revisionId}`. Revision IDs hash the package name plus ordinally sorted file names and
-per-file hashes, so the same normalized snapshot for one package maps to the same ID. A new head revision gets a fresh
-`Pending` document; previous revisions keep their own scan state, so a flagged revision blocks only itself. Each
-document also carries a denormalized `isHead` flag, allowing the gate to resolve the head scan without reading the
-`packages` collection. The status is one of:
+Each retained package revision has a scan-state document in the `package-security-scans` collection, keyed by
+`{packageName}:{revisionId}`. Revision IDs hash the package name plus sorted file names and per-file hashes, so the
+same normalized snapshot maps to the same ID. A new head revision gets a fresh `Pending` document; previous revisions
+keep their own state, so a flagged revision blocks only itself. Documents carry a denormalized `isHead` flag so the
+gate can resolve the head scan without reading `packages`.
 
 | Status | Meaning | Content served? |
 | --- | --- | --- |
-| `Pending` | No successful scan yet for that revision (newly seeded, re-scanned, or leased). | **Blocked** |
-| `Verified` | The scan completed with no Critical/High findings. | Allowed |
-| `Flagged` | The scan completed with at least one Critical or High finding. | **Blocked** |
-| `Error` | The scan threw; the revision must not be served until a successful re-scan. | **Blocked** |
+| `Pending` | No successful scan yet (newly seeded, re-scanned, or leased). | **Blocked** |
+| `Verified` | Scan completed with no Critical/High findings. | Allowed |
+| `Flagged` | Scan completed with at least one Critical or High finding. | **Blocked** |
+| `Error` | Scan threw; blocked until a successful re-scan. | **Blocked** |
 
-Findings are stored alongside the status. Severity ordering is `Info < Low < Medium < High < Critical`. Only `Critical`
-and `High` flip a revision to `Flagged`; `Medium` and below are retained for review but do not block serving. The
-status-to-decision mapping lives in `PackageSecurityAccess.CheckAsync` and is the single place that decides whether
-content is served.
-
-Package content documents are deliberately left free of scanner and worker metadata: leases, owners, and findings live
-only in `package-security-scans`.
+Severity ordering is `Info < Low < Medium < High < Critical`; only `Critical` and `High` flip a revision to
+`Flagged`. The status-to-decision mapping lives in `PackageSecurityAccess.CheckAsync` and is the single place that
+decides whether content is served. Leases, owners, and findings live only in `package-security-scans`; package
+content documents stay free of scanner metadata.
 
 ## Scanner
 
-`PkgBuildSecurityScanner` is deterministic and side-effect free: the same input always yields the same findings, and it
-executes no code. Every file is first checked for binary content — ELF magic, NUL/control bytes, or undecodable UTF-8 —
-because a binary source file cannot be reviewed as text and may hide malicious code. The severity depends on what the
-content looks like: ELF executables and unrecognized binaries stay `Critical` (blocking), while content that cannot
-execute on its own — recognized media/data magic bytes, certificate/signature files, and text whose only binary
-indicator is undecodable bytes — is emitted as a non-blocking `Medium` finding (see the `local-binary` notes below).
-Script-like files (the `PKGBUILD` plus companions `.sh`, `.bash`, `.install`, `.hook`, `.py`, `.pl`, `.rb`, `.service`,
-`.csh`, `.zsh`) are then scanned line by line for shell threats. Remaining non-script, non-binary files (patches, etc.)
-are ignored.
+`PkgBuildSecurityScanner` is deterministic and side-effect free: same input, same findings, no code executed. Every
+file is first checked for binary content (whole-file, regardless of extension): recognized executable formats (ELF,
+PE/`MZ`) are `Critical`, any other binary content — archives, inert media, certificate/signature files, undecodable
+text — is a non-blocking `Medium` (`local-binary`). Script-like files (the `PKGBUILD` plus `.sh`, `.bash`, `.install`,
+`.hook`, `.py`, `.pl`, `.rb`, `.service`, `.csh`, `.zsh`) are then scanned line by line; other text files are ignored.
 
-Each script file is processed line by line. Shell comments are stripped first (honoring single- and double-quote state),
-then the line is **de-obfuscated** by collapsing quote-splitting (`c''u''rl` → `curl`), stripping quotes that sit
-between two word characters (`c'u'rl` → `curl` — the shell's quote removal makes these part of the word), and dropping
-intra-word backslash escapes. Quotes at word edges are kept: `'npm'` stays a quoted string (display/argument text),
-not an invocation. Every rule is matched against both the raw line and the de-obfuscated probe:
+Each script line is processed as follows:
 
-- If a rule matches only on the de-obfuscated probe, the invocation was deliberately hidden and the finding is escalated
-  to `Critical`.
-- If it matches on both, the rule's normal severity applies.
+1. Shell comments are stripped, honoring single- and double-quote state.
+2. The line is **de-obfuscated**: quote-splitting is collapsed (`c''u''rl` → `curl`), intra-word quotes
+   (`c'u'rl` → `curl`) and backslash escapes are dropped. Quotes at word edges are kept — `'npm'` stays a quoted
+   string, not an invocation.
+3. Every rule matches against both the raw and the de-obfuscated line. A match that appears **only** on the
+   de-obfuscated probe means the invocation was deliberately hidden and escalates to `Critical` — unless the match
+   maps entirely inside quoted regions of the raw line (an escape-stripping artifact like echo'd `\$(sudo …)`, where
+   the backslash prevents execution), which is dropped or kept at normal severity.
 
-Matching is quote-aware: the scanner tracks the shell quote region at every position of the line and drops matches
-that cannot execute.
-
-- `$(…)`, backticks and `${!…}` only expand outside single quotes, so matches inside single quotes — or behind a
-  backslash escape (`\$(…)`) — are dropped. Double-quoted expansions still execute and stay flagged.
-- Redirects and `tee` targets are dropped when the operator sits inside any quoted string or is backslash-escaped —
-  `echo " >> /etc/…"` is literal text, not a write.
-- Obfuscation escalation is gated on the same analysis: a match that only appears on the de-obfuscated probe and maps
-  entirely inside quoted regions of the raw line is an escape-stripping artifact (e.g. echo'd instructions containing
-  `\$(sudo …)`, where the backslash prevents execution) rather than hidden intent — it is dropped or kept at the
-  rule's normal severity instead of escalating to `Critical`. Genuine quote-split obfuscation outside quotes
-  (`s''u''d''o`) still escalates.
+Matching is quote-aware: matches that cannot execute are dropped. Expansions (`$(…)`, backticks, `${!…}`) inside
+single quotes or behind a backslash are literal text; double-quoted expansions still execute and stay flagged.
+Redirects and `tee` targets are dropped when the operator sits inside any quoted string (`echo " >> /etc/…"` is
+display text). A pipe inside a command substitution stays live even when the substitution is quoted —
+`echo "$(curl … | sh)"` executes.
 
 Heredoc bodies are tracked across lines. A quoted delimiter (`<<'EOF'`, `<<"EOF"`, `<<\EOF`) makes the body literal
-data, so the non-blocking expansion rules (`command-substitution`, `variable-indirection`) are suppressed inside it.
-As a conservative guard, suppression is lifted when the declaration pipes the body into a shell or interpreter
-(`cat <<'EOF' | sh`), and blocking rules stay active inside bodies — except on `#` lines, which are shell comments
-in a live body and help text in a data body: `privilege-escalation` and `write-outside-build-root` never fire on
-them, in either mode. Unquoted-delimiter bodies expand and are scanned as ordinary lines.
+data, suppressing the non-blocking expansion rules — unless the declaration pipes the body into a shell or
+interpreter (`cat <<'EOF' | sh`). Blocking rules stay active inside bodies, except on `#` lines, where
+`privilege-escalation` and `write-outside-build-root` never fire. Unquoted-delimiter bodies expand and are scanned
+as ordinary lines.
 
-The current rules, with their default severities:
+### Rules
 
 | Rule id | Severity (default) | What it detects |
 | --- | --- | --- |
-| `network-to-shell` | Critical | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell (`sh`, `bash`, …). Matches whose pipe sits inside quoted display text are not flagged (see below). |
-| `decode-to-shell` | Critical | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell. Quoted-display matches and pipes into a shell that reads a script file argument are not flagged (see below). |
-| `eval-indirection` | Critical (Medium for established idioms) | `eval`/`source`/`.` in command position, fed by command substitution, backticks, or an echo/printf/base64 payload. Display text and argument mentions are not flagged; established idioms are downgraded to Medium (see below). |
-| `network-execution` | High | Downloader followed by a pipe/semicolon/`&&` into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). Quoted-display matches and pipes into a `perl` running inline `-e` code are not flagged (see below). |
-| `write-outside-build-root` | High (Medium in `.install` scriptlets) | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). Matches inside `.install` scriptlets are downgraded to Medium (see below). |
-| `privilege-escalation` | High (Medium in `.install` scriptlets and shell helper scripts) | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. (Escalated to Critical when obfuscated.) Matches inside `.install` scriptlets and `.sh`/`.bash`/`.csh`/`.zsh` helper scripts are downgraded to Medium (see below). |
-| `hidden-character` | Critical (Medium for zero-width chars) | Bidi overrides/isolates (U+202A–E, U+2066–9) and C0/C1 control bytes (outside quoted display text). Zero-width chars (U+200B/C/D, U+FEFF) are Medium; complete ANSI escape sequences are skipped (see below). |
-| `homograph` | Medium | Spoofing in PKGBUILD metadata values (`pkgname`, `depends`, `makedepends`, `url`, `source`): invisible/combining characters, Latin mixed with Cyrillic/Greek/Armenian, fullwidth ASCII lookalikes (U+FF01–FF5E), and non-ASCII that folds to an ASCII skeleton. PKGBUILD only. |
+| `network-to-shell` | Critical | Downloader (`curl`, `wget`, `aria2c`, …) piped into a shell. |
+| `decode-to-shell` | Critical | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell. |
+| `eval-indirection` | Critical (Medium for established idioms) | `eval`/`source`/`.` in command position, fed by command substitution, backticks, or a payload. |
+| `network-execution` | High | Downloader chained (pipe/`;`/`&&`) into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). |
+| `write-outside-build-root` | High (Medium in `.install` scriptlets) | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). |
+| `privilege-escalation` | High (Medium in `.install` scriptlets and shell helper scripts) | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. |
+| `hidden-character` | Critical (Medium for zero-width chars) | Bidi overrides/isolates and C0/C1 control bytes; zero-width chars (U+200B/C/D, U+FEFF) are Medium. |
+| `homograph` | Medium | Spoofing in PKGBUILD metadata values. PKGBUILD only. |
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
-| `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking; the effective name is resolved at runtime). |
+| `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking). |
 | `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
-| `local-binary` | Critical (Medium for non-executable content) | A source file that contains binary bytes (NUL, control, undecodable UTF-8). Whole-file check; only recognized executable formats (ELF, PE/`MZ`) block, see below. |
+| `local-binary` | Critical (Medium for non-executable content) | A source file containing binary bytes; only recognized executable formats (ELF, PE/`MZ`) block. |
 
-Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after), not
-as regex substrings, so `sudo` inside `pseudo` or `sudoku` is not flagged.
+Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after),
+so `sudo` inside `pseudo` or `sudoku` is not flagged.
 
-The three pipe rules only fire when the connector actually pipes. A `|` inside a quoted string is printed, not fed to
-a shell, so matches whose pipe sits in a single- or double-quoted region are dropped: uninstall help text
-(`echo "    curl … | bash"` in `.install` scriptlets), optdepends notes, and usage strings
-(`echo "Usage: $0 {g|sh|ag}"`). A pipe inside a command substitution stays live even when the substitution itself is
-quoted — `echo "$(curl … | sh)"` executes. Two structural exemptions apply to plainly visible constructs (obfuscated
-matches keep their Critical escalation): `network-execution` drops a `perl` that receives its program from inline
-`-e`/`-E` code (`curl … | perl -pe 's/tag/…/'` release-tag scraping — the download arrives as stdin *data* for the
-reviewable inline program; a bare `perl`, a lone `-`, module flags, or a script file keep the finding), and
-`decode-to-shell` drops a pipe whose shell reads its script from a file argument (`echo yes | bash ./install.sh`
-feeding an answer to an interactive installer — the executed code is the reviewable local file, not the piped text).
-A corpus audit on 2026-08-27 verified all 11 blocking `decode-to-shell` findings, 12/20 `network-to-shell`, and
-19/28 `network-execution` findings as these benign classes; the remaining matches are genuine bootstraps
-(`curl … | sh` rustup/ghcup installs, `curl … | python` pip bootstrap) and stay flagged.
+### False-positive suppression
 
-Both `privilege-escalation` and `write-outside-build-root` take the file context into account. ALPM runs `.install`
-scriptlets as root as part of the transaction, so inside a scriptlet an escalation tool is redundant rather than an
-escalation, and writing system files (`>> /etc/shells`, generated keys, `tee`'d config) is the ordinary job of the
-scriptlet rather than an escape from the build sandbox. Matches in `*.install` files are therefore kept for review as
-non-blocking `Medium` findings — obfuscated constructs included, since it is the context, not the syntax, that makes
-them benign. Packaged helper scripts (`.sh`, `.bash`, `.csh`, `.zsh`) get the same downgrade for `privilege-escalation`
-only: they ship inside the package and run solely when the user invokes them voluntarily — typically as root — so the
-escalation tool confers nothing the user did not hand over (the `check.sh`/`setup.sh`/`update.sh` class; a corpus audit
-on 2026-08-27 verified ~580 such findings benign). `write-outside-build-root` deliberately keeps its blocking severity
-in helper scripts: that bucket holds the corpus's most genuinely alarming content (NOPASSWD sudoers writes, root
-`authorized_keys` injection, `/etc/os-release` overwrites). PKGBUILD build-time invocations (`sudo make install`,
-`sudo install -Dm755 … /usr/bin/…`) genuinely run as the building user and stay High. Heredoc bodies get the same
-treatment on `#` lines only: a tool name or redirect on a comment line can never run, so both rules suppress it
-there, while live-looking body lines keep their findings.
+The corpus is overwhelmingly benign, so several exemptions downgrade or drop matches on plainly visible, non-executing,
+or context-benign constructs. They were tuned against a full corpus audit (2026-08-27) and are pinned by the unit and
+facade tests:
 
-`eval-indirection` only fires when the `eval`/`source`/`.` keyword is a real invocation: unquoted and in command
-position (line start, after `;`/`&`/`|`/`(`/backtick/`{`, or after a control keyword such as `then`, `do`, or
-`sudo`). A quoted keyword (`printf "… source $(tput setaf 2)…"`) is display text, and a keyword after a plain word
-(`pkgdesc="An open source EchoLink proxy"`, `Description=Open Source EchoLink Proxy`) is an argument mention —
-neither is flagged. The established shell idioms are downgraded to a non-blocking `Medium` finding, at the same trust
-level as `command-substitution`: `eval echo …` / `eval printf …` where the evaluated text is literal words plus
-tilde/variable expansion (`SUDO_HOME=$(eval echo ~$SUDO_USER)`), and `eval $(…)` whose output comes from a
-well-known environment emitter (`opam env`, `makepkg -g`, `dbus-launch`, `pifpaf`, `perl -V:…`), a local file parser
-(`grep`, `awk`, `sed`, `cat`, `head`, `tail` — the classic key=value import from PKGBUILDs, Makefiles, and
-`/proc`), a read-only local hardware monitor (`sensors`, whose output only feeds further local parsing — status-bar
-scripts like `baraction.sh`), or a local path/variable invocation (`./get_latest`, `"${ENVY_BIN}" session`).
-Anything else — `eval $(curl …)`, `eval base64 …` — keeps its blocking severity. A corpus audit on 2026-08-27 found
-all 127 blocking `eval-indirection` findings were display text or these idioms, with `sensors` (added 2026-08-28)
-covering the single residual hit.
-
-`hidden-character` distinguishes three tiers. Complete ANSI escape sequences (ESC `[` … final byte — terminal
-colors) are skipped entirely: they change how output looks, never how the shell parses the line. Zero-width
-characters (U+200B/C/D, U+FEFF) are a non-blocking `Medium` finding: the shell never treats them as separators, so
-they cannot make executed code differ from reviewed code — they only make names display differently from how they
-read (emoji ZWJ sequences, Persian ZWNJ orthography, copy-paste artifacts). Everything else stays `Critical`:
-bidi overrides/isolates (which can reorder displayed text and are the real trojan-source vector) in any position,
-and other C0/C1 control bytes outside quoted display text — except C1 bytes adjacent to Latin-1 supplement
-characters, which are mojibake from double-encoded UTF-8 file names, not deliberate obfuscation. A bare ESC that is
-not part of a complete CSI sequence (e.g. OSC terminal-title escapes) stays `Critical` even inside quotes. A corpus
-audit on 2026-08-27 found all 77 blocking `hidden-character` findings fell into the benign tiers (ANSI colors,
-zero-width display text, mojibake file names); no bidi overrides were present anywhere.
-
-`local-binary` is the one rule that is not a per-line shell check: it runs once per file on the whole content and
-applies to every file in the package regardless of extension. Only recognized **executable formats** — ELF
-executables and Windows PE images (`MZ` header) — are `Critical` and block the package. Everything else binary is
-retained as a non-blocking `Medium` finding, because content that is not itself an executable cannot run without
-PKGBUILD commands (which the shell rules scan), and a binary committed to the repository is more auditable than an
-equivalent remote archive URL (rated Medium by `suspicious-source-url`):
-
-- Binary archives recognized by magic bytes — gzip, bzip2, xz, zstd, zip, 7z, RAR, and tar (`ustar` at offset 257).
-  Committed archives (vendored assets, source snapshots, `.svgz`) are a common, legitimate AUR pattern; a corpus
-  audit on 2026-08-27 showed ~97% of blocking `local-binary` findings were non-executable binaries, overwhelmingly
-  archives and patches.
-- Inert media recognized by magic bytes on the (UTF-8-decoded) content — PNG, JPEG, GIF, BMP, ICO, WebP,
-  TrueType/OpenType/WOFF/WOFF2 fonts, PDF, tracker audio modules (S3M/XM/IT), and Allegro packed datafiles (game
-  asset containers). Content-based, so renaming `.exe` to `.png` does not help — and renaming an executable to any
-  other extension does not help either, because the ELF/`MZ` magic check runs before anything else.
-- Certificate/signature files by extension (`.sig`, `.asc`, `.gpg`, `.cer`, `.crt`, `.pem`) — inert data with no
-  reliable magic bytes. ELF content still takes precedence and stays `Critical`.
-- Text whose only binary indicator is undecodable UTF-8 (U+FFFD from legacy encodings), with no NUL or control
-  characters.
-- Any other binary content (e.g. patches with stray binary bytes, opaque data blobs) — `Medium` "binary data":
-  no executable format was recognized.
-
-`homograph` is the other non-shell rule: it runs only on the PKGBUILD and inspects the extracted values of the
-`pkgname`, `depends`, `makedepends`, `url`, and `source` assignments (including indented ones inside `package()`
-functions). Comments are stripped and quotes removed before checking, so non-ASCII prose after `#` never fires it.
-Four checks run in order and the first hit wins per line: hidden/invisible characters (the zero-width/bidi/control
-set plus format and combining marks — a mark like U+0670 prepended to a URL scheme is invisible yet changes the
-value — checked on the NFC-normalized value so decomposed accents are not mistaken for hidden marks), Latin mixed
-with Cyrillic/Greek/Armenian (other scripts such as CJK and Hangul are ignored: they cannot spoof ASCII and are
-legitimate in internationalized names), fullwidth ASCII lookalikes, and confusable-skeleton folding (a ~45-entry
-Cyrillic/Greek table without accented Latin letters). Free prose (`pkgdesc`, comments) is deliberately out of scope.
-The rule's findings are `Medium` and do not block: the 2026-08-27 corpus audit found every stored homograph finding
-benign (a real internationalized domain `π.duncano.de`, a U+0670 encoding artifact before a `url=` scheme), and the
-mirror displays the raw metadata values, so lookalikes stay visible for review without gating the package.
-
-The remaining rules are shell-line rules and only run on scannable script files.
+- **Quoted display text is not execution.** Pipe rules drop matches whose `|` sits inside a quoted string (uninstall
+  help text, optdepends notes, usage strings). A quoted `eval` keyword or one used as an argument mention
+  (`pkgdesc="An open source …"`) is not flagged.
+- **Structural exemptions for visible constructs** (obfuscated matches keep their Critical escalation):
+  `network-execution` drops a `perl` receiving its program from inline `-e`/`-E` code (the download is stdin *data*
+  for the reviewable program), and `decode-to-shell` drops a pipe whose shell reads its script from a file argument
+  (`echo yes | bash ./install.sh` — the executed code is the reviewable local file).
+- **File-context downgrades.** ALPM runs `.install` scriptlets as root, so escalation tools and system writes there
+  are redundant rather than dangerous: both rules downgrade to `Medium`. Packaged helper scripts
+  (`.sh`/`.bash`/`.csh`/`.zsh`) get the same downgrade for `privilege-escalation` only — they run solely when invoked
+  voluntarily. `write-outside-build-root` deliberately keeps High in helper scripts; that bucket holds the corpus's
+  genuinely alarming content (NOPASSWD sudoers writes, root `authorized_keys` injection). PKGBUILD build-time
+  invocations (`sudo make install`) run as the building user and stay High.
+- **Established `eval` idioms are Medium:** `eval echo …` / `eval printf …` with literal words plus
+  tilde/variable expansion, and `eval $(…)` fed by a well-known environment emitter (`opam env`, `makepkg -g`,
+  `dbus-launch`), a local file parser (`grep`, `awk`, `sed`, `cat`), or a local read-only monitor (`sensors`).
+  Anything dynamic — `eval $(curl …)` — keeps blocking severity.
+- **`hidden-character` tiers.** Complete ANSI escape sequences are skipped (they only affect display). Zero-width
+  characters are Medium: they cannot make executed code differ from reviewed code, only make names display
+  differently. Bidi overrides — the real trojan-source vector — and other control bytes stay Critical, except C1
+  bytes adjacent to Latin-1 supplement characters (mojibake file names). A bare ESC outside a complete CSI sequence
+  (e.g. OSC title escapes) stays Critical even inside quotes.
+- **`homograph` scope.** PKGBUILD metadata values only, after comment stripping and quote removal; CJK/Hangul are
+  excluded from the mixed-script check (they cannot spoof ASCII). Findings are Medium and do not block: the mirror
+  displays raw metadata values, so lookalikes stay visible for review.
 
 Adding or changing a shell rule is a one-line change to the `Rules` array in `ShellContentScanner` (or the
-`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file). The `local-binary` and `homograph` rules remain
-separate because they are whole-file and field-value checks respectively, not shell-line rules. Rule ids are persisted
-verbatim in stored findings and exposed indirectly by `GET /packages/{name}/security` through `findingCount`, so
-renaming a rule does not corrupt data but changes the ids visible in historical documents.
+`PrivilegeEscalationTools` / `RiskyTools` arrays in the same file); `local-binary` and `homograph` are separate
+whole-file/field-value checks. Rule ids are persisted verbatim in stored findings, so renaming a rule changes the
+ids visible in historical documents.
 
 ## Pipeline
 
-The persisted `Pending` state is the durable work queue — there is no in-process queue. The pipeline is:
+The persisted `Pending` state is the durable work queue — there is no in-process queue:
 
-1. A new revision is seeded (`IPackageService.SeedFilesAsync`, implemented by `PackageService`) or a rescan is requested
-   (`POST /packages/{name}/security/rescan`, optionally with `?revision={sha}`); both call `MarkPendingAsync`, which
-   upserts the `(package, revision)` state document to `Pending` and clears any prior findings/lease for that revision.
-   On public instances set `Atoll:Mutations:Enabled=false` to make the rescan endpoint return `403` and hide the button
-   in the UI (`403` also applies to the manual seed and delete endpoints).
-2. `PackageSecurityWorker` runs `ScannerConcurrency` poll loops. Each loop calls `TryClaimPendingScanAsync`, which
-   atomically (`FindOneAndUpdate`) leases one `Pending` document whose lease has expired or is unset, stamping
-   `leaseUntil = now + 5m` and `leaseOwner = {MachineName}:{Guid}`.
-3. The worker re-reads the claimed revision via `GetRevisionAsync`. If the revision is no longer retained in the
-   package's history (it aged out of `MaxRevisions`, or the package was deleted) the claim is deleted — a scan result
-   must never be written for content that can no longer be served.
-4. Otherwise the claimed revision's files are scanned and the result is written with `CompleteScanAsync`, which is
-   guarded by `(id, leaseOwner)` so only the claim owner can complete it. Because the claim is keyed by revision, a
-   refresh that swaps the head in between does not disturb the in-flight scan: the result is tied to the exact
-   revision that was examined.
-5. If the scan throws, the worker records `Error` for that revision. Errors block serving until a successful re-scan.
+1. A new revision is seeded or a rescan is requested (`POST /packages/{name}/security/rescan`, optionally
+   `?revision={sha}`); both call `MarkPendingAsync`, which upserts the `(package, revision)` document to `Pending`
+   and clears prior findings/lease. On public instances set `Atoll:Mutations:Enabled=false` to make the rescan
+   endpoint return `403` and hide the UI button (this also applies to the seed and delete endpoints).
+2. `PackageSecurityWorker` runs `ScannerConcurrency` poll loops. Each atomically (`FindOneAndUpdate`) leases one
+   `Pending` document whose lease has expired or is unset, stamping `leaseUntil = now + 5m`.
+3. The worker re-reads the claimed revision. If it is no longer retained (aged out of `MaxRevisions`, or the package
+   was deleted) the claim is deleted — a result must never be written for content that can no longer be served.
+4. Otherwise the files are scanned and the result written with `CompleteScanAsync`, guarded by `(id, leaseOwner)` so
+   only the claim owner can complete it. The claim is keyed by revision, so a head swap mid-scan does not disturb
+   the in-flight scan.
+5. If the scan throws, the revision is recorded `Error`.
 
-Leases make the queue crash-safe: if a worker dies mid-scan, the lease expires and another worker (or the same instance
-after restart) reclaims it after 5 minutes.
+Leases make the queue crash-safe: if a worker dies mid-scan, the lease expires and another worker (or the same
+instance after restart) reclaims it after 5 minutes.
 
-### Scan Versioning & Startup Lifecycle
+### Policy versioning and startup
 
-Security scanner rules evolve over time (e.g., adding new detection patterns or relaxing false positives). Persisted
-scan results are stamped with a monotonically increasing integer policy version
-(`PkgBuildSecurityScanner.CurrentPolicyVersion`, stored in `policyVersion` on `PackageSecurityScanDocument`). Increment
-this version
-whenever a scanner change requires existing verdicts to be recomputed; versions must never be reused or decremented.
+Persisted results are stamped with a monotonically increasing integer policy version
+(`PkgBuildSecurityScanner.CurrentPolicyVersion`, stored as `policyVersion`). Increment it whenever a scanner change
+requires existing verdicts to be recomputed; versions must never be reused or decremented.
 
-On startup, `PackageSecurityWorker` executes the following sequence before polling begins:
+On startup, before polling, the worker:
 
-1. **Requeue Outdated Scans (`RequeueOutdatedAsync`):** The worker executes one `UpdateManyAsync` operation on MongoDB
-   that matches all non-`Pending` documents where `policyVersion` is `null` (legacy scans) or lower than the worker's
-   current policy version (`policyVersion < scanner.PolicyVersion`). Each matching document is atomically reset to
-   `Status = Pending` with cleared findings, timestamps, leases, and version. Results from a newer policy are preserved,
-   which prevents an older worker from downgrading them during a rolling deployment.
-2. **Backfill Missing Scan Documents (`EnsureExistingPackagesArePendingAsync`):** Computes the set difference between
-   seeded packages and packages that already have a scan document (via `ListPackageNamesAsync`), then calls
-   `EnsurePendingAsync` (upsert with `SetOnInsert`) only for the missing ones — packages that predate the security
-   feature or lost their scan document get a `Pending` entry without overwriting an existing completed scan. In steady
-   state this is two queries, so restarts no longer re-check the whole catalog.
+1. **Requeues outdated scans** (`RequeueOutdatedAsync`): one `UpdateManyAsync` resetting every non-`Pending`
+   document whose `policyVersion` is null (legacy) or lower than the current version back to `Pending`, clearing
+   findings, timestamps, and leases. Results from a *newer* policy are preserved, so an older worker cannot downgrade
+   them during a rolling deployment.
+2. **Backfills missing scan documents** (`EnsureExistingPackagesArePendingAsync`): computes the set difference
+   between seeded packages and existing scan documents and upserts a `Pending` entry only for the missing ones —
+   without overwriting completed scans.
 
-`ScannerConcurrency`, `PollIntervalMs`, and `Enabled` are validated by Data Annotations at startup. The worker is a
-hosted service registered in `Program.cs`; it starts with the API and stops on shutdown.
+Configuration is validated by Data Annotations at startup. The worker is a hosted service registered in
+`Program.cs`; it starts with the API and stops on shutdown.
 
 ## Gating
 
-`PackageSecurityAccess.CheckAsync` is the single decision point. `PackageSecurityFilter`, applied to the
-content-serving route group in `Endpoints.cs`, enforces it for head content, a requested revision, and both Git Smart
-HTTP routes. Decision table:
+`PackageSecurityAccess.CheckAsync` is the single decision point, enforced by `PackageSecurityFilter` on the
+content-serving route group in `Endpoints.cs` — head content, a requested revision, and both Git Smart HTTP routes:
 
 | Condition | Result |
 | --- | --- |
-| Security disabled (`Enabled=false`) | Allow (everything, including previously Flagged). |
-| Package does not exist | Allow (the route then returns 404 downstream). |
+| Security disabled (`Enabled=false`) | Allow everything, including previously Flagged. |
+| Package does not exist | Allow (the route returns 404 downstream). |
 | Status `Verified` | Allow. |
 | Status `Pending`, or no scan document | Block — `security_status_pending`. |
 | Status `Flagged` | Block — `security_status_flagged`. |
 | Status `Error` | Block — `security_scan_error`. |
 
-Blocked requests return `403 Forbidden` with an RFC 9457 `application/problem+json` body and a non-sensitive `reason`
-extension code (one of the three above). No file content or finding detail is leaked. The requested-version route is
-gated on that revision's status; the head-content and Git routes use the head status. Version history and the security
-status endpoint remain ungated because they expose only metadata and scan summaries.
+Blocked requests return `403 Forbidden` with an RFC 9457 `application/problem+json` body and a non-sensitive
+`reason` extension code; no file content or finding detail is leaked. Version history and the security status
+endpoint stay ungated (metadata and scan summaries only).
 
-**UI exception:** the Blazor Files tab (`PackageDetailsService.GetFilesAsync`) is deliberately *not* gated — it
-serves the file tree and contents of flagged revisions read-only, with a warning banner, so users can inspect the
-content that triggered the findings. Only the API/Git surfaces go through `PackageSecurityFilter`.
+**UI exception:** the Blazor Files tab is deliberately *not* gated — it serves flagged revisions read-only with a
+warning banner, so users can inspect the content that triggered the findings.
 
-> **Git materialization is scan-status aware:** when security is enabled, the bare repository is materialized from
-> `Verified` revisions only. A `Flagged`, `Pending`, or `Error` historical revision is excluded from the cloneable
-> Git history, so it cannot be reached via `git clone` followed by `git checkout <sha>` (the equivalent
-> `GET /packages/{name}/versions/{sha}` request is also blocked). The `.atoll-head` marker embeds every retained
-> revision id and its scan status, so any status change, history change, or toggling of security invalidates the
-> marker and triggers a lazy rebuild on the next Git request. The `/versions` endpoint remains the full-history,
-> metadata-only surface regardless of scan status.
+**Git materialization is scan-status aware:** the bare repository is materialized from `Verified` revisions only, so
+a `Flagged`/`Pending`/`Error` historical revision cannot be reached via `git clone` + `git checkout <sha>`. The
+`.atoll-head` marker embeds every retained revision id and its scan status; any status or history change (or
+toggling security) invalidates the marker and triggers a lazy rebuild on the next Git request.
 
 ## Configuration
 
@@ -349,184 +242,102 @@ content that triggered the findings. Only the API/Git surfaces go through `Packa
 
 | Option | Default | Range | Effect |
 | --- | --- | --- | --- |
-| `Enabled` | `true` | bool | Master switch. `false` makes `CheckAsync` allow everything and the worker exits without polling. |
-| `ScannerConcurrency` | `4` | 1–64 | Number of parallel poll/scan loops. Also bounds startup backfill parallelism. |
-| `PollIntervalMs` | `100` | 100–300000 | Delay between poll attempts when no pending package was claimed. Lowered load is traded for scan latency. |
+| `Enabled` | `true` | bool | Master switch. `false` makes `CheckAsync` allow everything and the worker exit without polling. |
+| `ScannerConcurrency` | `4` | 1–64 | Number of parallel poll/scan loops; also bounds startup backfill parallelism. |
+| `PollIntervalMs` | `100` | 100–300000 | Delay between poll attempts when nothing was claimed; trades load for scan latency. |
 
 The lease duration is fixed at 5 minutes in `PackageSecurityWorker` and is not configurable. The
-`atoll_securityscan_pending` gauge is refreshed every 30 seconds, independent of `ScannerConcurrency`.
+`atoll_securityscan_pending` gauge refreshes every 30 seconds, independent of `ScannerConcurrency`.
 
 ## Observability
 
-`GET /metrics` serves Prometheus-format OpenTelemetry metrics. The `atoll_securityscan_*` instruments are backed by
-`SecurityScanStatusStore`, updated by `PackageSecurityWorker` as scans finish:
+`GET /metrics` serves Prometheus-format OpenTelemetry metrics; the `atoll_securityscan_*` instruments are backed by
+`SecurityScanStatusStore` and updated by the worker:
 
 | Metric | Meaning |
 | --- | --- |
-| `atoll_securityscan_completed_total` | Scans that reached a terminal status (verified + flagged + errored). |
-| `atoll_securityscan_verified_total` | Scans that completed `Verified`. |
-| `atoll_securityscan_flagged_total` | Scans that completed `Flagged`. |
-| `atoll_securityscan_errored_total` | Scans that failed and were marked `Error`. |
-| `atoll_securityscan_dropped_total` | Claims dropped because the claimed revision aged out of the retained history before it could be scanned. |
-| `atoll_securityscan_pending` | Backlog depth: the number of `Pending` scan documents. Refreshed every 30 seconds. |
-| `atoll_securityscan_last_finished_timestamp` | Unix time of when the last scan completed or errored. |
+| `atoll_securityscan_completed_total` | Scans that reached a terminal status. |
+| `atoll_securityscan_verified_total` / `atoll_securityscan_flagged_total` / `atoll_securityscan_errored_total` | Terminal-status breakdown. |
+| `atoll_securityscan_dropped_total` | Claims dropped because the revision aged out of retained history before scanning. |
+| `atoll_securityscan_pending` | Backlog depth (number of `Pending` documents), refreshed every 30 s. |
+| `atoll_securityscan_last_finished_timestamp` | Unix time of the last completed or errored scan. |
 
-Content is not served until the head revision is scanned, so compare `atoll_securityscan_pending` against the
-bulk-seed and package-refresh throughput counters on the same endpoint to see whether the scanner keeps up with
-ingestion.
+Content is not served until the head revision is scanned, so compare `atoll_securityscan_pending` against seed and
+refresh throughput on the same endpoint to see whether the scanner keeps up with ingestion.
 
-Diagnose individual scans through logs and the MongoDB collection:
+Each completed scan logs `Security scan for {PackageName} revision {RevisionId} -> {Status} ({FindingCount}
+findings).`; failures log a warning and record `Error`. Useful ad-hoc queries on `package-security-scans`:
 
-- Each completed scan logs
-  `Security scan for {PackageName} revision {RevisionId} -> {Status} ({FindingCount} findings).`
-- Failed scans log a warning and record `Error`.
-- The `package-security-scans` collection is keyed by `{packageName}:{revisionId}`. Useful ad-hoc queries:
-  - Blocked revisions: `{ status: { $in: ["Pending", "Flagged", "Error"] } }`
-  - All scan state for one package: `{ packageName: "<name>" }`
-  - Stuck leases: `{ status: "Pending", leaseUntil: { $lt: <now> } }` (these are reclaimable; they should clear on the
-    next poll).
-  - Recently flagged: `{ status: "Flagged" }` with `findings` containing the rule ids above.
+- Blocked revisions: `{ status: { $in: ["Pending", "Flagged", "Error"] } }`
+- All scan state for one package: `{ packageName: "<name>" }`
+- Stuck leases: `{ status: "Pending", leaseUntil: { $lt: <now> } }` (reclaimable; should clear on the next poll)
 
 ## Manual verification
 
-These checks need only `curl` (or a Git client) and read access to the running API. They exercise the gate end-to-end
-without modifying any package.
+These checks need only `curl` (or a Git client) and read access to the running API.
 
-### 1. Confirm gating and reason codes
-
-Seed a deliberately malicious PKGBUILD and confirm content is blocked while metadata is not:
-
-```sh
-NAME=atoll-security-check
-BASE=http://localhost:8080
-
-# Seed a package whose PKGBUILD pipes a download into a shell.
-printf 'pkgname=%s\npkgver=1\nsource=("https://example.com/x.tar.gz")\n' "$NAME" > PKGBUILD
-# (seed via whatever mechanism your deployment uses, e.g. POST /packages/$NAME/seed)
-
-# Status should move Pending -> Flagged once the worker scans it.
-curl -s "$BASE/packages/$NAME/security"
-
-# Content and Git must be blocked with 403 + a reason code.
-curl -i "$BASE/packages/$NAME"
-curl -i "$BASE/packages/$NAME/versions"            # not gated — returns history
-curl -i "$BASE/packages/$NAME.git/info/refs?service=git-upload-pack"
-```
-
-Expected:
-
-- `GET /packages/$NAME` and the Git route return `403` with JSON containing `"reason":"security_status_flagged"`.
-- `GET /packages/$NAME/versions` returns `200` (history is metadata, not content).
-- `GET /packages/$NAME/security` reports `"status":"Flagged"` and a non-zero `findingCount`.
-
-### 2. Confirm a clean package verifies
-
-```sh
-NAME=atoll-security-clean
-# Seed a minimal PKGBUILD with none of the matched patterns.
-# After the worker scans it:
-curl -s "$BASE/packages/$NAME/security"   # "status":"Verified"
-curl -i "$BASE/packages/$NAME"            # 200
-```
-
-### 3. Confirm rescan re-queues
-
-```sh
-curl -i -X POST "$BASE/packages/$NAME/security/rescan"                    # 202 Accepted (head revision)
-curl -i -X POST "$BASE/packages/$NAME/security/rescan?revision=<sha>"     # 202 Accepted (specific revision)
-curl -s   "$BASE/packages/$NAME/security"                                 # revision returns to Pending, then resolves again
-```
-
-### 4. Confirm the lease recovers from a simulated crash
-
-Because the queue is the `Pending` state plus an expiring lease, you can verify recovery without killing the process:
-mark a package `Pending` (via rescan), then temporarily stop the worker (e.g. run with `Atoll:Security:Enabled=false` is
-**not** sufficient — that prevents polling; instead scale the instance to zero or block the DB briefly). After
-`leaseUntil` passes, restart; the worker must reclaim and resolve the scan. The direct check is the stuck-lease query in
-the previous section resolving on its own after restart.
+1. **Gating and reason codes** — seed a PKGBUILD that pipes a download into a shell, then:
+   - `GET /packages/$NAME/security` moves `Pending` → `Flagged` with a non-zero `findingCount`.
+   - `GET /packages/$NAME` and `GET /packages/$NAME.git/info/refs?service=git-upload-pack` return `403` with
+     `"reason":"security_status_flagged"`.
+   - `GET /packages/$NAME/versions` returns `200` (history is metadata, not content).
+2. **Clean package verifies** — seed a minimal PKGBUILD with none of the matched patterns; the status becomes
+   `Verified` and `GET /packages/$NAME` returns `200`.
+3. **Rescan re-queues** — `POST /packages/$NAME/security/rescan` (optionally `?revision=<sha>`) returns `202`; the
+   revision returns to `Pending` and resolves again.
+4. **Lease recovery** — mark a package `Pending` via rescan, stop the worker (scale the instance to zero or block
+   the DB — setting `Enabled=false` only prevents polling), wait past `leaseUntil`, restart. The stuck-lease query
+   above must clear on its own after restart.
 
 ## Limitations and follow-ups
 
-- **Static analysis only.** Creative shell and obfuscation not covered by the normalizer are not detected, and while
-  binary/ELF source files are flagged on presence, their contents cannot be inspected for malicious behavior. Do not
-  treat `Verified` as a guarantee.
-- **Binary detection runs on UTF-8-decoded strings.** Package content reaches the scanner already decoded from UTF-8,
-  so invalid byte sequences collapse to the replacement character (U+FFFD) instead of being inspected as raw bytes. This
-  is enough to catch ELF/NUL/control-byte content, but a legitimate text file containing a literal U+FFFD is retained
-  as a non-blocking `Medium` finding (unencodable text). The inert-media magic matching works within the same
-  constraint — signatures are anchored on the bytes that survive decoding, which is precise for the allowlisted formats
-  but weaker than raw-byte matching. Byte-exact detection would require the seed paths (`PackageService`,
-  `AurGitPackageSource`, `AurMirror`) to surface raw bytes.
-- **Heredoc prose can still block.** Quoted-delimiter heredoc bodies suppress only the non-blocking expansion rules;
-  `sudo`/redirect-looking prose inside them can still yield blocking `High` findings. Extending suppression to
-  blocking rules requires handling pipe-to-installer patterns (`cat <<EOF | sh`, `install < /dev/stdin`) safely first.
-- **Homograph checks are field-scoped.** Only the extracted values of single-line `pkgname`/`depends`/`makedepends`/
-  `url`/`source` assignments are checked; arrays spanning multiple lines, other fields, and free prose are out of
-  scope. Legitimate internationalized names can still be flagged: Greek is an ASCII-lookalike-prone script, so a
-  Greek IDN (e.g. `π.duncano.de`) trips the mixed-script check — accepted knowingly, it is rare in the corpus.
-  Conversely, single-script spoofing that never mixes Latin and does not fold to ASCII (e.g. pure Cyrillic using
-  letters outside the confusables table) is not detected.
-- **No manual override.** There is no `ForceVerified` / `ForceBlocked` state for a package a maintainer has reviewed and
-  wants to unblock (or block) regardless of scanner output.
-- **No source-host policy.** `suspicious-source-url` is a syntactic check only; there is no allow/deny list for source
-  domains.
-- **Git history is the verified subset only.** When security is enabled, only `Verified` revisions are materialized
-  into the bare repository, so a `Flagged` historical revision is not serveable over Git (`git clone` + `git checkout
-  <sha>` fails for it). The `.atoll-head` marker embeds retained revision ids and scan statuses; any status change or
-  history change invalidates it and triggers a lazy rebuild. `GET /packages/{name}/versions/{sha}` returns the same
-  verdict. The `/versions` endpoint still lists the full history (metadata only). A Verified -> Flagged flip makes the
-  old commit unreachable (dangling object on disk); unreachable objects are never advertised or fetchable, but a
-  periodic `git gc --prune` in the repositories directory reclaims the disk space.
-- **Single-instance assumption.** The lease scheme supports multiple worker loops within one instance and is safe
-  against crashes, but has not been validated for multiple API replicas. The broader single-instance assumption is noted
-  in `ARCHITECTURE.md`.
+- **Static analysis only.** Shell and obfuscation outside the matched patterns are not detected, and binary contents
+  cannot be inspected for malicious behavior. Do not treat `Verified` as a guarantee.
+- **Binary detection runs on UTF-8-decoded strings.** Invalid byte sequences collapse to U+FFFD before inspection.
+  This catches ELF/NUL/control content, but magic matching is weaker than raw-byte detection (which would require
+  the seed paths to surface raw bytes).
+- **Heredoc prose can still block.** Only the non-blocking expansion rules are suppressed in quoted-delimiter bodies;
+  `sudo`/redirect-looking prose can still yield blocking findings. Extending suppression requires safely handling
+  pipe-to-installer patterns first.
+- **Homograph checks are field-scoped.** Only single-line `pkgname`/`depends`/`makedepends`/`url`/`source` values;
+  multi-line arrays, other fields, and free prose are out of scope. Legitimate internationalized names can trip the
+  mixed-script check (accepted — rare in the corpus), and single-script spoofing outside the confusables table is
+  not detected.
+- **No manual override.** There is no `ForceVerified`/`ForceBlocked` state for reviewed packages.
+- **No source-host policy.** `suspicious-source-url` is syntactic only; there is no allow/deny list for domains.
+- **Git history is the verified subset.** A Verified → Flagged flip makes the old commit unreachable (dangling
+  object on disk); unreachable objects are never advertised or fetchable, but a periodic `git gc --prune` in the
+  repositories directory reclaims the space.
+- **Single-instance assumption.** Leases are crash-safe within one instance but unvalidated for multiple API
+  replicas; see `ARCHITECTURE.md`.
 
 ## Alignment with shelly-alpm
 
-Atoll's scanner shares lineage with the security validators of
-[shelly](https://github.com/Seafoam-Labs/Shelly-ALPM) (Zig Arch package manager): the risky/privilege tool lists were
-originally identical. The two enforce differently — shelly advises a human who approves the build, Atoll
-auto-blocks serving on High/Critical — so shelly's noisier rules must not be ported wholesale. This mapping is
-the reference for a future "shelly changed, catch up" task.
+The scanner shares lineage with the security validators of
+[shelly](https://github.com/Seafoam-Labs/Shelly-ALPM) (Zig Arch package manager) — the risky/privilege tool lists
+were originally identical. The two enforce differently: shelly advises a human who approves the build, while Atoll
+auto-blocks serving on High/Critical, so shelly's noisier rules must not be ported wholesale. This mapping is the
+reference for a future "shelly changed, catch up" task; the tool lists are the likeliest drift point (plain arrays
+in `ShellContentScanner.cs`, trivially diff-able against shelly's).
 
-**Provenance:** last full comparison against shelly commit `8988d056` (2026-08-21), executed 2026-08-23
-(analysis and per-phase corpus measurements in the working notes that produced it). Re-run the comparison when
-shelly's validators change meaningfully; the relevant files are `post_install_validator.zig`,
-`homograph_validator.zig`, `local_source_validator.zig`, and `parser/shell_scan.zig` (under
-`Shelly.PackageManager/src/pkgbuild/`). The tool lists are the likeliest drift point — they are plain arrays in
-`ShellContentScanner.cs` and trivially diff-able against shelly's.
+Last full comparison: shelly commit `8988d056` (2026-08-21). Re-run when shelly's validators change meaningfully —
+see `post_install_validator.zig`, `homograph_validator.zig`, `local_source_validator.zig`, and
+`parser/shell_scan.zig` under `Shelly.PackageManager/src/pkgbuild/`.
 
 | Shelly validator/concept | Atoll counterpart | Divergence (intentional) |
 | --- | --- | --- |
-| `post_install_validator.zig` risky tools | `risky-tool` (Medium) | Atoll adds a quoted-region exemption (shelly's tests document quoted-string FPs it accepts as advisory) |
-| `post_install_validator.zig` privilege tools | `privilege-escalation` (High, Critical when obfuscated; Medium in `.install` scriptlets and shell helper scripts) | Same; plus quote exemption, obfuscation escalation, and the scriptlet/helper context downgrades (scriptlets already run as root; helper scripts run only when invoked voluntarily — corpus-driven: 1,411 scriptlet and ~580 helper-script blocking hits were FPs) |
-| Bare `eval` token → critical | `eval-indirection` (Critical, Medium for established idioms) | Atoll requires a dynamic operand in command position — avoids `grep eval` and display-text FPs; established idioms (`eval echo ~$user`, `eval $(opam env)`, local parsers) are Medium — corpus-driven: 127/127 blocking hits were FPs |
-| Decode-to-shell | `decode-to-shell` (Critical) | Atoll superset (`openssl enc`, more shell targets); quoted-display pipes and pipes into a shell with a script file argument are suppressed (corpus-driven: 11/11 blocking hits were FPs) |
-| — | `network-to-shell` / `network-execution` | Atoll-only, shelly covers these only indirectly; quoted-display pipes suppressed and `perl -e` text filters exempted (corpus-driven: 12/20 and 19/28 blocking hits were FPs) |
-| Command substitution / variable indirection (naive) | `command-substitution` / `variable-indirection` (Medium) | Atoll is quote-aware and heredoc-aware; shelly matches naive substrings |
-| — | `write-outside-build-root` (High; Medium in `.install` scriptlets) | Atoll-only; scriptlet writes are downgraded (corpus-driven: 488 blocking scriptlet hits were FPs) while the helper-script bucket keeps High — it holds the genuine alarms |
-| `homograph_validator.zig` | `homograph` (Medium, `HomographScanner`) | Ported conceptually: same four checks, field-scoped to PKGBUILD metadata; CJK/Hangul excluded from the mixed-script check, no accented Latin in the confusables table (corpus-driven precision choices); Medium not blocking — all 3 stored hits were benign FPs |
-| `local_source_validator.zig` (ELF, first 64 bytes of `source=` files) | `local-binary` (Critical/Medium, `LocalSourceBinaryScanner`) | Atoll checks every file, whole content; blocks only on executable magic (ELF, PE/`MZ`), archives and inert media are Medium — corpus-driven: ~97% of Critical hits were non-executable binaries |
-| Obfuscation normalization (edge + intra-word quotes) | `NormalizeForMatching` (intra-word quotes only) | Edge-quote stripping would re-introduce quoted-string FPs in Atoll's blocking model |
-| `shell_scan.zig` segmentation (`split_shell_segments`, heredocs) | `ShellSyntax` quoted masks + heredoc tracking in `ShellContentScanner` | Adopted for FP suppression; shelly's validators themselves don't suppress on it |
-| `suspicious-source-url`-style URL validation | `suspicious-source-url` (Medium) | Atoll's host-only extension matching is deliberate and test-pinned |
-| Install-script scope labels | — | Not adopted (nice-to-have) |
-| Review digest/TOCTOU, sandbox/Landlock | — | Not applicable: Atoll never executes or live-reviews content |
+| Risky tools | `risky-tool` (Medium) | Atoll adds a quoted-region exemption. |
+| Privilege tools | `privilege-escalation` | Same, plus quote exemption, obfuscation escalation, and the scriptlet/helper context downgrades. |
+| Bare `eval` token → critical | `eval-indirection` | Atoll requires a dynamic operand in command position; established idioms are Medium. |
+| Decode-to-shell | `decode-to-shell` | Atoll superset (`openssl enc`, more shell targets); quoted-display and script-file-argument pipes suppressed. |
+| — | `network-to-shell` / `network-execution` | Atoll-only; quoted-display pipes suppressed, `perl -e` text filters exempted. |
+| Command substitution / indirection (naive) | `command-substitution` / `variable-indirection` | Atoll is quote-aware and heredoc-aware; shelly matches naive substrings. |
+| — | `write-outside-build-root` | Atoll-only; scriptlet writes downgraded, helper scripts keep High. |
+| `homograph_validator.zig` | `homograph` | Ported conceptually; field-scoped to metadata, CJK/Hangul excluded, Medium not blocking. |
+| `local_source_validator.zig` (ELF, first 64 bytes of `source=` files) | `local-binary` | Atoll checks every file, whole content; blocks only on executable magic. |
+| Obfuscation normalization (edge + intra-word quotes) | `NormalizeForMatching` (intra-word only) | Edge-quote stripping would re-introduce quoted-string FPs in Atoll's blocking model. |
+| `shell_scan.zig` segmentation | `ShellSyntax` quoted masks + heredoc tracking | Adopted for FP suppression; shelly's validators don't suppress on it. |
+| URL validation | `suspicious-source-url` | Host-only extension matching, test-pinned. |
 
-## Transport security & response compression
-
-Atoll enables in-app response compression (Brotli and Gzip) for dynamic HTML and API responses. When configuring
-response compression, keep the following security considerations in mind:
-
-- **HTTPS compression risks (CRIME / BREACH attacks):** Compressing dynamically generated responses over TLS can
-  introduce side-channel vulnerabilities such as CRIME and BREACH. If an attacker can inject chosen plaintext into an
-  HTTPS request and measure the exact encrypted response size, they may deduce secrets (such as session tokens or CSRF
-  tokens) reflected in the response body.
-- **Default configuration:** ASP.NET Core's response compression middleware deliberately disables compression for HTTPS
-  requests by default (`EnableForHttps = false`). In Atoll's standard deployment (ECS behind an ALB or reverse proxy),
-  the connection between the proxy and Kestrel is plain HTTP, so compression applies automatically without enabling
-  `EnableForHttps`.
-- **Mitigation and TLS termination:** If TLS is ever terminated directly inside Kestrel and `EnableForHttps` is set to
-  `true`, ensure all pages containing sensitive per-user secrets or tokens implement BREACH mitigations (such as
-  randomized padding or antiforgery token masking). Because Atoll serves public package catalog metadata and uses
-  ASP.NET Core antiforgery tokens, the residual risk in current private/internal mirror setups is low.
+Not adopted: install-script scope labels (nice-to-have); review digest/TOCTOU and sandboxing (not applicable — Atoll
+never executes or live-reviews content).
