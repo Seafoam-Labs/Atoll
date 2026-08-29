@@ -38,6 +38,50 @@ by anyone except this repository's `main` branch and same-repo pull requests (se
 
 After that, pushing to `main` deploys; opening a PR from a same-repo branch runs `terraform plan`.
 
+## Adopting or recovering existing bootstrap resources
+
+Because the bootstrap stack (`terraform/bootstrap/`) maintains local state, you must import the resources if you are
+running Terraform from a fresh machine against an already bootstrapped account, or if resources like the S3 state
+bucket, ECR repository, or GitHub OIDC provider already exist in the AWS account:
+
+```bash
+cd terraform/bootstrap
+terraform init
+
+# Resolve account ID and resource names (adjust if customized in variables.tf)
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+BUCKET_NAME="seafoam-atoll-tfstate"
+PROJECT_NAME="atoll-api"
+LOCK_TABLE="atoll-api-terraform-locks"
+
+# 1. State bucket and configurations
+terraform import aws_s3_bucket.tfstate "${BUCKET_NAME}"
+terraform import aws_s3_bucket_versioning.tfstate "${BUCKET_NAME}"
+terraform import aws_s3_bucket_server_side_encryption_configuration.tfstate "${BUCKET_NAME}"
+terraform import aws_s3_bucket_public_access_block.tfstate "${BUCKET_NAME}"
+
+# 2. DynamoDB lock table
+terraform import aws_dynamodb_table.tf_lock "${LOCK_TABLE}"
+
+# 3. ECR Repository
+terraform import aws_ecr_repository.app "${PROJECT_NAME}"
+
+# 4. GitHub OIDC Provider (only one allowed per AWS account)
+terraform import aws_iam_openid_connect_provider.github "arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+
+# 5. IAM Role, Policy, and Attachment
+terraform import aws_iam_role.github_deploy "${PROJECT_NAME}-github-deploy"
+terraform import aws_iam_policy.github_deploy "arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-github-deploy"
+terraform import aws_iam_role_policy_attachment.github_deploy "${PROJECT_NAME}-github-deploy/arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-github-deploy"
+```
+
+Once imported, run `terraform plan` to confirm that the local state matches the live infrastructure without unexpected
+changes.
+
+> **Note on the Main Stack (`terraform/`):** Unlike bootstrap, the main stack stores its state remotely in the S3 bucket
+> (`terraform/backend.tf`). Once bootstrap is complete, running `terraform init` locally or via GitHub Actions
+> automatically loads the state from S3—no manual imports are required.
+
 ## What the pipeline does
 
 1. `build-image` — builds the container image on every PR (validates the Dockerfile, no AWS).
