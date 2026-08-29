@@ -1,10 +1,17 @@
 namespace Atoll.Api.Services.Security.Scanning;
 
+using System.Text.RegularExpressions;
+
 internal static class LocalSourceBinaryScanner
 {
     // Certificate/signature data has no reliable magic bytes, so these inert kinds are
     // recognized by extension. ELF still takes precedence and stays Critical regardless.
     private static readonly string[] CertificateExtensions = [".sig", ".asc", ".gpg", ".cer", ".crt", ".pem"];
+
+    // Shared libraries are named by the linker convention (*.so, *.so.N[.N...]). e_type
+    // cannot distinguish them - PIE executables are ET_DYN like libraries - so the file
+    // name is the signal.
+    private static readonly Regex SharedLibraryName = new(@"\.so(\.\d+)*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static SecurityFinding? Scan(string content, string path)
     {
@@ -17,8 +24,16 @@ internal static class LocalSourceBinaryScanner
             return null;
 
         if (isElf)
+        {
+            // A shared library is loaded by other programs as package content, the same
+            // trust class as binaries inside a vendored archive, so it does not block.
+            if (SharedLibraryName.IsMatch(path))
+                return CreateFinding(SecurityFindingRules.LocalBinarySharedLibrary, path,
+                    string.Format(SecurityFindingRules.LocalBinarySharedLibrary.Description, path));
+
             return CreateFinding(SecurityFindingRules.LocalBinary, path,
                 string.Format(SecurityFindingRules.LocalBinary.Description, path, "an ELF executable"));
+        }
 
         if (isWindowsExecutable)
             return CreateFinding(SecurityFindingRules.LocalBinary, path,

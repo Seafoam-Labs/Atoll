@@ -44,10 +44,17 @@ internal static class ShellContentScanner
 
     public static IEnumerable<SecurityFinding> Scan(string content, string path)
     {
+        return Scan(content, path, referencedByPkgBuild: true);
+    }
+
+    public static IEnumerable<SecurityFinding> Scan(string content, string path, bool referencedByPkgBuild)
+    {
         Heredoc? activeHeredoc = null;
         var pendingHeredocs = new Queue<Heredoc>();
+        var insideArrayValue = false;
         var isInstallScriptlet = PackageBuildFileClassifier.IsInstallScriptlet(path);
         var isHelperScript = PackageBuildFileClassifier.IsHelperScript(path);
+        var isUnreferencedScript = !referencedByPkgBuild && !isInstallScriptlet;
 
         foreach (var rawLine in content.Split('\n'))
         {
@@ -62,7 +69,7 @@ internal static class ShellContentScanner
                 }
 
                 // Heredoc bodies are data, not code lines: no comment stripping.
-                foreach (var finding in ScanLine(bodyLine, rawLine, path, isInstallScriptlet, isHelperScript, IsHeredocCommentLine(bodyLine)))
+                foreach (var finding in ScanLine(bodyLine, rawLine, path, isInstallScriptlet, isHelperScript, IsHeredocCommentLine(bodyLine), isUnreferencedScript))
                     if (!activeHeredoc.Suppress || !IsHeredocSuppressedRule(finding.RuleId))
                         yield return finding;
 
@@ -74,7 +81,9 @@ internal static class ShellContentScanner
                 continue;
 
             var positions = ShellSyntax.ComputeQuotePositions(line);
-            foreach (var finding in ScanLine(line, positions, rawLine, path, isInstallScriptlet, isHelperScript, isHeredocCommentLine: false))
+            var (arraySpans, endsInsideArray) = GetArrayValueSpans(line, positions, insideArrayValue);
+            insideArrayValue = endsInsideArray;
+            foreach (var finding in ScanLine(line, positions, rawLine, path, isInstallScriptlet, isHelperScript, isHeredocCommentLine: false, arraySpans, isUnreferencedScript))
                 yield return finding;
 
             foreach (var declaration in ParseHeredocDeclarations(line, positions))
@@ -95,9 +104,10 @@ internal static class ShellContentScanner
         string path,
         bool isInstallScriptlet,
         bool isHelperScript,
-        bool isHeredocCommentLine)
+        bool isHeredocCommentLine,
+        bool isUnreferencedScript)
     {
-        return ScanLine(line, ShellSyntax.ComputeQuotePositions(line), rawLine, path, isInstallScriptlet, isHelperScript, isHeredocCommentLine);
+        return ScanLine(line, ShellSyntax.ComputeQuotePositions(line), rawLine, path, isInstallScriptlet, isHelperScript, isHeredocCommentLine, arrayValueSpans: null, isUnreferencedScript);
     }
 
     private static IEnumerable<SecurityFinding> ScanLine(
@@ -107,7 +117,9 @@ internal static class ShellContentScanner
         string path,
         bool isInstallScriptlet,
         bool isHelperScript,
-        bool isHeredocCommentLine)
+        bool isHeredocCommentLine,
+        IReadOnlyList<(int Start, int End)>? arrayValueSpans,
+        bool isUnreferencedScript = false)
     {
         if (line.Length == 0)
             yield break;
@@ -133,6 +145,11 @@ internal static class ShellContentScanner
                 // 'eval'/'source'/'.' must be an actual invocation in command position;
                 // display text and argument mentions ("open source EchoLink") are inert.
                 if (!IsEvalKeywordInvoked(match, normalized, positions, sourceIndices))
+                    continue;
+
+                // A keyword inside an array-assignment value ('depends=(. $(cmd))') is an
+                // assigned word, never executed; the substitution keeps its own findings.
+                if (IsInertArrayData(match.Groups[2].Index, match.Groups[2].Length, arrayValueSpans, positions, sourceIndices))
                     continue;
 
                 var definition = IsReviewableEval(match, normalized)
@@ -163,6 +180,16 @@ internal static class ShellContentScanner
                         message: obfuscated
                             ? scriptletRule.Description + " The construct was also obfuscated, but scriptlets run as root under alpm's control either way."
                             : null);
+                    continue;
+                }
+
+                // The PKGBUILD never references this file, so nothing in it runs during
+                // build or install: the write stays visible for review but cannot execute
+                // as part of packaging. An obfuscated construct still signals hidden
+                // intent and escalates below instead of taking the downgrade.
+                if (isUnreferencedScript && !obfuscated)
+                {
+                    yield return Finding(SecurityFindingRules.WriteOutsideBuildRootUnreferenced, rawLine, path);
                     continue;
                 }
 
@@ -201,11 +228,11 @@ internal static class ShellContentScanner
         if (!isHeredocCommentLine)
             foreach (var tool in PrivilegeEscalationTools)
             {
-                var index = ShellSyntax.FindUnquotedTool(normalized, tool);
+                var index = FindInvokedTool(normalized, tool, positions, sourceIndices, arrayValueSpans);
                 if (index < 0)
                     continue;
 
-                if (ShellSyntax.MatchesUnquotedTool(line, tool))
+                if (IsVisibleToolMatch(line, tool, index, positions, sourceIndices))
                 {
                     // Scriptlets already run as root under alpm's control, so an escalation
                     // tool inside one is redundant rather than an escalation. Helper scripts
@@ -253,11 +280,11 @@ internal static class ShellContentScanner
 
         foreach (var tool in RiskyTools)
         {
-            var index = ShellSyntax.FindUnquotedTool(normalized, tool);
+            var index = FindInvokedTool(normalized, tool, positions, sourceIndices, arrayValueSpans);
             if (index < 0)
                 continue;
 
-            if (ShellSyntax.MatchesUnquotedTool(line, tool))
+            if (IsVisibleToolMatch(line, tool, index, positions, sourceIndices))
             {
                 var rule = SecurityFindingRules.RiskyTool;
                 yield return Finding(rule, rawLine, path, message: string.Format(rule.Description, tool));
@@ -272,6 +299,148 @@ internal static class ShellContentScanner
             yield return Finding(SecurityFindingRules.RiskyTool, rawLine, path, FindingSeverity.Critical,
                 $"'{tool}' is invoked via obfuscated shell syntax - the tool name was deliberately hidden, which is a strong sign of malicious intent.");
         }
+    }
+
+    // An array assignment 'name=( … )'. The '=' must sit in unquoted text, so the same
+    // text inside a quoted help string never opens a value region.
+    private static readonly Regex ArrayAssignmentIntroducer =
+        new(@"(?<=^|[;&|)\s])[A-Za-z_][A-Za-z0-9_]*\+?=\(", RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Computes the character ranges of this line that lie inside an array-assignment
+    ///     value, and whether the line still ends inside one. Unquoted parens are depth-
+    ///     tracked so an array can span lines; text inside a command substitution keeps its
+    ///     own region and is not part of the inert spans.
+    /// </summary>
+    private static (List<(int Start, int End)> Spans, bool EndsInside) GetArrayValueSpans(
+        string line,
+        ShellSyntax.QuotePosition[] positions,
+        bool startsInside)
+    {
+        var spans = new List<(int Start, int End)>();
+        var i = 0;
+        var inside = startsInside;
+
+        while (i < line.Length)
+        {
+            if (!inside)
+            {
+                var introducer = ArrayAssignmentIntroducer.Match(line, i);
+                if (!introducer.Success)
+                    break;
+
+                var open = introducer.Index + introducer.Length - 1;
+                if (positions[open].Region != ShellSyntax.QuoteRegion.Normal)
+                {
+                    i = open + 1;
+                    continue;
+                }
+
+                inside = true;
+                i = open + 1;
+            }
+
+            var depth = 1;
+            var close = i;
+            while (close < line.Length)
+            {
+                if (positions[close].Region == ShellSyntax.QuoteRegion.Normal)
+                {
+                    if (line[close] == '(')
+                        depth++;
+                    else if (line[close] == ')' && --depth == 0)
+                        break;
+                }
+
+                close++;
+            }
+
+            if (close == line.Length)
+            {
+                spans.Add((i, line.Length));
+                return (spans, true);
+            }
+
+            spans.Add((i, close));
+            inside = false;
+            i = close + 1;
+        }
+
+        return (spans, inside);
+    }
+
+    /// <summary>
+    ///     Returns the first occurrence of the tool that is executed code rather than array
+    ///     assignment data, or -1. Words inside a <c>name=( … )</c> value are assigned, never
+    ///     invoked, so mentions there (dependency arrays naming sudo or curl) are skipped and
+    ///     a later live occurrence on the same line is still found.
+    /// </summary>
+    private static int FindInvokedTool(
+        string normalized,
+        string tool,
+        ShellSyntax.QuotePosition[] positions,
+        int[] sourceIndices,
+        IReadOnlyList<(int Start, int End)>? arrayValueSpans)
+    {
+        var search = 0;
+        while (true)
+        {
+            var index = ShellSyntax.FindUnquotedTool(normalized, tool, search);
+            if (index < 0)
+                return -1;
+
+            if (!IsInertArrayData(index, tool.Length, arrayValueSpans, positions, sourceIndices))
+                return index;
+
+            search = index + tool.Length;
+        }
+    }
+
+    /// <summary>
+    ///     True when the normalized tool match exists verbatim and contiguously in the source.
+    ///     Checking this specific match matters: an earlier visible occurrence may be inert
+    ///     array data while the selected live occurrence is obfuscated.
+    /// </summary>
+    private static bool IsVisibleToolMatch(
+        string line,
+        string tool,
+        int normalizedIndex,
+        ShellSyntax.QuotePosition[] positions,
+        int[] sourceIndices)
+    {
+        var sourceStart = sourceIndices[normalizedIndex];
+        var sourceEnd = sourceIndices[normalizedIndex + tool.Length - 1];
+        return sourceEnd - sourceStart == tool.Length - 1 &&
+               !ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, normalizedIndex, tool.Length) &&
+               line.AsSpan(sourceStart, tool.Length).Equals(tool, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     True when the whole normalized match maps back into an array-assignment value
+    ///     outside any command substitution. Assignment words are data; a substitution inside
+    ///     an array still executes and keeps its findings.
+    /// </summary>
+    private static bool IsInertArrayData(
+        int normalizedIndex,
+        int length,
+        IReadOnlyList<(int Start, int End)>? arrayValueSpans,
+        ShellSyntax.QuotePosition[] positions,
+        int[] sourceIndices)
+    {
+        if (arrayValueSpans is null)
+            return false;
+
+        for (var i = normalizedIndex; i < normalizedIndex + length; i++)
+        {
+            var source = sourceIndices[i];
+            if (positions[source].Region == ShellSyntax.QuoteRegion.CommandSubstitution)
+                return false;
+
+            if (!arrayValueSpans.Any(span => source >= span.Start && source < span.End))
+                return false;
+        }
+
+        return true;
     }
 
     // Words that can directly precede an invoked command. Any other word before the eval

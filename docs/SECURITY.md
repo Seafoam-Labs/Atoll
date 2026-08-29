@@ -75,11 +75,12 @@ content documents stay free of scanner metadata.
 
 ## Scanner
 
-`PkgBuildSecurityScanner` is deterministic and side-effect free: same input, same findings, no code executed. Every
-file is first checked for binary content (whole-file, regardless of extension): recognized executable formats (ELF,
-PE/`MZ`) are `Critical`, any other binary content — archives, inert media, certificate/signature files, undecodable
-text — is a non-blocking `Medium` (`local-binary`). Script-like files (the `PKGBUILD` plus `.sh`, `.bash`, `.install`,
-`.hook`, `.py`, `.pl`, `.rb`, `.service`, `.csh`, `.zsh`) are then scanned line by line; other text files are ignored.
+`PkgBuildSecurityScanner` is deterministic and side-effect free: same input, same findings, no code executed. Every file
+is first checked for binary content (whole-file, regardless of extension): recognized executable formats (ELF, PE/`MZ`)
+are `Critical`, any other binary content — archives, inert media, certificate/signature files, undecodable text — is a
+non-blocking `Medium` (`local-binary`), as is an ELF file named as a shared library (`*.so`, `*.so.N`). Script-like
+files (the `PKGBUILD` plus `.sh`, `.bash`, `.install`, `.hook`, `.py`, `.pl`, `.rb`, `.service`, `.csh`, `.zsh`) are
+then scanned line by line; other text files are ignored.
 
 Each script line is processed as follows:
 
@@ -112,17 +113,20 @@ as ordinary lines.
 | `decode-to-shell` | Critical | Decoder (`base64`, `xxd`, `openssl enc`, `printf`, `echo`) piped into a shell. |
 | `eval-indirection` | Critical (Medium for established idioms) | `eval`/`source`/`.` in command position, fed by command substitution, backticks, or a payload. |
 | `network-execution` | High | Downloader chained (pipe/`;`/`&&`) into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). |
-| `write-outside-build-root` | High (Medium in `.install` scriptlets) | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). |
+| `write-outside-build-root` | High (Medium in `.install` scriptlets and in scripts the PKGBUILD never invokes) | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). |
 | `privilege-escalation` | High (Medium in `.install` scriptlets and shell helper scripts) | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. |
 | `hidden-character` | Critical (Medium for zero-width chars) | Bidi overrides/isolates and C0/C1 control bytes; zero-width chars (U+200B/C/D, U+FEFF) are Medium. |
 | `homograph` | Medium | Spoofing in PKGBUILD metadata values. PKGBUILD only. |
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
 | `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking). |
 | `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
-| `local-binary` | Critical (Medium for non-executable content) | A source file containing binary bytes; only recognized executable formats (ELF, PE/`MZ`) block. |
+| `local-binary` | Critical (Medium for non-executable content and shared libraries) | A source file containing binary bytes; only recognized executable formats (ELF, PE/`MZ`) block, and an ELF named as a shared library (`*.so`, `*.so.N`) is packaged payload like an archive's contents. |
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after),
-so `sudo` inside `pseudo` or `sudoku` is not flagged.
+so `sudo` inside `pseudo` or `sudoku` is not flagged. Array-assignment values (`depends=(mono curl … sudo …)`,
+including multi-line arrays) are tracked across lines: their words are assigned data, never invoked, so tool
+mentions there are not findings — while command substitutions inside an array (`depends=($(curl …))`) still execute
+and keep theirs.
 
 ### False-positive suppression
 
@@ -133,6 +137,9 @@ facade tests:
 - **Quoted display text is not execution.** Pipe rules drop matches whose `|` sits inside a quoted string (uninstall
   help text, optdepends notes, usage strings). A quoted `eval` keyword or one used as an argument mention
   (`pkgdesc="An open source …"`) is not flagged.
+- **Array assignments are data.** `name=( … )` values (dependency arrays, `source=`, plain shell arrays) assign
+  words without invoking them, so `depends=(… sudo …)` or `… curl …` is not a finding; substitutions inside an
+  array still execute and stay flagged. The value region can span lines and ends at the unquoted closing paren.
 - **Structural exemptions for visible constructs** (obfuscated matches keep their Critical escalation):
   `network-execution` drops a `perl` receiving its program from inline `-e`/`-E` code (the download is stdin *data*
   for the reviewable program), and `decode-to-shell` drops a pipe whose shell reads its script from a file argument
@@ -140,9 +147,30 @@ facade tests:
 - **File-context downgrades.** ALPM runs `.install` scriptlets as root, so escalation tools and system writes there
   are redundant rather than dangerous: both rules downgrade to `Medium`. Packaged helper scripts
   (`.sh`/`.bash`/`.csh`/`.zsh`) get the same downgrade for `privilege-escalation` only — they run solely when invoked
-  voluntarily. `write-outside-build-root` deliberately keeps High in helper scripts; that bucket holds the corpus's
-  genuinely alarming content (NOPASSWD sudoers writes, root `authorized_keys` injection). PKGBUILD build-time
-  invocations (`sudo make install`) run as the building user and stay High.
+  voluntarily. `write-outside-build-root` keeps High in helper scripts the PKGBUILD invokes (directly or via
+  `install=`); that bucket holds the corpus's genuinely alarming content (NOPASSWD sudoers writes, root
+  `authorized_keys` injection). PKGBUILD build-time invocations (`sudo make install`) run as the building user and
+  stay High.
+- **Shared libraries are packaged payload.** An ELF file named by the linker convention (`*.so`, `*.so.N[.N…]`) is
+  loaded by other programs rather than executed directly, so it is the same trust class as the ELF binaries inside
+  the vendored `.deb`/tar archives such packages also ship (Medium `local-binary-archive`/`suspicious-source-url`)
+  and downgrades to a review-only `Medium`. Corpus pattern: committed compat libraries and plugin `.so` files
+  (activinspire's `libre2.so.5`, hoffice's `libqt5im-nimf.so`, `libsteam_api.so`). The name is the signal — `e_type`
+  cannot distinguish libraries from PIE executables — so renaming an executable to `*.so` gains only this downgrade
+  and the file stays visible in the repository for review; any other ELF name keeps `Critical`.
+- **Scripts the PKGBUILD never invokes cannot run.** A script the PKGBUILD mentions only in ways that cannot execute
+  it — nowhere in its text, as a `source=`/checksum array entry, or staged into the build tree by
+  `install`/`cp`/`mv`/`ln` (an explicit `$pkgdir`/`$DESTDIR` target or a relative destination, which lands inside
+  the build tree) — never runs at build or install time, so its `write-outside-build-root` findings downgrade to
+  `Medium`. Corpus patterns: maintainer-only docker build/release tooling (ferdium-bin's `dockerscript.sh`, referenced
+  nowhere), packaged payload scripts that only execute later on the user's system (ccache-ext's
+  `update-ccache-links.sh`, run by a pacman hook; crashplan-pro's `upgrade.sh`, run by a path-triggered systemd
+  unit — staged via `install … bin/upgrade.sh` after a `cd $pkgdir`). The write stays visible for review, and
+  obfuscated constructs still escalate to Critical. Any
+  other mention — a typed or `bash` invocation, an `install=` scriptlet entry, a comment, a copy to a system path —
+  counts as an invocation, including one after a data declaration or staging command on the same line. Staging outside
+  the build tree is itself out-of-root behavior, and when there is no PKGBUILD to check against the conservative answer
+  keeps the finding blocking. Evasion via glob or variable-based invocation remains possible and accepted.
 - **Established `eval` idioms are Medium:** `eval echo …` / `eval printf …` with literal words plus
   tilde/variable expansion, and `eval $(…)` fed by a well-known environment emitter (`opam env`, `makepkg -g`,
   `dbus-launch`), a local file parser (`grep`, `awk`, `sed`, `cat`), or a local read-only monitor (`sensors`).
@@ -326,13 +354,13 @@ see `post_install_validator.zig`, `homograph_validator.zig`, `local_source_valid
 
 | Shelly validator/concept | Atoll counterpart | Divergence (intentional) |
 | --- | --- | --- |
-| Risky tools | `risky-tool` (Medium) | Atoll adds a quoted-region exemption. |
-| Privilege tools | `privilege-escalation` | Same, plus quote exemption, obfuscation escalation, and the scriptlet/helper context downgrades. |
+| Risky tools | `risky-tool` (Medium) | Atoll adds quoted-region and array-assignment exemptions. |
+| Privilege tools | `privilege-escalation` | Same, plus quote/array exemptions, obfuscation escalation, and the scriptlet/helper context downgrades. |
 | Bare `eval` token → critical | `eval-indirection` | Atoll requires a dynamic operand in command position; established idioms are Medium. |
 | Decode-to-shell | `decode-to-shell` | Atoll superset (`openssl enc`, more shell targets); quoted-display and script-file-argument pipes suppressed. |
 | — | `network-to-shell` / `network-execution` | Atoll-only; quoted-display pipes suppressed, `perl -e` text filters exempted. |
 | Command substitution / indirection (naive) | `command-substitution` / `variable-indirection` | Atoll is quote-aware and heredoc-aware; shelly matches naive substrings. |
-| — | `write-outside-build-root` | Atoll-only; scriptlet writes downgraded, helper scripts keep High. |
+| — | `write-outside-build-root` | Atoll-only; scriptlet and never-invoked-script writes downgraded, invoked helper scripts keep High. |
 | `homograph_validator.zig` | `homograph` | Ported conceptually; field-scoped to metadata, CJK/Hangul excluded, Medium not blocking. |
 | `local_source_validator.zig` (ELF, first 64 bytes of `source=` files) | `local-binary` | Atoll checks every file, whole content; blocks only on executable magic. |
 | Obfuscation normalization (edge + intra-word quotes) | `NormalizeForMatching` (intra-word only) | Edge-quote stripping would re-introduce quoted-string FPs in Atoll's blocking model. |

@@ -244,7 +244,7 @@ public class PkgBuildSecurityScannerTests
     {
         // Helper scripts ship in the package and only run when the user invokes them
         // voluntarily, typically as root: sudo inside one grants nothing new. The
-        // write-outside-build-root test below pins the guard that keeps system writes
+        // write-outside-build-root tests below pin the guards that keep system writes
         // from helper scripts blocking.
         var result = Scan(("check.sh", "sudo systemctl restart foo.service\n"));
 
@@ -256,10 +256,275 @@ public class PkgBuildSecurityScannerTests
     [Test]
     public void Write_outside_build_root_in_helper_script_still_flags()
     {
+        // No PKGBUILD in the file set, so there is no reference to check: the
+        // conservative answer keeps the write blocking.
         var result = Scan(("dockerscript.sh", "echo 'yay ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers\n"));
 
         var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
         Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Write_outside_build_root_in_referenced_helper_script_still_flags()
+    {
+        // The PKGBUILD invokes the script from build(), so its writes execute at
+        // build time and keep blocking.
+        var result = Scan(
+            ("PKGBUILD", "pkgname=foo\n\nbuild() {\n  bash ./dockerscript.sh\n}\n"),
+            ("dockerscript.sh", "echo 'yay ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Write_outside_build_root_in_unreferenced_helper_script_does_not_block()
+    {
+        // ferdium-bin regression: the maintainer-only docker build/release scripts
+        // (build-in-docker.sh, build.sh, dockerscript.sh, update.sh) are never invoked
+        // by the PKGBUILD; the sudoers write targets their own container anyway.
+        var result = Scan(
+            ("PKGBUILD",
+                """
+                pkgname=ferdium-bin
+                pkgver=7.2.2
+
+                package() {
+                  install -Dm644 ferdium.desktop "$pkgdir/usr/share/applications/ferdium.desktop"
+                }
+                """),
+            ("dockerscript.sh", "echo 'yay ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers\n"),
+            ("build.sh", "docker run --rm archlinux:base-devel /bin/bash /root/dockerscript.sh\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("never invokes").IgnoreCase);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Write_outside_build_root_in_script_only_staged_into_pkgdir_does_not_block()
+    {
+        // ccache-ext regression: update-ccache-links.sh appears in the PKGBUILD only as a
+        // source-array entry and an install into $pkgdir - it runs later, on the user's
+        // system via the pacman hook, never at build or install time.
+        var result = Scan(
+            ("PKGBUILD",
+                """
+                pkgname=ccache-ext
+                pkgver=3
+                pkgrel=1
+
+                source=('update-ccache-links.sh'
+                        'update-ccache-links.hook')
+                sha256sums=('152d8d3cbe25c9c8380f98846f3f80e9b36fe375d4c2c182a9ab3e02ad757146'
+                            'e7c0cb74b47371162262e1ad57590cbd41a3fdeaa4988370fde98ae19c75703c')
+
+                package() {
+                  install -Dm755 update-ccache-links.sh "${pkgdir}/usr/bin/update-ccache-links"
+                }
+                """),
+            ("update-ccache-links.sh",
+                "ret=`pacman -Qqo \"/usr/bin/$file\" | grep -e gcc -e clang`\n" +
+                "echo -e \"#!/bin/sh -\\n/usr/bin/ccache /opt/cuda/bin/nvcc \\\"\\$@\\\"\" > /usr/lib/ccache/bin/nvcc-ccache\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("never invokes").IgnoreCase);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Write_outside_build_root_in_script_only_staged_at_a_relative_path_does_not_block()
+    {
+        // crashplan-pro regression: upgrade.sh appears only in the source array and an
+        // install whose destination is relative to a cd into $pkgdir - it runs later, on
+        // the user's system via a path-triggered systemd unit, never at build time.
+        var result = Scan(
+            ("PKGBUILD",
+                """
+                pkgname=crashplan-pro
+                pkgver=11.9.0
+                pkgrel=1
+
+                source=(https://example.org/CrashPlan.tgz
+                        crashplan-pro.service
+                        upgrade.sh
+                        crashplan-pro_upgrade.service)
+                sha1sums=('b4c3240af2be415ca464b3f2fe4abffb6c546027'
+                          '194c2022af9809ba9a4694c747db01124c550ffb'
+                          '8135b6e0fca07b5e3793faa8064ec480efda0063'
+                          'c24e2ba2b2d6831246ea4af072305ddf5d1fd774')
+
+                package() {
+                  mkdir -p $pkgdir/opt/crashplan
+                  cd $pkgdir/opt/crashplan
+                  install -D -m 755 $srcdir/upgrade.sh bin/upgrade.sh
+                }
+                """),
+            ("upgrade.sh", "echo \"LC_ALL=$LANG\" > /opt/crashplan/bin/run.conf\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("never invokes").IgnoreCase);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Relative_destination_cp_in_build_does_not_count_as_invocation()
+    {
+        // A transport command never executes its operand, and a relative destination
+        // lands inside the build tree even without a pkgdir literal.
+        var result = Scan(
+            ("PKGBUILD",
+                """
+                pkgname=foo
+                source=('helper.sh')
+                sha256sums=('SKIP')
+
+                build() {
+                  cp helper.sh bin/helper.sh
+                }
+                """),
+            ("helper.sh", "echo x > /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Source_array_mention_with_typed_invocation_still_blocks()
+    {
+        // Declaring the script in source= stages it, but the typed ./helper.sh
+        // invocation in build() is what runs it - the write stays blocking.
+        var result = Scan(
+            ("PKGBUILD",
+                """
+                pkgname=foo
+                source=('helper.sh')
+                sha256sums=('SKIP')
+
+                build() {
+                  ./helper.sh
+                }
+                """),
+            ("helper.sh", "echo x > /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Inline_comment_after_staging_destination_does_not_count_as_invocation()
+    {
+        var result = Scan(
+            ("PKGBUILD", "pkgname=foo\ninstall -Dm755 helper.sh $pkgdir/usr/bin/helper # packaged helper\n"),
+            ("helper.sh", "echo x > /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Comment_mention_stays_conservatively_referenced()
+    {
+        var result = Scan(
+            ("PKGBUILD", "pkgname=foo\n# helper.sh may be run manually\n"),
+            ("helper.sh", "echo x > /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Invocation_after_source_array_on_the_same_line_still_blocks()
+    {
+        var result = Scan(
+            ("PKGBUILD", "pkgname=foo\nsource=(helper.sh); bash helper.sh\n"),
+            ("helper.sh", "echo x > /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Invocation_after_staging_command_on_the_same_line_still_blocks()
+    {
+        var result = Scan(
+            ("PKGBUILD", "pkgname=foo\ninstall -Dm755 helper.sh $pkgdir/usr/bin/helper; bash helper.sh\n"),
+            ("helper.sh", "echo x > /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Non_data_array_mention_still_blocks()
+    {
+        // Only makepkg data arrays (source, checksums, …) stage their entries; a mention
+        // in any other array is treated as code the PKGBUILD reaches.
+        var result = Scan(
+            ("PKGBUILD", "pkgname=foo\nscripts=(./helper.sh)\n"),
+            ("helper.sh", "echo x > /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Staging_to_system_path_still_blocks()
+    {
+        // The transport exemption covers staging into $pkgdir only: copying the script
+        // straight to a system path is itself out-of-root behavior and keeps the mention.
+        var result = Scan(
+            ("PKGBUILD",
+                """
+                pkgname=foo
+
+                package() {
+                  install -Dm755 helper.sh /usr/bin/helper
+                }
+                """),
+            ("helper.sh", "echo x > /etc/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
+    }
+
+    [Test]
+    public void Install_scriptlet_entry_counts_as_a_reference()
+    {
+        // The scriptlet is wired up via install=, so its writes run under alpm's
+        // control and take the scriptlet verdict, not the unreferenced one.
+        var result = Scan(
+            ("PKGBUILD", "pkgname=foo\ninstall=foo.install\n"),
+            ("foo.install", "post_install() {\n  echo /bin/zsh >> /etc/shells\n}\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("scriptlet").IgnoreCase);
+        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
+    }
+
+    [Test]
+    public void Obfuscated_write_in_unreferenced_helper_script_stays_critical()
+    {
+        var result = Scan(
+            ("PKGBUILD", "pkgname=foo\npkgver=1.0\n"),
+            ("helper.sh", "echo x > /et''c/sudoers\n"));
+
+        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
     }
 

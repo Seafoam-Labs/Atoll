@@ -41,6 +41,16 @@ internal static class SecurityFindingRules
         FindingSeverity.Medium,
         "Local source file '{0}' is binary data that cannot be reviewed as text - no executable format was recognized, so it cannot execute on its own.");
 
+    // Same rule id as LocalBinary, retained for review but non-blocking: an ELF file named
+    // as a shared library (*.so, *.so.N) is loaded by other programs as package content,
+    // the same trust class as binaries inside a vendored archive (rated Medium above).
+    // Renaming an executable to *.so gains only this downgrade and the file stays visible
+    // in the repository for review.
+    public static readonly SecurityFindingRule LocalBinarySharedLibrary = new(
+        "local-binary",
+        FindingSeverity.Medium,
+        "Local source file '{0}' is an ELF shared library - it cannot be reviewed as text, but it is loaded by other programs as package content rather than executed directly.");
+
     public static readonly SecurityFindingRule SuspiciousSourceUrl = new(
         "suspicious-source-url",
         FindingSeverity.Medium,
@@ -94,6 +104,15 @@ internal static class SecurityFindingRules
         FindingSeverity.Medium,
         "A write targets a path outside the build root from the package's .install scriptlet - scriptlets run as root under alpm's control, and writing system files is their ordinary purpose.");
 
+    // Same rule id as WriteOutsideBuildRoot, retained for review but non-blocking: the
+    // PKGBUILD never invokes the script - it only stages it as package content via a
+    // source entry or an install into $pkgdir - so the write cannot run as part of
+    // packaging. The script stays visible in the repository for review.
+    public static readonly SecurityFindingRule WriteOutsideBuildRootUnreferenced = new(
+        "write-outside-build-root",
+        FindingSeverity.Medium,
+        "A write targets a path outside the build root in a script the PKGBUILD never invokes - it is only staged as package content, so it cannot run at build or install time and is kept for review only.");
+
     public static readonly SecurityFindingRule NetworkExecution = new(
         "network-execution",
         FindingSeverity.High,
@@ -132,7 +151,8 @@ internal static class SecurityFindingRules
     // scripts ship inside the package and only run when the user invokes them voluntarily,
     // typically with root already granted, so the tool confers nothing the user did not
     // hand over. Writes to system files from such scripts stay covered by
-    // write-outside-build-root, which is not downgraded for helper scripts.
+    // write-outside-build-root, which blocks unless the PKGBUILD never invokes the
+    // script at all.
     public static readonly SecurityFindingRule PrivilegeEscalationHelperScript = new(
         "privilege-escalation",
         FindingSeverity.Medium,

@@ -147,6 +147,35 @@ public class LocalSourceBinaryScannerTests
         Assert.That(finding.Message, Does.Contain("ELF executable"));
     }
 
+    [TestCase("libqt5im-nimf.so")]
+    [TestCase("libre2.so.5")]
+    [TestCase("libgconf-2.so.4.1.5")]
+    [TestCase("libpcre.so.3.13.2")]
+    [TestCase("subdir/libsteam_api.so", Description = "path with directory")]
+    public void Elf_named_as_a_shared_library_is_medium(string path)
+    {
+        // A shared library is loaded by other programs as package content - the same trust
+        // class as binaries inside a vendored archive - so it is kept for review only.
+        var elf = Bytes([0x7F, .. Encoding.UTF8.GetBytes("ELF payload")]);
+
+        var finding = LocalSourceBinaryScanner.Scan(elf, path);
+
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Medium));
+        Assert.That(finding.Message, Does.Contain("shared library"));
+    }
+
+    [TestCase("tool.so.txt")]
+    [TestCase("libfoo.so.5a")]
+    public void Elf_with_a_non_library_so_suffixed_name_stays_critical(string path)
+    {
+        // Only the linker naming convention counts; anything else keeps blocking severity.
+        var elf = Bytes([0x7F, .. Encoding.UTF8.GetBytes("ELF payload")]);
+
+        var finding = LocalSourceBinaryScanner.Scan(elf, path);
+
+        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Critical));
+    }
+
     [Test]
     public void Windows_executable_magic_is_critical()
     {
