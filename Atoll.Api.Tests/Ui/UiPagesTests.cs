@@ -450,6 +450,7 @@ public class UiPagesTests
         Assert.Multiple(() =>
         {
             Assert.That(headBody, Does.Contain("code-view"));
+            Assert.That(headBody, Does.Contain("language-pkgbuild"));
             Assert.That(headBody, Does.Contain("pkgname=new"));
             Assert.That(headBody, Does.Contain("PKGBUILD"));
         });

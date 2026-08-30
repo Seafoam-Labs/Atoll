@@ -428,6 +428,71 @@
         @apply shrink-0 px-3 py-3 text-ink whitespace-pre;
     }
 
+    /* Seafoam Labs highlight.js theme. Rose keywords, cyan titles, amber values, seafoam
+       strings, faint comments; diff markers reuse the security greens/reds. No base
+       background or block layout - the viewer's <pre> provides canvas, padding, scrolling. */
+    .hljs {
+        @apply text-ink;
+    }
+
+    .hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword, .hljs-template-tag,
+    .hljs-template-variable, .hljs-type, .hljs-variable.language_ {
+        @apply text-sec-flagged;
+    }
+
+    .hljs-title, .hljs-title.class_, .hljs-title.class_.inherited__, .hljs-title.function_ {
+        @apply text-atoll;
+    }
+
+    .hljs-attr, .hljs-attribute, .hljs-literal, .hljs-meta, .hljs-number, .hljs-operator,
+    .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id, .hljs-variable {
+        @apply text-sec-pending;
+    }
+
+    .hljs-meta .hljs-string, .hljs-regexp, .hljs-string {
+        @apply text-sec-verified;
+    }
+
+    .hljs-built_in, .hljs-symbol {
+        @apply text-sev-high;
+    }
+
+    .hljs-code, .hljs-comment, .hljs-formula {
+        @apply text-ink-faint;
+    }
+
+    .hljs-name, .hljs-quote, .hljs-selector-pseudo, .hljs-selector-tag {
+        @apply text-atoll-light;
+    }
+
+    .hljs-subst {
+        @apply text-ink;
+    }
+
+    .hljs-section {
+        @apply text-atoll-light font-bold;
+    }
+
+    .hljs-bullet {
+        @apply text-sev-medium;
+    }
+
+    .hljs-emphasis {
+        @apply italic;
+    }
+
+    .hljs-strong {
+        @apply font-bold;
+    }
+
+    .hljs-addition {
+        @apply bg-sec-verified/10 text-sec-verified;
+    }
+
+    .hljs-deletion {
+        @apply bg-sec-error/10 text-sec-error;
+    }
+
     /* ===== Security status banners ===== */
     .status-banner {
         @apply rounded-lg border px-4 py-3 text-sm;

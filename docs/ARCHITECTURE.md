@@ -192,7 +192,7 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | --- | --- | --- |
 | `/` | Interactive Server | Package catalog search, live filtering (all/seeded/unseeded), and sorting |
 | `/package/{name}` | Static SSR | Package details, metadata, relationships, clone block, security banner |
-| `/package/{name}/files` | Static SSR | PKGBUILD and source file viewer across revisions |
+| `/package/{name}/files` | Static SSR | PKGBUILD and source file viewer across revisions (client-side syntax coloring via self-hosted highlight.js) |
 | `/package/{name}/revisions` | Static SSR | Revision history list and static security analysis findings |
 | `/status` | Static SSR | Operational dashboard: index sync, workers, security scans, exclusions |
 

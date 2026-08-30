@@ -1,5 +1,7 @@
 @* Mono viewer with a line-number gutter. Two plain <pre> text nodes (numbers + body) render large
-   files far faster than per-line markup; the gutter is sticky so it stays put while scrolling. *@
+   files far faster than per-line markup; the gutter is sticky so it stays put while scrolling.
+   Syntax coloring is applied client-side by wwwroot/js/file-highlighting.js (self-hosted
+   highlight.js), after the SSR markup paints. *@
 @if (IsBinary)
 {
     <div class="card text-center">
@@ -32,7 +34,7 @@ else
     }
     <div class="code-view">
         <pre class="code-nums" aria-hidden="true">@_lineNumbers</pre>
-        <pre class="code-body">@Content</pre>
+        <pre class="code-body"><code class="@_languageClass">@Content</code></pre>
     </div>
 }
 
@@ -41,8 +43,10 @@ else
     [Parameter] public long ContentBytes { get; set; }
     [Parameter] public bool IsBinary { get; set; }
     [Parameter] public bool IsTruncated { get; set; }
+    [Parameter] public string? FileName { get; set; }
 
     private string _lineNumbers = "";
+    private string? _languageClass;
 
     protected override void OnParametersSet()
     {
@@ -51,5 +55,104 @@ else
 
         var lines = text.Length == 0 ? 0 : newlines + (text.EndsWith('\n') ? 0 : 1);
         _lineNumbers = lines == 0 ? "" : string.Join("\n", Enumerable.Range(1, lines));
+        _languageClass = MapLanguage(FileName) is { } language ? $"language-{language}" : null;
+    }
+
+    // Exact names first (PKGBUILD has no extension); only languages shipped in the vendored
+    // "common" bundle are listed, plus "pkgbuild" which js/pkgbuild-language.js registers
+    // client-side on top of that bundle - anything else falls back to hljs auto-detection.
+    private static readonly Dictionary<string, string> LanguagesByFileName = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["PKGBUILD"] = "pkgbuild",
+        [".SRCINFO"] = "ini",
+        [".AURINFO"] = "ini",
+        ["Pipfile"] = "ini",
+        [".editorconfig"] = "ini",
+        [".env"] = "ini",
+        [".shellcheckrc"] = "ini",
+        [".profile"] = "bash",
+        ["Makefile"] = "makefile",
+        ["GNUmakefile"] = "makefile",
+        ["LICENSE"] = "plaintext",
+        [".gitignore"] = "plaintext",
+        [".gitattributes"] = "plaintext",
+    };
+
+    private static readonly Dictionary<string, string> LanguagesByExtension = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".install"] = "bash",
+        [".sh"] = "bash",
+        [".bash"] = "bash",
+        [".zsh"] = "bash",
+        [".py"] = "python",
+        [".js"] = "javascript",
+        [".mjs"] = "javascript",
+        [".cjs"] = "javascript",
+        [".ts"] = "typescript",
+        [".json"] = "json",
+        [".yml"] = "yaml",
+        [".yaml"] = "yaml",
+        [".toml"] = "ini",
+        [".ini"] = "ini",
+        [".cfg"] = "ini",
+        [".conf"] = "ini",
+        [".service"] = "ini",
+        [".timer"] = "ini",
+        [".socket"] = "ini",
+        [".hook"] = "ini",
+        [".rules"] = "ini",
+        [".preset"] = "ini",
+        [".sysusers"] = "ini",
+        [".tmpfiles"] = "ini",
+        [".pc"] = "ini",
+        [".properties"] = "ini",
+        [".desktop"] = "ini",
+        [".md"] = "markdown",
+        [".markdown"] = "markdown",
+        [".txt"] = "plaintext",
+        [".c"] = "c",
+        [".h"] = "c",
+        [".cpp"] = "cpp",
+        [".cc"] = "cpp",
+        [".hpp"] = "cpp",
+        [".cs"] = "csharp",
+        [".go"] = "go",
+        [".rs"] = "rust",
+        [".java"] = "java",
+        [".kt"] = "kotlin",
+        [".kts"] = "kotlin",
+        [".rb"] = "ruby",
+        [".php"] = "php",
+        [".pl"] = "perl",
+        [".pm"] = "perl",
+        [".lua"] = "lua",
+        [".r"] = "r",
+        [".sql"] = "sql",
+        [".swift"] = "swift",
+        [".diff"] = "diff",
+        [".patch"] = "diff",
+        [".css"] = "css",
+        [".scss"] = "scss",
+        [".less"] = "less",
+        [".xml"] = "xml",
+        [".html"] = "xml",
+        [".htm"] = "xml",
+        [".svg"] = "xml",
+        [".graphql"] = "graphql",
+    };
+
+    /// <summary>Maps a package file path to a highlight.js language id, or null for auto-detection.</summary>
+    public static string? MapLanguage(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return null;
+
+        var fileName = Path.GetFileName(path);
+        if (LanguagesByFileName.TryGetValue(fileName, out var byName))
+            return byName;
+
+        return LanguagesByExtension.TryGetValue(Path.GetExtension(fileName), out var byExtension)
+            ? byExtension
+            : null;
     }
 }
