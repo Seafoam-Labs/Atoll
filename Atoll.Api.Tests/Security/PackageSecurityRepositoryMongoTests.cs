@@ -1,6 +1,7 @@
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Support;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 
@@ -9,9 +10,21 @@ namespace Atoll.Api.Tests.Security;
 [Category("RequiresMongo")]
 public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryContract
 {
+    /// <summary>The index set <see cref="MongoPackageSecurityRepository" /> leaves behind, including the primary key.</summary>
+    private static readonly string[] EnsuredIndexNames =
+    [
+        "_id_",
+        "status_1_requiredPolicyVersion_1_leaseUntil_1",
+        "packageName_1_isHead_1",
+        "isHead_1_status_1_packageName_1"
+    ];
+
     private IMongoClient _client = null!;
     private string _database = null!;
     private MongoPackageSecurityRepository _repo = null!;
+
+    private IMongoCollection<PackageSecurityScanDocument> Scans =>
+        _client.GetDatabase(_database).GetCollection<PackageSecurityScanDocument>("package-security-scans");
 
     [SetUp]
     public void SetUp()
@@ -31,7 +44,119 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
 
     private protected override IPackageSecurityRepository CreateRepository()
     {
+        return NewRepository();
+    }
+
+    private MongoPackageSecurityRepository NewRepository()
+    {
         return MongoRepositoryFactory.CreatePackageSecurityRepository(_client, _database);
+    }
+
+    private async Task<string[]> IndexNamesAsync()
+    {
+        var indexes = await Scans.Indexes.List().ToListAsync();
+        return indexes.Select(index => index["name"].AsString).ToArray();
+    }
+
+    [Test]
+    public async Task Constructor_drops_superseded_indexes_left_by_an_older_deployment()
+    {
+        // Recreate the shapes earlier releases ensured: the pre-policy-aware claim index, the
+        // packageName duplicate of the compound head index, and the narrow head-status index.
+        var keys = Builders<PackageSecurityScanDocument>.IndexKeys;
+        foreach (var superseded in new[]
+                 {
+                     keys.Ascending(x => x.Status).Ascending(x => x.LeaseUntil),
+                     keys.Ascending(x => x.PackageName),
+                     keys.Ascending(x => x.IsHead).Ascending(x => x.Status)
+                 })
+        {
+            await Scans.Indexes.CreateOneAsync(new CreateIndexModel<PackageSecurityScanDocument>(superseded));
+        }
+
+        Assert.That(await IndexNamesAsync(), Is.SupersetOf(new[] { "packageName_1", "isHead_1_status_1" }));
+
+        NewRepository();
+
+        Assert.That(await IndexNamesAsync(), Is.EquivalentTo(EnsuredIndexNames));
+    }
+
+    [Test]
+    public async Task Constructor_is_idempotent_when_the_superseded_indexes_are_already_absent()
+    {
+        NewRepository();
+
+        // A second startup (or a fresh database) finds nothing to drop and must converge on the
+        // same index set rather than fail on the missing indexes.
+        NewRepository();
+
+        Assert.That(await IndexNamesAsync(), Is.EquivalentTo(EnsuredIndexNames));
+    }
+
+    [Test]
+    public async Task Head_status_query_shape_is_covered_by_the_index_without_fetching_documents()
+    {
+        for (var i = 0; i < 25; i++)
+        {
+            await Scans.InsertOneAsync(new PackageSecurityScanDocument
+            {
+                Id = PackageSecurityScanDocument.ComposeId($"pkg-{i}", "rev-1"),
+                PackageName = $"pkg-{i}",
+                RevisionId = "rev-1",
+                IsHead = i % 2 == 0,
+                Status = SecurityStatus.Verified,
+                Findings = [new SecurityFinding("rule", FindingSeverity.High, "payload", "", "PKGBUILD")]
+            });
+        }
+
+        // Exercises the query shape used by MongoPackageSecurityRepository.ListHeadStatusesAsync.
+        var explain = await _client.GetDatabase(_database).RunCommandAsync<BsonDocument>(
+            new BsonDocumentCommand<BsonDocument>(new BsonDocument
+            {
+                {
+                    "explain", new BsonDocument
+                    {
+                        { "find", Scans.CollectionNamespace.CollectionName },
+                        { "filter", new BsonDocument("isHead", true) },
+                        { "projection", new BsonDocument { { "_id", 0 }, { "packageName", 1 }, { "status", 1 } } },
+                        { "limit", 0 }
+                    }
+                },
+                { "verbosity", "executionStats" }
+            }));
+
+        var stages = ValuesNamed(explain, "stage").Select(value => value.AsString).ToArray();
+        var docsExamined = ValuesNamed(explain, "totalDocsExamined").Sum(value => value.ToInt64());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(stages, Does.Contain("PROJECTION_COVERED"), $"winning plan was {string.Join(" → ", stages)}");
+            Assert.That(docsExamined, Is.Zero, "head-status reads must not touch the documents behind the index");
+        });
+    }
+
+    private static IEnumerable<BsonValue> ValuesNamed(BsonValue node, string name)
+    {
+        switch (node)
+        {
+            case BsonDocument document:
+            {
+                foreach (var element in document)
+                {
+                    if (element.Name == name) yield return element.Value;
+                    foreach (var nested in ValuesNamed(element.Value, name)) yield return nested;
+                }
+
+                break;
+            }
+            case BsonArray array:
+            {
+                foreach (var item in array)
+                foreach (var nested in ValuesNamed(item, name)) yield return nested;
+
+                break;
+            }
+        }
     }
 
     [Test]

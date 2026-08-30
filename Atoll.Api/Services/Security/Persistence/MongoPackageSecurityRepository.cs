@@ -344,23 +344,34 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
                 keys.Ascending(x => x.Status).Ascending(x => x.RequiredPolicyVersion).Ascending(x => x.LeaseUntil)),
             new CreateIndexModel<PackageSecurityScanDocument>(
                 keys.Ascending(x => x.PackageName).Ascending(x => x.IsHead)),
+            // Serves both head-status reads off the index alone: the package catalog's
+            // (packageName, status) projection and the status dashboard's aggregation. Keeping
+            // PackageName last means neither has to fetch head documents carrying findings.
             new CreateIndexModel<PackageSecurityScanDocument>(
-                keys.Ascending(x => x.PackageName)),
-            // Covers the status dashboard's head-status aggregation (match on IsHead,
-            // group by Status) without touching non-head revision scans.
-            new CreateIndexModel<PackageSecurityScanDocument>(
-                keys.Ascending(x => x.IsHead).Ascending(x => x.Status))
+                keys.Ascending(x => x.IsHead).Ascending(x => x.Status).Ascending(x => x.PackageName))
         ]);
 
-        // The pre-policy-aware claim index (status, leaseUntil) is superseded; drop it when an
-        // older deployment left it behind.
-        try
+        // CreateMany only adds, so every superseded shape needs a targeted drop. Each is an
+        // idempotent no-op on a fresh database or a repeated startup, and only IndexNotFound is
+        // suppressed so authorization or server errors still surface at construction time.
+        foreach (var superseded in new[]
+                 {
+                     // Pre-policy-aware claim index.
+                     "status_1_leaseUntil_1",
+                     // Strict prefix duplicate of (packageName, isHead).
+                     "packageName_1",
+                     // Too narrow to cover the head-status projection.
+                     "isHead_1_status_1"
+                 })
         {
-            _scans.Indexes.DropOne("status_1_leaseUntil_1");
-        }
-        catch (MongoCommandException)
-        {
-            // IndexNotFound — nothing to clean up.
+            try
+            {
+                _scans.Indexes.DropOne(superseded);
+            }
+            catch (MongoCommandException ex) when (ex.CodeName == "IndexNotFound")
+            {
+                // Already absent.
+            }
         }
     }
 }

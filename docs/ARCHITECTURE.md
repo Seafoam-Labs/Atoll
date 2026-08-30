@@ -125,8 +125,10 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
     `{packageName}:{revisionId}`). History length does not bloat root package documents; snapshots are capped by
     MongoDB's 16 MiB BSON limit.
   - `package-security-scans` — Security state and findings per revision (keyed by `{packageName}:{revisionId}`).
-    Indexed on `(status, requiredPolicyVersion, leaseUntil)` for the policy-aware scanner work queue and
-    `(packageName, isHead)` for head lookups.
+    Indexed on `(status, requiredPolicyVersion, leaseUntil)` for the policy-aware scanner work queue,
+    `(packageName, isHead)` for head lookups and package-scoped reads, and `(isHead, status, packageName)` so the
+    package catalog's head-status projection and the status dashboard's per-status counts are served from the index
+    without fetching documents that carry findings.
   - `seed-exclusions` — Records pkgbases whose revision content exceeds the 16 MiB document limit, preventing endless
     retries during seed and refresh.
   - `aur-metadata` — Raw AUR metadata dump snapshots.
