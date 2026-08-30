@@ -47,10 +47,12 @@ public sealed class AurRpcService(PackageIndexStore store)
             _ => throw new ArgumentOutOfRangeException(nameof(by), by, null)
         };
 
-        return matches
-            .OrderBy(package => package.Name, StringComparer.Ordinal)
-            .Take(MaxResults + 1)
-            .ToArray();
+        return
+        [
+            .. matches
+                .OrderBy(package => package.Name, StringComparer.Ordinal)
+                .Take(MaxResults + 1)
+        ];
     }
 
     public IReadOnlyList<string> Suggest(string prefix, bool packageBases)
@@ -122,7 +124,7 @@ public sealed class AurRpcResponse
     public static AurRpcResponse Success(string type, IEnumerable<AurPackageMetadata> packages) => new()
     {
         Type = type,
-        Results = packages.Select(AurRpcPackage.FromMetadata).ToArray()
+        Results = [.. packages.Select(AurRpcPackage.FromMetadata)]
     };
 
     public static AurRpcResponse Failure(string error) => new()

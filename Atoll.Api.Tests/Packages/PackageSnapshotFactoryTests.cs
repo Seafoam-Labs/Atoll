@@ -62,7 +62,7 @@ public class PackageSnapshotFactoryTests
             Assert.That(snapshot.Content.Author, Is.EqualTo("aur"));
             Assert.That(snapshot.Content.Message, Is.EqualTo("seed from AUR"));
             Assert.That(snapshot.Content.CreatedAt, Is.EqualTo(snapshot.CreatedAt));
-            Assert.That(snapshot.Content.Files.Keys, Is.EquivalentTo(new[] { "PKGBUILD" }));
+            Assert.That(snapshot.Content.Files.Keys, Is.EquivalentTo(["PKGBUILD"]));
             Assert.That(snapshot.Metadata.RevisionId, Is.EqualTo(snapshot.RevisionId));
             Assert.That(snapshot.Metadata.CreatedAt, Is.EqualTo(snapshot.CreatedAt));
             Assert.That(snapshot.Metadata.Author, Is.EqualTo("aur"));

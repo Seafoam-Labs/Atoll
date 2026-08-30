@@ -38,7 +38,7 @@ public class ProxyOptionsTests
             Assert.That(forwarded.KnownIPNetworks, Has.Count.EqualTo(1));
             Assert.That(forwarded.KnownIPNetworks[0].BaseAddress, Is.EqualTo(IPAddress.Parse("127.0.0.0")));
             Assert.That(forwarded.KnownIPNetworks[0].PrefixLength, Is.EqualTo(8));
-            Assert.That(forwarded.KnownProxies, Is.EqualTo(new[] { IPAddress.IPv6Loopback }));
+            Assert.That(forwarded.KnownProxies, Is.EqualTo([IPAddress.IPv6Loopback]));
         });
     }
 
@@ -57,8 +57,8 @@ public class ProxyOptionsTests
         {
             Assert.That(
                 forwarded.KnownIPNetworks.Select(network => (network.BaseAddress.ToString(), network.PrefixLength)),
-                Is.EqualTo(new[] { ("172.31.0.0", 16), ("10.0.0.0", 8) }));
-            Assert.That(forwarded.KnownProxies, Is.EqualTo(new[] { IPAddress.Parse("192.0.2.10") }));
+                Is.EqualTo([("172.31.0.0", 16), ("10.0.0.0", 8)]));
+            Assert.That(forwarded.KnownProxies, Is.EqualTo([IPAddress.Parse("192.0.2.10")]));
             Assert.That(forwarded.ForwardedProtoHeaderName, Is.EqualTo("CloudFront-Forwarded-Proto"));
             Assert.That(forwarded.ForwardLimit, Is.EqualTo(2));
         });

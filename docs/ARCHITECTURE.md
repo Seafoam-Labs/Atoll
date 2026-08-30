@@ -148,7 +148,11 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - **Base URLs:** `http://localhost:8080` (container), `http://localhost:5290` (dev)
 - **Style:** REST, JSON · **Authentication:** none (open read/write; trusted networks only) · **Versioning:** none ·
   **Error format:** RFC 9457 `ProblemDetails`
-- **OpenAPI:** `/openapi/v1.json` in Development mode
+- **OpenAPI:** `/openapi/v1.json` in Development mode. Minimal API handlers use typed results so response status codes
+  and JSON models are inferred. `GET /packages/{name}/security` documents its history and single-revision `200`
+  payloads with `oneOf`; `ProducesJsonOneOf` supplies this metadata because ASP.NET Core 10 otherwise retains only one
+  response type per status code and content type. Revisit the helper when upgrading to .NET 11, which supports this
+  composition natively.
 
 ### Search parameters
 

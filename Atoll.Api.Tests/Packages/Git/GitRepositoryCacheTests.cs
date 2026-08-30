@@ -144,9 +144,11 @@ public class GitRepositoryCacheTests
             CreatedAt = T0,
             UpdatedAt = T2,
             HeadRevisionId = headRevisionId,
-            Revisions = revisions
-                .Select(r => new PackageRevisionDocument { RevisionId = r.Id, CreatedAt = r.At })
-                .ToList()
+            Revisions =
+            [
+                .. revisions
+                    .Select(r => new PackageRevisionDocument { RevisionId = r.Id, CreatedAt = r.At })
+            ]
         };
     }
 }

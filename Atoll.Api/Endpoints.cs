@@ -1,14 +1,15 @@
-using Atoll.Api.Services.Git;
-using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Sync.Direct;
+using Atoll.Api.Extensions;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Rpc;
+using Atoll.Api.Services.Git;
+using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
+using Atoll.Api.Services.Sync.Direct;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api;
 
@@ -49,35 +50,44 @@ public static class Endpoints
             async ([FromServices] IPackageService repo) => TypedResults.Ok(await repo.ListAsync()));
 
         packages.MapPost("/{name}/seed",
-            async ([FromRoute] string name, [FromServices] DirectPackageSeeder seeder,
-                [FromServices] IOptions<AtollOptions> options) =>
-            {
-                if (!options.Value.Mutations.Enabled)
-                    return MutationsDisabled();
+                async Task<Results<Created, ProblemHttpResult>> (
+                    [FromRoute] string name,
+                    [FromServices] DirectPackageSeeder seeder,
+                    [FromServices] IOptions<AtollOptions> options) =>
+                {
+                    if (!options.Value.Mutations.Enabled)
+                        return MutationsDisabled();
 
-                await seeder.SeedAsync(name);
-                return TypedResults.Created($"/packages/{name}");
-            });
+                    await seeder.SeedAsync(name);
+                    return TypedResults.Created($"/packages/{name}");
+                })
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         packages.MapGet("/{name}/versions",
             async ([FromRoute] string name, [FromServices] IPackageService repo) =>
             TypedResults.Ok(await repo.GetHistoryAsync(name)));
 
         packages.MapDelete("/{name}",
-            async ([FromRoute] string name, [FromServices] IPackageService repo,
-                [FromServices] IOptions<AtollOptions> options) =>
-            {
-                if (!options.Value.Mutations.Enabled) return MutationsDisabled();
-                await repo.DeleteAsync(name);
-                return TypedResults.NoContent();
-            });
+                async Task<Results<NoContent, ProblemHttpResult>> (
+                    [FromRoute] string name,
+                    [FromServices] IPackageService repo,
+                    [FromServices] IOptions<AtollOptions> options) =>
+                {
+                    if (!options.Value.Mutations.Enabled) return MutationsDisabled();
+                    await repo.DeleteAsync(name);
+                    return TypedResults.NoContent();
+                })
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
-        packages.MapGet("/{name}/security", SecurityStatus);
-        packages.MapPost("/{name}/security/rescan", SecurityRescan);
+        packages.MapGet("/{name}/security", SecurityStatus)
+            .ProducesJsonOneOf<PackageSecurityHistoryResponse, PackageSecurityRevisionResponse>();
+        packages.MapPost("/{name}/security/rescan", SecurityRescan)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         var secured = packages
             .MapGroup("")
-            .AddEndpointFilter<PackageSecurityFilter>();
+            .AddEndpointFilter<PackageSecurityFilter>()
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         secured.MapGet("/{name}",
             async ([FromRoute] string name, [FromServices] IPackageService repo) =>
@@ -88,7 +98,7 @@ public static class Endpoints
             TypedResults.Ok(await repo.GetAsync(name, sha)));
     }
 
-    private static async Task<IResult> SecurityStatus(
+    private static async Task<Results<Ok<PackageSecurityHistoryResponse>, Ok<PackageSecurityRevisionResponse>, NotFound>> SecurityStatus(
         [FromRoute] string name,
         [FromQuery(Name = "revision")] string? revision,
         [FromServices] IPackageRepository packages,
@@ -101,37 +111,38 @@ public static class Endpoints
         if (string.IsNullOrEmpty(revision))
         {
             var scans = await security.ListForPackageAsync(name);
-            return TypedResults.Ok(new
-            {
-                packageName = name,
-                headRevisionId = package.HeadRevisionId,
-                revisions = scans
-                    .OrderByDescending(s => s.IsHead)
-                    .ThenByDescending(s => s.ScannedAt)
-                    .Select(s => new
-                    {
-                        revisionId = s.RevisionId,
-                        status = s.Status.ToString(),
-                        isHead = s.IsHead,
-                        scannedAt = s.ScannedAt,
-                        findingCount = s.Findings.Count
-                    })
-            });
+            var history = new PackageSecurityHistoryResponse(
+                name,
+                package.HeadRevisionId,
+                [
+                    .. scans
+                        .OrderByDescending(s => s.IsHead)
+                        .ThenByDescending(s => s.ScannedAt)
+                        .Select(s => new PackageSecurityRevisionItem(
+                            s.RevisionId,
+                            s.Status.ToString(),
+                            s.IsHead,
+                            s.ScannedAt,
+                            s.Findings.Count
+                        ))
+                ]);
+
+            return TypedResults.Ok(history);
         }
 
         var scan = await security.GetAsync(name, revision);
-        return TypedResults.Ok(new
-        {
-            packageName = name,
-            revisionId = revision,
-            status = (scan?.Status ?? Services.Security.SecurityStatus.Pending).ToString(),
-            isHead = revision == package.HeadRevisionId,
-            scannedAt = scan?.ScannedAt,
-            findingCount = scan?.Findings.Count ?? 0
-        });
+        var revisionStatus = new PackageSecurityRevisionResponse(
+            name,
+            revision,
+            (scan?.Status ?? Services.Security.SecurityStatus.Pending).ToString(),
+            revision == package.HeadRevisionId,
+            scan?.ScannedAt,
+            scan?.Findings.Count ?? 0);
+
+        return TypedResults.Ok(revisionStatus);
     }
 
-    private static async Task<IResult> SecurityRescan(
+    private static async Task<Results<Accepted, NotFound, ProblemHttpResult>> SecurityRescan(
         [FromRoute] string name,
         [FromQuery(Name = "revision")] string? revision,
         [FromServices] IPackageRepository packages,
@@ -154,7 +165,7 @@ public static class Endpoints
         return TypedResults.Accepted($"/packages/{name}/security?revision={revisionId}");
     }
 
-    private static IResult MutationsDisabled()
+    private static ProblemHttpResult MutationsDisabled()
     {
         return TypedResults.Problem(
             "Mutating actions are disabled on this instance.",
@@ -165,13 +176,14 @@ public static class Endpoints
     {
         var secured = packages
             .MapGroup("")
-            .AddEndpointFilter<PackageSecurityFilter>();
+            .AddEndpointFilter<PackageSecurityFilter>()
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         secured.MapGet("/{name}.git/info/refs", GitInfoRefs);
         secured.MapPost("/{name}.git/git-upload-pack", GitUploadPack);
     }
 
-    private static async Task<IResult> GitInfoRefs(
+    private static async Task<Results<EmptyHttpResult, NotFound, ProblemHttpResult>> GitInfoRefs(
         [FromRoute] string name,
         [FromQuery(Name = "service")] string? service,
         [FromServices] IGitTransferService git,
@@ -193,7 +205,7 @@ public static class Endpoints
         return TypedResults.NotFound();
     }
 
-    private static async Task<IResult> GitUploadPack(
+    private static async Task<Results<EmptyHttpResult, NotFound>> GitUploadPack(
         [FromRoute] string name,
         [FromServices] IGitTransferService git,
         HttpRequest request,

@@ -291,7 +291,7 @@ public class PackageCatalogServiceTests
 
     private static string[] ExpectedNames(int start, int count)
     {
-        return Enumerable.Range(start, count).Select(i => $"pkg-{i:0000}").ToArray();
+        return [.. Enumerable.Range(start, count).Select(i => $"pkg-{i:0000}")];
     }
 
     private static AurPackageMetadata CreateMetadata(string name)

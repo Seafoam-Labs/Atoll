@@ -39,3 +39,23 @@ public sealed record SecurityFinding(
     string Message,
     string Snippet,
     string File);
+
+public sealed record PackageSecurityHistoryResponse(
+    string PackageName,
+    string HeadRevisionId,
+    IReadOnlyList<PackageSecurityRevisionItem> Revisions);
+
+public sealed record PackageSecurityRevisionItem(
+    string RevisionId,
+    string Status,
+    bool IsHead,
+    DateTimeOffset? ScannedAt,
+    int FindingCount);
+
+public sealed record PackageSecurityRevisionResponse(
+    string PackageName,
+    string RevisionId,
+    string Status,
+    bool IsHead,
+    DateTimeOffset? ScannedAt,
+    int FindingCount);
