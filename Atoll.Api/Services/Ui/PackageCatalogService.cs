@@ -5,6 +5,7 @@ using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
+using Atoll.Api.Services.Security.Persistence;
 
 namespace Atoll.Api.Services.Ui;
 

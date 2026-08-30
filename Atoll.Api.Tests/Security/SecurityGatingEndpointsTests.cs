@@ -71,12 +71,7 @@ public class SecurityGatingEndpointsTests
         await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
         if (status != SecurityStatus.Pending)
-        {
-            await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-            await _factory.SecurityRepository.CompleteScanAsync(
-                "pkg", "rev-1", "test", new ScanResult(status, []),
-                PkgBuildSecurityScanner.CurrentPolicyVersion);
-        }
+            await _factory.SecurityRepository.CompleteScanAsync("pkg", status);
     }
 
     [Test]
@@ -199,14 +194,8 @@ public class SecurityGatingEndpointsTests
 
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SecurityRepository.CompleteScanAsync(
-            "pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SecurityRepository.CompleteScanAsync(
-            "pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _factory.SecurityRepository.CompleteScanAsync("pkg", SecurityStatus.Verified);
+        await _factory.SecurityRepository.CompleteScanAsync("pkg", SecurityStatus.Flagged);
 
         var flagged = await _client.GetAsync("/packages/pkg/versions/rev-2");
         var clean = await _client.GetAsync("/packages/pkg/versions/rev-1");

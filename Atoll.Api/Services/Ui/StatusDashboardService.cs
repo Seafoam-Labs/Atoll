@@ -6,6 +6,7 @@ using Atoll.Api.Services.Sync.Refresh;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
+using Atoll.Api.Services.Security.Persistence;
 using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Ui;

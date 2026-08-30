@@ -13,18 +13,30 @@ The implementation is in:
 - `Atoll.Api/Services/Security/PkgBuildSecurityScanner.cs` — facade: iterates files, delegates to the components
   below, reduces their findings into the final `ScanResult`.
 - `Atoll.Api/Services/Security/Scanning/ShellContentScanner.cs` — owns the rule set and the risky/privilege tool
-  lists; runs the per-line scan loop (rule matching, tool detection, obfuscation escalation, heredoc tracking).
+  lists; runs the per-line scan loop (rule matching, tool detection, obfuscation escalation) and coordinates the
+  collaborators below.
 - `Atoll.Api/Services/Security/Scanning/ShellSyntax.cs` — shell-aware primitives shared across rules: comment
-  stripping, de-obfuscation normalization with a source map, quote-region tracking, tool-boundary matching,
-  hidden-codepoint detection.
+  stripping, de-obfuscation normalization with a source map, quote-region tracking, tool-boundary matching.
+- `Atoll.Api/Services/Security/Scanning/ShellHeredocs.cs` — heredoc declaration parsing and cross-line body
+  tracking (quoted-delimiter suppression, pipes into interpreters).
+- `Atoll.Api/Services/Security/Scanning/ShellEvalClassifier.cs` — `eval`/`source` invocation classification and
+  command-substitution operand reviewability (established-idiom recognition).
+- `Atoll.Api/Services/Security/Scanning/ShellArraySpans.cs` — array-assignment value spans and inert-data
+  detection for tool mentions.
+- `Atoll.Api/Services/Security/Scanning/NetworkRuleExemptions.cs` — network-rule structural exemptions
+  (`perl -e` text filters, shell script file arguments, network connector pipes).
+- `Atoll.Api/Services/Security/Scanning/HiddenCharacters.cs` — hidden-codepoint detection and benign-context
+  rules (ANSI escapes, zero-width characters, mojibake).
 - `Atoll.Api/Services/Security/Scanning/PkgBuildSourceUrlScanner.cs` — inspects `source=` URLs (PKGBUILD only).
 - `Atoll.Api/Services/Security/Scanning/HomographScanner.cs` — detects homograph spoofing in PKGBUILD metadata
   fields (PKGBUILD only).
 - `Atoll.Api/Services/Security/Scanning/PackageBuildFileClassifier.cs` — decides which files are scannable.
 - `Atoll.Api/Services/Security/Scanning/LocalSourceBinaryScanner.cs` — classifies binary source files.
-- `Atoll.Api/Services/Security/PackageSecurityWorker.cs`, `MongoPackageSecurityRepository.cs`,
-  `PackageSecurityAccess.cs`, `PackageSecurityFilter.cs` (the `IEndpointFilter` gating content routes), and
-  `Endpoints.cs` (route registration).
+- `Atoll.Api/Services/Security/PackageSecurityWorker.cs` (the polling worker),
+  `Atoll.Api/Services/Security/Persistence/` (`IPackageSecurityRepository.cs`,
+  `MongoPackageSecurityRepository.cs`, `PackageSecurityScanDocument.cs`), `PackageSecurityAccess.cs`,
+  `PackageSecurityFilter.cs` (the `IEndpointFilter` gating content routes), and `Endpoints.cs` (route
+  registration).
 
 The `Scanning/` types are `internal static` with focused unit tests under `Atoll.Api.Tests/Security/Scanning/`; the
 facade is covered end-to-end by `PkgBuildSecurityScannerTests`, which doubles as a regression fixture on a real-world
@@ -382,7 +394,7 @@ see `post_install_validator.zig`, `homograph_validator.zig`, `local_source_valid
 | `homograph_validator.zig` | `homograph` | Ported conceptually; field-scoped to metadata, CJK/Hangul excluded, Medium not blocking. |
 | `local_source_validator.zig` (ELF, first 64 bytes of `source=` files) | `local-binary` | Atoll checks every file, whole content; blocks only on executable magic. |
 | Obfuscation normalization (edge + intra-word quotes) | `NormalizeForMatching` (intra-word only) | Edge-quote stripping would re-introduce quoted-string FPs in Atoll's blocking model. |
-| `shell_scan.zig` segmentation | `ShellSyntax` quoted masks + heredoc tracking | Adopted for FP suppression; shelly's validators don't suppress on it. |
+| `shell_scan.zig` segmentation | `ShellSyntax` quoted masks + `ShellHeredocs` heredoc tracking | Adopted for FP suppression; shelly's validators don't suppress on it. |
 | URL validation | `suspicious-source-url` | Host-only extension matching, test-pinned. |
 
 Not adopted: install-script scope labels (nice-to-have); review digest/TOCTOU and sandboxing (not applicable — Atoll

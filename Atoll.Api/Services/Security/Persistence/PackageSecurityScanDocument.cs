@@ -1,7 +1,7 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace Atoll.Api.Services.Security;
+namespace Atoll.Api.Services.Security.Persistence;
 
 public sealed record PackageSecurityScanDocument
 {
@@ -42,11 +42,3 @@ public sealed record PackageSecurityScanDocument
         return packageName + ":" + revisionId;
     }
 }
-
-public sealed record SecurityFinding(
-    string RuleId,
-    [property: BsonRepresentation(BsonType.String)]
-    FindingSeverity Severity,
-    string Message,
-    string Snippet,
-    string File);

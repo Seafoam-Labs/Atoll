@@ -1,6 +1,7 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using Atoll.Api.Services.Packages.Persistence;
@@ -110,14 +111,8 @@ public class PackageSecurityAccessTests
 
         await security.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion);
         await security.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await security.CompleteScanAsync(
-            "pkg", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await security.CompleteScanAsync(
-            "pkg", "rev-2", "test", new ScanResult(SecurityStatus.Flagged, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
+        await security.CompleteScanAsync("pkg", SecurityStatus.Flagged);
 
         var access = Create(packages, security);
 

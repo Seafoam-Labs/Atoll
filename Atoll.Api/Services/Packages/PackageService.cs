@@ -1,5 +1,6 @@
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
+using Atoll.Api.Services.Security.Persistence;
 using Microsoft.Extensions.Options;
 using Atoll.Api.Services.Packages.Persistence;
 

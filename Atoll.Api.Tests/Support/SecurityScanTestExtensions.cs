@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Security;
+using Atoll.Api.Services.Security.Persistence;
 
 namespace Atoll.Api.Tests.Support;
 

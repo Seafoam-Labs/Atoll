@@ -1,6 +1,7 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
+using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

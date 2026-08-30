@@ -3,6 +3,7 @@ using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Catalog.Persistence;
 using Atoll.Api.Services.Security;
+using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;

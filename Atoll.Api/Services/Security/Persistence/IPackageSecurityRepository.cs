@@ -1,4 +1,4 @@
-namespace Atoll.Api.Services.Security;
+namespace Atoll.Api.Services.Security.Persistence;
 
 public interface IPackageSecurityRepository
 {

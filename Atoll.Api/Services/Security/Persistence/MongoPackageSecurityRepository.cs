@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 
-namespace Atoll.Api.Services.Security;
+namespace Atoll.Api.Services.Security.Persistence;
 
 public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
 {

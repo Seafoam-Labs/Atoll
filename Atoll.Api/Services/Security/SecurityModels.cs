@@ -1,3 +1,6 @@
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
 namespace Atoll.Api.Services.Security;
 
 public enum SecurityStatus
@@ -28,3 +31,11 @@ public sealed record HeadScanStatusCounts(long Verified, long Flagged, long Pend
 {
     public long Total => Verified + Flagged + Pending + Error;
 }
+
+public sealed record SecurityFinding(
+    string RuleId,
+    [property: BsonRepresentation(BsonType.String)]
+    FindingSeverity Severity,
+    string Message,
+    string Snippet,
+    string File);

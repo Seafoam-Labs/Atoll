@@ -4,6 +4,7 @@ using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Rpc;
 using Atoll.Api.Services.Security;
+using Atoll.Api.Services.Security.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
