@@ -351,9 +351,14 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
                 keys.Ascending(x => x.IsHead).Ascending(x => x.Status).Ascending(x => x.PackageName))
         ]);
 
-        // CreateMany only adds, so every superseded shape needs a targeted drop. Each is an
-        // idempotent no-op on a fresh database or a repeated startup, and only IndexNotFound is
-        // suppressed so authorization or server errors still surface at construction time.
+        // CreateMany only adds, so every superseded shape needs a targeted drop. Drops are gated
+        // on the live index list rather than suppressing IndexNotFound because DocumentDB reports
+        // a missing index as a generic command error without MongoDB's codeName, which would
+        // crash startup on a fresh cluster. Listing still surfaces authorization failures.
+        var existing = _scans.Indexes.List()
+            .ToList()
+            .Select(ix => ix["name"].AsString)
+            .ToHashSet();
         foreach (var superseded in new[]
                  {
                      // Pre-policy-aware claim index.
@@ -364,13 +369,9 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
                      "isHead_1_status_1"
                  })
         {
-            try
+            if (existing.Contains(superseded))
             {
                 _scans.Indexes.DropOne(superseded);
-            }
-            catch (MongoCommandException ex) when (ex.CodeName == "IndexNotFound")
-            {
-                // Already absent.
             }
         }
     }
