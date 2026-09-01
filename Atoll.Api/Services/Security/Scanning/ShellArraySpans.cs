@@ -39,7 +39,6 @@ internal static partial class ShellArraySpans
                     continue;
                 }
 
-                inside = true;
                 i = open + 1;
             }
 

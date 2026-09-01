@@ -32,12 +32,7 @@ internal static class ShellContentScanner
             @"(^|[\s;&|`(])(curl|wget|wget2|aria2c|fetch)\b[^|;\n]*(\||;|&&|\s>\s*&?1?)\s*(sh|bash|zsh|dash|ksh|eval|python|perl|ruby|node)\b")
     ];
 
-    public static IEnumerable<SecurityFinding> Scan(string content, string path)
-    {
-        return Scan(content, path, referencedByPkgBuild: true);
-    }
-
-    public static IEnumerable<SecurityFinding> Scan(string content, string path, bool referencedByPkgBuild)
+    public static IEnumerable<SecurityFinding> Scan(string content, string path, bool referencedByPkgBuild = true)
     {
         ShellHeredocs.Heredoc? activeHeredoc = null;
         var pendingHeredocs = new Queue<ShellHeredocs.Heredoc>();
