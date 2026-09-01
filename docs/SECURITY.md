@@ -23,6 +23,8 @@ The implementation is in:
   command-substitution operand reviewability (established-idiom recognition).
 - `Atoll.Api/Services/Security/Scanning/ShellArraySpans.cs` — array-assignment value spans and inert-data
   detection for tool mentions.
+- `Atoll.Api/Services/Security/Scanning/ShellCommandPositions.cs` — decides whether a tool word sits in command
+  position (an invocation) or is an argument/assignment data handed to another command.
 - `Atoll.Api/Services/Security/Scanning/NetworkRuleExemptions.cs` — network-rule structural exemptions
   (`perl -e` text filters, shell script file arguments, network connector pipes).
 - `Atoll.Api/Services/Security/Scanning/HiddenCharacters.cs` — hidden-codepoint detection and benign-context
@@ -126,7 +128,7 @@ as ordinary lines.
 | `eval-indirection` | Critical (Medium for established idioms) | `eval`/`source`/`.` in command position, fed by command substitution, backticks, or a payload. |
 | `network-execution` | High | Downloader chained (pipe/`;`/`&&`) into a shell or interpreter (`python`, `perl`, `ruby`, `node`, `eval`). |
 | `write-outside-build-root` | High (Medium in `.install` scriptlets and in scripts the PKGBUILD never invokes) | Redirect/`tee` into system paths (`/etc/`, `/usr/`, `/bin/`, …). |
-| `privilege-escalation` | High (Medium in `.install` scriptlets and shell helper scripts) | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su`. |
+| `privilege-escalation` | High (Medium in `.install` scriptlets and shell helper scripts) | Boundary-delimited `sudo`, `sudoedit`, `doas`, `pkexec`, `run0`, `su` in command position. |
 | `hidden-character` | Critical (Medium for zero-width chars) | Bidi overrides/isolates and C0/C1 control bytes; zero-width chars (U+200B/C/D, U+FEFF) are Medium. |
 | `homograph` | Medium | Spoofing in PKGBUILD metadata values. PKGBUILD only. |
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
@@ -135,10 +137,11 @@ as ordinary lines.
 | `local-binary` | Critical (Medium for non-executable content and shared libraries) | A source file containing binary bytes; only recognized executable formats (ELF, PE/`MZ`) block, and an ELF named as a shared library (`*.so`, `*.so.N`) is packaged payload like an archive's contents. |
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after),
-so `sudo` inside `pseudo` or `sudoku` is not flagged. Array-assignment values (`depends=(mono curl … sudo …)`,
-including multi-line arrays) are tracked across lines: their words are assigned data, never invoked, so tool
-mentions there are not findings — while command substitutions inside an array (`depends=($(curl …))`) still execute
-and keep theirs.
+so `sudo` inside `pseudo` or `sudoku` is not flagged. A word must also be in **command position** — see
+`Scanning/ShellCommandPositions.cs` — because a boundary-delimited name is not yet an invocation. Array-assignment
+values (`depends=(mono curl … sudo …)`, including multi-line arrays) are tracked across lines: their words are
+assigned data, never invoked, so tool mentions there are not findings — while command substitutions inside an array
+(`depends=($(curl …))`) still execute and keep theirs.
 
 ### False-positive suppression
 
@@ -152,6 +155,18 @@ facade tests:
 - **Array assignments are data.** `name=( … )` values (dependency arrays, `source=`, plain shell arrays) assign
   words without invoking them, so `depends=(… sudo …)` or `… curl …` is not a finding; substitutions inside an
   array still execute and stay flagged. The value region can span lines and ends at the unquoted closing paren.
+- **A tool name that is not in command position is not an invocation.** `ShellCommandPositions` walks back from the
+  word to the command that governs it, so names used as arguments, list elements, or prose drop out: `cd sudo` walks
+  into a directory (`ttf-sudo`), `install -Dm755 sudo "$pkgdir/usr/lib/sudos-eyes/sudo"` installs a file *named*
+  `sudo`, `for _gsu in pkexec kdesu gksu` searches for binaries, `_install_module curl` passes the name to a function,
+  and `avahi should be enabled first with: sudo …` is help text. Command position means: line start, after a separator
+  (`;`, `&&`, `|`, `(`, `` ` ``, `{`, `}`), after a control word (`if`, `then`, `do`, `!`, `time`, `exec`, `eval`,
+  `env`, …) or another privilege tool, or after the option list of a command that runs what it is handed (`python -m
+  pip`, `xargs curl`, `ssh host sudo …`). `for`, `in`, `case` and `select` are deliberately excluded — their operand
+  is a variable name or a word list. Options, numeric option values and `NAME=value` prefixes are stepped over, so
+  `FOO=bar sudo make install` and `nice -n 10 sudo make install` still flag. The gate is applied to visible matches
+  only: an obfuscated tool name keeps its `Critical` escalation wherever it sits, and a later live occurrence on the
+  same line is still found (`cd sudo && sudo make install`).
 - **Structural exemptions for visible constructs** (obfuscated matches keep their Critical escalation):
   `network-execution` drops a `perl` receiving its program from inline `-e`/`-E` code (the download is stdin *data*
   for the reviewable program), and `decode-to-shell` drops a pipe whose shell reads its script from a file argument
@@ -198,8 +213,10 @@ facade tests:
 
 Adding or changing a shell rule is a one-line change to the `Rules` array in `ShellContentScanner` (or the
 `PrivilegeEscalationTools` / `RiskyTools` arrays in the same file); `local-binary` and `homograph` are separate
-whole-file/field-value checks. Rule ids are persisted verbatim in stored findings, so renaming a rule changes the
-ids visible in historical documents.
+whole-file/field-value checks. Which words count as an invocation is decided by the two word lists in
+`ShellCommandPositions` (`CommandPositionWords`, `ArgumentExecutingCommands`) — a tool added to the rule arrays that
+runs its arguments belongs in the latter too. Rule ids are persisted verbatim in stored findings, so renaming a rule
+changes the ids visible in historical documents.
 
 ## Pipeline
 
@@ -357,6 +374,11 @@ These checks need only `curl` (or a Git client) and read access to the running A
 - **Heredoc prose can still block.** Only the non-blocking expansion rules are suppressed in quoted-delimiter bodies;
   `sudo`/redirect-looking prose can still yield blocking findings. Extending suppression requires safely handling
   pipe-to-installer patterns first.
+- **Command position is a heuristic over one line.** The governing word is found by walking back over options, numeric
+  values and `NAME=value` prefixes, so an option value that is itself a word ends the walk there (`env -u FOO sudo x`)
+  and a word after an unquoted `$( … )` stays in command position — dropping it would lose the real
+  `VAR=$(probe) sudo cmd`. A command that executes its arguments but is absent from `ArgumentExecutingCommands` hides
+  the tool it is handed, exactly as an inline `bash -c 'sudo …'` always did.
 - **Homograph checks are field-scoped.** Only single-line `pkgname`/`depends`/`makedepends`/`url`/`source` values;
   multi-line arrays, other fields, and free prose are out of scope. Legitimate internationalized names can trip the
   mixed-script check (accepted — rare in the corpus), and single-script spoofing outside the confusables table is
@@ -384,8 +406,8 @@ see `post_install_validator.zig`, `homograph_validator.zig`, `local_source_valid
 
 | Shelly validator/concept | Atoll counterpart | Divergence (intentional) |
 | --- | --- | --- |
-| Risky tools | `risky-tool` (Medium) | Atoll adds quoted-region and array-assignment exemptions. |
-| Privilege tools | `privilege-escalation` | Same, plus quote/array exemptions, obfuscation escalation, and the scriptlet/helper context downgrades. |
+| Risky tools | `risky-tool` (Medium) | Atoll adds quoted-region, array-assignment, and command-position exemptions. |
+| Privilege tools | `privilege-escalation` | Same, plus quote/array/command-position exemptions, obfuscation escalation, and the scriptlet/helper context downgrades. |
 | Bare `eval` token → critical | `eval-indirection` | Atoll requires a dynamic operand in command position; established idioms are Medium. |
 | Decode-to-shell | `decode-to-shell` | Atoll superset (`openssl enc`, more shell targets); quoted-display and script-file-argument pipes suppressed. |
 | — | `network-to-shell` / `network-execution` | Atoll-only; quoted-display pipes suppressed, `perl -e` text filters exempted. |

@@ -72,12 +72,16 @@ internal static partial class ShellArraySpans
     }
 
     /// <summary>
-    ///     Returns the first occurrence of the tool that is executed code rather than array
-    ///     assignment data, or -1. Words inside a <c>name=( … )</c> value are assigned, never
-    ///     invoked, so mentions there (dependency arrays naming sudo or curl) are skipped and
-    ///     a later live occurrence on the same line is still found.
+    ///     Returns the first occurrence of the tool that is executed code, or -1. Two shapes are
+    ///     data rather than code: words inside a <c>name=( … )</c> value, which are assigned and
+    ///     never invoked, and plainly visible words in argument position (<c>cd sudo</c> names a
+    ///     directory). A tool that only appears after de-obfuscation skips the position test -
+    ///     hiding the name signals intent whatever the syntax around it - so it is still
+    ///     returned for the caller to escalate. A later live occurrence on the same line is
+    ///     always still found.
     /// </summary>
     internal static int FindInvokedTool(
+        string line,
         string normalized,
         string tool,
         ShellSyntax.QuotePosition[] positions,
@@ -91,7 +95,9 @@ internal static partial class ShellArraySpans
             if (index < 0)
                 return -1;
 
-            if (!IsInertArrayData(index, tool.Length, arrayValueSpans, positions, sourceIndices))
+            if (!IsInertArrayData(index, tool.Length, arrayValueSpans, positions, sourceIndices) &&
+                (!IsVisibleToolMatch(line, tool, index, positions, sourceIndices) ||
+                 ShellCommandPositions.IsInvokedWord(normalized, index, positions, sourceIndices)))
                 return index;
 
             search = index + tool.Length;

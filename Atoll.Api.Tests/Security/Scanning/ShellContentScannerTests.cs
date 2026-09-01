@@ -260,6 +260,67 @@ public class ShellContentScannerTests
         Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False);
     }
 
+    [TestCase("cd sudo", Description = "cd into a tool")]
+    [TestCase("install -Dm755 sudo \"$pkgdir/usr/lib/sudos-eyes/sudo\"",
+        Description = "sudos-eyes: the packaged file is named sudo")]
+    [TestCase("for _gsu in pkexec kdesu gksu; do", Description = "word list names the tools it looks for")]
+    [TestCase("echo sudo sed -i 's/active = no/active = yes/g' /etc/audit/plugins.d/af_unix.conf",
+        Description = "the command is echo: the sudo is its argument")]
+    [TestCase("avahi should be enabled first with: sudo systemctl restart avahi-daemon",
+        Description = "prose in a scriptlet's message")]
+    [TestCase("echo   $ sudo modprobe libcomposite", Description = "shell-prompt illustration")]
+    public void Privilege_escalation_rejects_tool_names_in_argument_position(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId == "privilege-escalation"), Is.False,
+            $"Unexpected privilege-escalation finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [TestCase("if sudo visudo -c -f /etc/sudoers.d/pyhotspot; then", Description = "control keyword")]
+    [TestCase("elif sudo -l | grep -qw ALL; then", Description = "elif")]
+    [TestCase("3) sudo pacman -S --needed vulkan-nouveau ;;", Description = "case branch body")]
+    [TestCase("exec pkexec bash -c 'true'", Description = "exec prefix")]
+    [TestCase("[ $(id -u) -eq 0 ] || exec sudo $0 $@", Description = "re-exec guard")]
+    [TestCase("gpg -dq ~/.ssh/pass.gpg | sudo -S -v", Description = "piped into sudo's stdin")]
+    [TestCase("nice -n 10 sudo make install", Description = "modifier past its option and value")]
+    [TestCase("env -i FOO=bar sudo make install", Description = "env prefix through options and assignments")]
+    [TestCase("FOO=bar sudo make install", Description = "assignment prefix runs the command")]
+    [TestCase("generate-config | sudo -u dendrite tee /etc/dendrite/config.yaml", Description = "pipe into sudo")]
+    [TestCase("cd sudo && sudo make install", Description = "the argument mention is skipped, the live invocation still flags")]
+    public void Privilege_escalation_still_flags_tools_in_command_position(string content)
+    {
+        AssertHasFinding(content, "privilege-escalation", FindingSeverity.High);
+    }
+
+    [Test]
+    public void Obfuscated_tool_name_in_argument_position_still_escalates()
+    {
+        // Structural exemptions cover plainly visible constructs only: a hidden tool name is
+        // intent evidence wherever it sits.
+        var finding = SingleFinding("cd s''u''d''o", "privilege-escalation");
+
+        Assert.That(finding.Severity, Is.EqualTo(FindingSeverity.Critical));
+        Assert.That(finding.Message, Does.Contain("obfuscated").IgnoreCase);
+    }
+
+    [TestCase("_install_module curl", Description = "function argument names the tool (corpus: 472 packages)")]
+    [TestCase("for node in ast.walk(tree):", Description = "loop variable, not the node runner")]
+    [TestCase("base-devel wget curl sudo git tar yajl", Description = "prose package list")]
+    public void Tool_rules_reject_words_in_argument_position(string content)
+    {
+        var findings = Scan(content);
+        Assert.That(findings.Any(f => f.RuleId is "risky-tool" or "privilege-escalation"), Is.False,
+            $"Unexpected tool finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
+    }
+
+    [TestCase("python -m pip install --upgrade pip", Description = "python executes the -m module")]
+    [TestCase("xargs curl --remote-name-all < libraries.txt", Description = "xargs runs what it is handed")]
+    [TestCase("uv pip install --system dist/*.whl", Description = "the leading risky tool alone flags the line")]
+    public void Risky_tool_still_flags_tools_reached_through_another_command(string content)
+    {
+        AssertHasFinding(content, "risky-tool", FindingSeverity.Medium);
+    }
+
     [TestCase("depends=(mono curl openvpn sudo polkit libnotify libayatana-appindicator)", "PKGBUILD",
         Description = "dependency arrays name tools without invoking them (eddie-ui)")]
     [TestCase("makedepends=(git curl)", "PKGBUILD")]

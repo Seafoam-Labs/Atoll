@@ -213,7 +213,7 @@ internal static class ShellContentScanner
         if (!isHeredocCommentLine)
             foreach (var tool in PrivilegeEscalationTools)
             {
-                var index = ShellArraySpans.FindInvokedTool(normalized, tool, positions, sourceIndices, arrayValueSpans);
+                var index = ShellArraySpans.FindInvokedTool(line, normalized, tool, positions, sourceIndices, arrayValueSpans);
                 if (index < 0)
                     continue;
 
@@ -265,7 +265,7 @@ internal static class ShellContentScanner
 
         foreach (var tool in RiskyTools)
         {
-            var index = ShellArraySpans.FindInvokedTool(normalized, tool, positions, sourceIndices, arrayValueSpans);
+            var index = ShellArraySpans.FindInvokedTool(line, normalized, tool, positions, sourceIndices, arrayValueSpans);
             if (index < 0)
                 continue;
 

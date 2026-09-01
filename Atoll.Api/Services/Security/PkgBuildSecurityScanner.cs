@@ -5,7 +5,7 @@ namespace Atoll.Api.Services.Security;
 public sealed class PkgBuildSecurityScanner : IPackageSecurityScanner
 {
     // Increment whenever a scanner rule change requires persisted verdicts to be refreshed.
-    public const int CurrentPolicyVersion = 3;
+    public const int CurrentPolicyVersion = 4;
 
     public int PolicyVersion => CurrentPolicyVersion;
 
