@@ -112,3 +112,8 @@ dotnet test
 
 Atoll is intended for trusted private deployments. Search and metadata are public by design, but content access is gated
 and should not be exposed broadly without network controls.
+
+## Inspiration
+
+Atoll was inspired by [faur](https://github.com/fosskers/faur), a community-driven AUR mirror project made in Clojure by
+[fosskers](https://github.com/fosskers).
