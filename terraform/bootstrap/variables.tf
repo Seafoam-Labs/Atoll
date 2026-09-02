@@ -22,8 +22,3 @@ variable "state_bucket_name" {
   description = "Globally unique name for the Terraform state bucket"
   default     = "seafoam-atoll-tfstate"
 }
-
-variable "lock_table_name" {
-  description = "DynamoDB table used for Terraform state locking"
-  default     = "atoll-api-terraform-locks"
-}

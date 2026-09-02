@@ -9,7 +9,7 @@ GitHub, not in Terraform state, not locally). This is what makes it safe to run 
 
 | Piece | Location | Purpose |
 | --- | --- | --- |
-| Bootstrap stack | `terraform/bootstrap/` | One-time: state bucket, lock table, OIDC provider, deploy role |
+| Bootstrap stack | `terraform/bootstrap/` | One-time: state bucket, OIDC provider, deploy role |
 | Main stack | `terraform/` | ECR, ECS Fargate, API Gateway, DocumentDB, secret wiring |
 | Pipeline | `.github/workflows/deploy.yml` | Build, plan on PRs, apply + deploy on push to `main` |
 
@@ -25,7 +25,8 @@ terraform apply
 ```
 
 If the bucket name collides, change `state_bucket_name` **and** the `bucket` value in
-`terraform/backend.tf` together. The lock table name must likewise match `dynamodb_table` there.
+`terraform/backend.tf` together. Terraform uses an S3 lockfile next to the state object
+(`.tflock`), so no DynamoDB table is required.
 
 Then copy the `deploy_role_arn` output into GitHub:
 
@@ -52,7 +53,6 @@ terraform init
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 BUCKET_NAME="seafoam-atoll-tfstate"
 PROJECT_NAME="atoll-api"
-LOCK_TABLE="atoll-api-terraform-locks"
 
 # 1. State bucket and configurations
 terraform import aws_s3_bucket.tfstate "${BUCKET_NAME}"
@@ -60,16 +60,13 @@ terraform import aws_s3_bucket_versioning.tfstate "${BUCKET_NAME}"
 terraform import aws_s3_bucket_server_side_encryption_configuration.tfstate "${BUCKET_NAME}"
 terraform import aws_s3_bucket_public_access_block.tfstate "${BUCKET_NAME}"
 
-# 2. DynamoDB lock table
-terraform import aws_dynamodb_table.tf_lock "${LOCK_TABLE}"
-
-# 3. ECR Repository
+# 2. ECR Repository
 terraform import aws_ecr_repository.app "${PROJECT_NAME}"
 
-# 4. GitHub OIDC Provider (only one allowed per AWS account)
+# 3. GitHub OIDC Provider (only one allowed per AWS account)
 terraform import aws_iam_openid_connect_provider.github "arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
 
-# 5. IAM Role, Policy, and Attachment
+# 4. IAM Role, Policy, and Attachment
 terraform import aws_iam_role.github_deploy "${PROJECT_NAME}-github-deploy"
 terraform import aws_iam_policy.github_deploy "arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-github-deploy"
 terraform import aws_iam_role_policy_attachment.github_deploy "${PROJECT_NAME}-github-deploy/arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-github-deploy"

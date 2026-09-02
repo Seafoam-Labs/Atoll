@@ -66,17 +66,6 @@ resource "aws_s3_bucket_public_access_block" "tfstate" {
   restrict_public_buckets = true
 }
 
-resource "aws_dynamodb_table" "tf_lock" {
-  name         = var.lock_table_name
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-}
-
 # --- Container image repository ---
 # Lives here rather than in the main stack: the pipeline pushes the first image
 # before the main stack applies, so the repository must already exist.
@@ -149,14 +138,6 @@ resource "aws_iam_policy" "github_deploy" {
         Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource = [
           "${aws_s3_bucket.tfstate.arn}/*"
-        ]
-      },
-      {
-        Sid    = "TerraformLocks"
-        Effect = "Allow"
-        Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:DescribeTable"]
-        Resource = [
-          aws_dynamodb_table.tf_lock.arn
         ]
       },
       {
