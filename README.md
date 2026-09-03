@@ -11,6 +11,7 @@ history, exposes searchable package metadata, and serves package content over Gi
 - Package seeding, version history, and file browsing
 - Git-compatible clone/fetch access for seeded packages
 - AUR RPC v5 and standard clone URLs for yay/paru compatibility
+- Versioned REST API under `/v1/…` (URL-segment versioning; RPC and Git Smart HTTP stay protocol-fixed)
 - Security-gated content access for refreshed or newly seeded revisions
 - Background workers for sync, refresh, and scanning
 - Local web UI for catalog, package details, file views, and status

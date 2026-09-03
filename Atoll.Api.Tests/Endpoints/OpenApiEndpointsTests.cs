@@ -41,13 +41,13 @@ public class OpenApiEndpointsTests
             Assert.That(version.GetString(), Does.StartWith("3."));
 
             var paths = root.GetProperty("paths");
-            Assert.That(paths.TryGetProperty("/search", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/packages", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/packages/{name}", out var packagePath), Is.True);
-            Assert.That(paths.TryGetProperty("/packages/{name}/seed", out var seedPath), Is.True);
-            Assert.That(paths.TryGetProperty("/packages/{name}/versions", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/packages/{name}/security", out var securityPath), Is.True);
-            Assert.That(paths.TryGetProperty("/packages/{name}/security/rescan", out var rescanPath), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/search", out _), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/packages", out _), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/packages/{name}", out var packagePath), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/packages/{name}/seed", out var seedPath), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/packages/{name}/versions", out _), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/packages/{name}/security", out var securityPath), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/packages/{name}/security/rescan", out var rescanPath), Is.True);
             Assert.That(paths.TryGetProperty("/rpc", out _), Is.True);
             Assert.That(paths.TryGetProperty("/rpc/v5/info", out _), Is.True);
             Assert.That(paths.TryGetProperty("/rpc/v5/info/{arg}", out var rpcInfoArgPath), Is.True);

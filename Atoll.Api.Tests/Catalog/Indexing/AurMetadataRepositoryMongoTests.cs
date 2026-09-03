@@ -1,4 +1,3 @@
-using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Catalog.Persistence;
 using Atoll.Api.Tests.Support;
 using MongoDB.Driver;

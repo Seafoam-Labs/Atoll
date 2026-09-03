@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Headers;
-using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
 using NUnit.Framework;
@@ -79,7 +78,7 @@ public class SecurityGatingEndpointsTests
     {
         await SeedAsync(SecurityStatus.Verified);
 
-        var response = await _client.GetAsync("/packages/pkg");
+        var response = await _client.GetAsync("/v1/packages/pkg");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
@@ -89,7 +88,7 @@ public class SecurityGatingEndpointsTests
     {
         await SeedAsync(SecurityStatus.Pending);
 
-        var response = await _client.GetAsync("/packages/pkg");
+        var response = await _client.GetAsync("/v1/packages/pkg");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
         var body = await response.Content.ReadAsStringAsync();
@@ -101,7 +100,7 @@ public class SecurityGatingEndpointsTests
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/packages/pkg");
+        var response = await _client.GetAsync("/v1/packages/pkg");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
         var body = await response.Content.ReadAsStringAsync();
@@ -113,7 +112,7 @@ public class SecurityGatingEndpointsTests
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/packages/pkg/versions/rev-1");
+        var response = await _client.GetAsync("/v1/packages/pkg/versions/rev-1");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
     }
@@ -123,7 +122,7 @@ public class SecurityGatingEndpointsTests
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/packages/pkg/versions");
+        var response = await _client.GetAsync("/v1/packages/pkg/versions");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
@@ -133,7 +132,7 @@ public class SecurityGatingEndpointsTests
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/search?query=portable-kit");
+        var response = await _client.GetAsync("/v1/search?query=portable-kit");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
@@ -143,7 +142,7 @@ public class SecurityGatingEndpointsTests
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/packages");
+        var response = await _client.GetAsync("/v1/packages");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
@@ -197,9 +196,9 @@ public class SecurityGatingEndpointsTests
         await _factory.SecurityRepository.CompleteScanAsync("pkg", SecurityStatus.Verified);
         await _factory.SecurityRepository.CompleteScanAsync("pkg", SecurityStatus.Flagged);
 
-        var flagged = await _client.GetAsync("/packages/pkg/versions/rev-2");
-        var clean = await _client.GetAsync("/packages/pkg/versions/rev-1");
-        var head = await _client.GetAsync("/packages/pkg");
+        var flagged = await _client.GetAsync("/v1/packages/pkg/versions/rev-2");
+        var clean = await _client.GetAsync("/v1/packages/pkg/versions/rev-1");
+        var head = await _client.GetAsync("/v1/packages/pkg");
 
         Assert.Multiple(() =>
         {
@@ -214,7 +213,7 @@ public class SecurityGatingEndpointsTests
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/packages/pkg/security");
+        var response = await _client.GetAsync("/v1/packages/pkg/security");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var body = await response.Content.ReadAsStringAsync();

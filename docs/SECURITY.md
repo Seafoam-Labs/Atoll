@@ -222,7 +222,7 @@ changes the ids visible in historical documents.
 
 The persisted `Pending` state is the durable work queue — there is no in-process queue:
 
-1. A new revision is seeded or a rescan is requested (`POST /packages/{name}/security/rescan`, optionally
+1. A new revision is seeded or a rescan is requested (`POST /v1/packages/{name}/security/rescan`, optionally
    `?revision={sha}`); both call `MarkPendingAsync`, which upserts the `(package, revision)` document to `Pending`,
    clears prior findings/lease, and stamps `requiredPolicyVersion` with the enqueuing scanner's current policy
    version (monotonic: an existing requirement is never lowered). On public instances set
@@ -352,13 +352,13 @@ findings).`; failures log a warning and record `Error`. Useful ad-hoc queries on
 These checks need only `curl` (or a Git client) and read access to the running API.
 
 1. **Gating and reason codes** — seed a PKGBUILD that pipes a download into a shell, then:
-   - `GET /packages/$NAME/security` moves `Pending` → `Flagged` with a non-zero `findingCount`.
-   - `GET /packages/$NAME` and `GET /packages/$NAME.git/info/refs?service=git-upload-pack` return `403` with
+   - `GET /v1/packages/$NAME/security` moves `Pending` → `Flagged` with a non-zero `findingCount`.
+   - `GET /v1/packages/$NAME` and `GET /packages/$NAME.git/info/refs?service=git-upload-pack` return `403` with
      `"reason":"security_status_flagged"`.
-   - `GET /packages/$NAME/versions` returns `200` (history is metadata, not content).
+   - `GET /v1/packages/$NAME/versions` returns `200` (history is metadata, not content).
 2. **Clean package verifies** — seed a minimal PKGBUILD with none of the matched patterns; the status becomes
-   `Verified` and `GET /packages/$NAME` returns `200`.
-3. **Rescan re-queues** — `POST /packages/$NAME/security/rescan` (optionally `?revision=<sha>`) returns `202`; the
+   `Verified` and `GET /v1/packages/$NAME` returns `200`.
+3. **Rescan re-queues** — `POST /v1/packages/$NAME/security/rescan` (optionally `?revision=<sha>`) returns `202`; the
    revision returns to `Pending` and resolves again.
 4. **Lease recovery** — mark a package `Pending` via rescan, stop the worker (scale the instance to zero or block
    the DB — setting `Enabled=false` only prevents polling), wait past `leaseUntil`, restart. The stuck-lease query

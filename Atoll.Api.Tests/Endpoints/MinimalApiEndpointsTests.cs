@@ -37,9 +37,9 @@ public class MinimalApiEndpointsTests
     [Test]
     public async Task PackagesSupportsNameProvidesAndWordsQueries()
     {
-        var byName = await _client.GetAsync("/search?query=portable-kit,not-real");
-        var byProv = await _client.GetAsync("/search?query=shelly&by=provides");
-        var byDesc = await _client.GetAsync("/search?query=handheld,portable&by=words");
+        var byName = await _client.GetAsync("/v1/search?query=portable-kit,not-real");
+        var byProv = await _client.GetAsync("/v1/search?query=shelly&by=provides");
+        var byDesc = await _client.GetAsync("/v1/search?query=handheld,portable&by=words");
 
         Assert.That(byName.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(byProv.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -67,7 +67,7 @@ public class MinimalApiEndpointsTests
     [Test]
     public async Task InvalidPackagesByAndUnknownRouteReturnTextHtml404()
     {
-        var invalidBy = await _client.GetAsync("/search?query=shelly&by=unknown");
+        var invalidBy = await _client.GetAsync("/v1/search?query=shelly&by=unknown");
         var unknown = await _client.GetAsync("/does-not-exist");
 
         Assert.That(invalidBy.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -77,7 +77,7 @@ public class MinimalApiEndpointsTests
     [Test]
     public async Task MetricsReturnsPrometheusText()
     {
-        _ = await _client.GetAsync("/search?query=portable-kit");
+        _ = await _client.GetAsync("/v1/search?query=portable-kit");
 
         var response = await _client.GetAsync("/metrics");
         var body = await response.Content.ReadAsStringAsync();
@@ -89,9 +89,9 @@ public class MinimalApiEndpointsTests
         {
             // The search request above is counted, and the sample index has 3 names / 3 provides.
             Assert.That(body, Does.Match(@"atoll_search_requests_total\{[^}]*\} [1-9]"));
-            Assert.That(body, Does.Match(@"atoll_index_size\{[^}]*index=""names""[^}]*\} 3"));
-            Assert.That(body, Does.Match(@"atoll_index_size\{[^}]*index=""provides""[^}]*\} 3"));
-            Assert.That(body, Does.Match(@"atoll_index_size\{[^}]*index=""words""[^}]*\} [1-9]"));
+            Assert.That(body, Does.Match("""atoll_index_size\{[^}]*index="names"[^}]*\} 3"""));
+            Assert.That(body, Does.Match("""atoll_index_size\{[^}]*index="provides"[^}]*\} 3"""));
+            Assert.That(body, Does.Match("""atoll_index_size\{[^}]*index="words"[^}]*\} [1-9]"""));
 
             // Uptime gauge plus ASP.NET Core request metrics from instrumentation.
             Assert.That(body, Does.Contain("process_uptime_seconds"));

@@ -1,5 +1,4 @@
 using System.Net;
-using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
 using NUnit.Framework;
@@ -73,62 +72,40 @@ public class MutationsEndpointsTests
     [Test]
     public async Task Mutations_disabled_rejects_seed_with_403()
     {
-        var disabled = new SecurityTestFactory { MutationsEnabled = false };
+        await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
 
-        try
-        {
-            var response = await client.PostAsync("/packages/no-such-package/seed", null);
+        var response = await client.PostAsync("/v1/packages/no-such-package/seed", null);
 
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
-        }
-        finally
-        {
-            client.Dispose();
-            disabled.Dispose();
-        }
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
     }
 
     [Test]
     public async Task Mutations_disabled_rejects_rescan_with_403()
     {
-        var disabled = new SecurityTestFactory { MutationsEnabled = false };
+        await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
-        try
-        {
-            // The mutation gate takes precedence over package lookup.
-            var response = await client.PostAsync("/packages/no-such-package/security/rescan", null);
 
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
-        }
-        finally
-        {
-            client.Dispose();
-            disabled.Dispose();
-        }
+        // The mutation gate takes precedence over package lookup.
+        var response = await client.PostAsync("/v1/packages/no-such-package/security/rescan", null);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
     }
 
     [Test]
     public async Task Mutations_disabled_rejects_delete_with_403()
     {
-        var disabled = new SecurityTestFactory { MutationsEnabled = false };
+        await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
-        try
-        {
-            await disabled.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
 
-            var response = await client.DeleteAsync("/packages/pkg");
+        await disabled.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
 
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
-            // The gate runs before repo.DeleteAsync, so the package is not removed.
-            var repo = await disabled.Repository.GetHeadAsync("pkg");
-            Assert.That(repo, Is.Not.Null);
-        }
-        finally
-        {
-            client.Dispose();
-            disabled.Dispose();
-        }
+        var response = await client.DeleteAsync("/v1/packages/pkg");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        // The gate runs before repo.DeleteAsync, so the package is not removed.
+        var repo = await disabled.Repository.GetHeadAsync("pkg");
+        Assert.That(repo, Is.Not.Null);
     }
 
     [Test]
@@ -136,9 +113,14 @@ public class MutationsEndpointsTests
     {
         await SeedPackageAsync();
 
-        var response = await _client.PostAsync("/packages/pkg/security/rescan", null);
+        var response = await _client.PostAsync("/v1/packages/pkg/security/rescan", null);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Accepted));
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Accepted));
+            Assert.That(response.Headers.Location?.OriginalString,
+                Is.EqualTo("/v1/packages/pkg/security?revision=rev-1"));
+        });
 
         var scan = await _factory.SecurityRepository.GetHeadAsync("pkg");
         Assert.That(scan, Is.Not.Null);

@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using Atoll.Api.Services.Packages;
 using Atoll.Api.Tests.Support;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -68,9 +67,9 @@ public class MongoApiEndpointsTests
             ]
         }, revisionContent);
 
-        var list = await _client.GetAsync("/packages");
-        var head = await _client.GetAsync("/packages/atoll-test");
-        var versions = await _client.GetAsync("/packages/atoll-test/versions");
+        var list = await _client.GetAsync("/v1/packages");
+        var head = await _client.GetAsync("/v1/packages/atoll-test");
+        var versions = await _client.GetAsync("/v1/packages/atoll-test/versions");
 
         Assert.That(list.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -124,7 +123,7 @@ public class MongoApiEndpointsTests
             ["status"] = "Pending"
         });
 
-        var del = await _client.DeleteAsync("/packages/to-delete");
+        var del = await _client.DeleteAsync("/v1/packages/to-delete");
         Assert.That(del.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
         Assert.That(await repo.ExistsAsync("to-delete"), Is.False);

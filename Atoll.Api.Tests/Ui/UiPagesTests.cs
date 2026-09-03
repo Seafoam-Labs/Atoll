@@ -1,5 +1,4 @@
 using System.Net;
-using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
 using NUnit.Framework;
@@ -68,10 +67,12 @@ public class UiPagesTests
     private async Task SeedAsync(string name, SecurityStatus status, IReadOnlyList<SecurityFinding>? findings = null)
     {
         await _factory.Repository.InsertSeedAsync(Doc(name), SeedRevision(name));
-        await _factory.SecurityRepository.MarkPendingAsync(name, "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _factory.SecurityRepository.MarkPendingAsync(name, "rev-1", true,
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
         if (status == SecurityStatus.Pending) return;
 
-        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _factory.SecurityRepository.CompleteScanAsync(
             name, "rev-1", "test", new ScanResult(status, findings ?? []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);
@@ -103,10 +104,12 @@ public class UiPagesTests
     private async Task CompleteScanAsync(
         string name, string sha, SecurityStatus status, IReadOnlyList<SecurityFinding>? findings = null)
     {
-        await _factory.SecurityRepository.MarkPendingAsync(name, sha, true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _factory.SecurityRepository.MarkPendingAsync(name, sha, true,
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
         if (status == SecurityStatus.Pending) return;
 
-        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _factory.SecurityRepository.CompleteScanAsync(
             name, sha, "test", new ScanResult(status, findings ?? []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);
@@ -226,55 +229,41 @@ public class UiPagesTests
     [Test]
     public async Task Mutations_disabled_hides_seed_button_for_unseeded_package()
     {
-        var disabled = new SecurityTestFactory { MutationsEnabled = false };
+        await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
 
-        try
-        {
-            var response = await client.GetAsync("/package/portable-kit");
-            var body = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/package/portable-kit");
+        var body = await response.Content.ReadAsStringAsync();
 
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(body, Does.Not.Contain("Seed from AUR"));
-            // The read-only AUR link remains available.
-            Assert.That(body, Does.Contain("href=\"https://aur.archlinux.org/packages/portable-kit\""));
-        }
-        finally
-        {
-            client.Dispose();
-            disabled.Dispose();
-        }
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(body, Does.Not.Contain("Seed from AUR"));
+        // The read-only AUR link remains available.
+        Assert.That(body, Does.Contain("href=\"https://aur.archlinux.org/packages/portable-kit\""));
     }
 
     [Test]
     public async Task Mutations_disabled_hides_rescan_button_for_seeded_package()
     {
-        var disabled = new SecurityTestFactory { MutationsEnabled = false };
+        await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
 
-        try
-        {
-            await disabled.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-            await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-            await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-            await disabled.SecurityRepository.CompleteScanAsync(
-                "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
-                PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await disabled.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
+        await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true,
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await disabled.SecurityRepository.CompleteScanAsync(
+            "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
 
-            var response = await client.GetAsync("/package/shelly-bin");
-            var body = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/package/shelly-bin");
+        var body = await response.Content.ReadAsStringAsync();
 
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(body, Does.Contain("badge-seeded"));
-            Assert.That(body, Does.Not.Contain("Rescan"));
-            // Content is still served when verified; only the mutation button is hidden.
-            Assert.That(body, Does.Contain("git clone"));
-        }
-        finally
-        {
-            client.Dispose();
-            disabled.Dispose();
-        }
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(body, Does.Contain("badge-seeded"));
+        Assert.That(body, Does.Not.Contain("Rescan"));
+        // Content is still served when verified; only the mutation button is hidden.
+        Assert.That(body, Does.Contain("git clone"));
     }
 
     [Test]
@@ -306,8 +295,10 @@ public class UiPagesTests
         using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
         using var client = factory.CreateClient();
         await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true,
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
         await factory.SecurityRepository.CompleteScanAsync(
             "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
             PkgBuildSecurityScanner.CurrentPolicyVersion);

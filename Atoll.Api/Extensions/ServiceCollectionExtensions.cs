@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Text.Json.Serialization;
+using Asp.Versioning;
 using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
@@ -64,7 +65,18 @@ internal static class ServiceCollectionExtensions
 
         public IServiceCollection AddAtollInfrastructure()
         {
-            services.AddOpenApi();
+            services.AddApiVersioning(options =>
+                {
+                    options.ApiVersionReader = new UrlSegmentApiVersionReader();
+                    options.ReportApiVersions = true;
+                })
+                .AddApiExplorer(options =>
+                {
+                    options.GroupNameFormat = "'v'VVV";
+                    options.SubstituteApiVersionInUrl = true;
+                })
+                .AddOpenApi();
+
             services.AddHttpClient();
 
             // Restore the original client IP and scheme from trusted proxies.

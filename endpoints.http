@@ -1,68 +1,72 @@
 @baseUrl = http://localhost:8080
 
-### Health Check
+### Health Check (version-neutral)
 GET {{baseUrl}}/health
 Accept: application/json
 
-### Get Metrics (Prometheus format)
+### Get Metrics (Prometheus format, version-neutral)
 GET {{baseUrl}}/metrics
 Accept: text/plain
 
 ### Search Packages by Name
-GET {{baseUrl}}/search?query=shelly&by=name
+GET {{baseUrl}}/v1/search?query=shelly&by=name
 Accept: application/json
 
 ### Search Packages by Words
-GET {{baseUrl}}/search?query=shelly&by=words
+GET {{baseUrl}}/v1/search?query=shelly&by=words
 Accept: application/json
 
 ### Search Packages by Provides
-GET {{baseUrl}}/search?query=shelly&by=provides
+GET {{baseUrl}}/v1/search?query=shelly&by=provides
 Accept: application/json
 
 ### List All Packages
-GET {{baseUrl}}/packages
+GET {{baseUrl}}/v1/packages
 Accept: application/json
 
 ### Seed Package from AUR
-POST {{baseUrl}}/packages/shelly/seed
+POST {{baseUrl}}/v1/packages/shelly/seed
 Accept: application/json
 
 ### Get Specific Package
-GET {{baseUrl}}/packages/shelly
+GET {{baseUrl}}/v1/packages/shelly
 Accept: application/json
 
 ### Get Package Versions
-GET {{baseUrl}}/packages/shelly/versions
+GET {{baseUrl}}/v1/packages/shelly/versions
 Accept: application/json
 
 ### Get Specific Package Version
-GET {{baseUrl}}/packages/shelly/versions/bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
+GET {{baseUrl}}/v1/packages/shelly/versions/bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
 Accept: application/json
 
 ### Delete Package
-DELETE {{baseUrl}}/packages/shelly
+DELETE {{baseUrl}}/v1/packages/shelly
 Accept: application/json
 
 ### Get Package Security Status (head revision)
-GET {{baseUrl}}/packages/shelly/security
+GET {{baseUrl}}/v1/packages/shelly/security
 Accept: application/json
 
 ### Get Package Security Status (specific revision)
-GET {{baseUrl}}/packages/shelly/security?revision=bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
+GET {{baseUrl}}/v1/packages/shelly/security?revision=bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
 Accept: application/json
 
 ### Trigger a Security Re-scan (head revision)
-POST {{baseUrl}}/packages/shelly/security/rescan
+POST {{baseUrl}}/v1/packages/shelly/security/rescan
 Accept: application/json
 
 ### Trigger a Security Re-scan (specific revision)
-POST {{baseUrl}}/packages/shelly/security/rescan?revision=bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
+POST {{baseUrl}}/v1/packages/shelly/security/rescan?revision=bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
 Accept: application/json
 
-### Git Smart HTTP - Ref Advertisement
+### AUR RPC v5 (version-neutral, built for yay/paru)
+GET {{baseUrl}}/rpc?v=5&type=info&arg[]=shelly
+Accept: application/json
+
+### Git Smart HTTP - Ref Advertisement (version-neutral)
 GET {{baseUrl}}/packages/shelly.git/info/refs?service=git-upload-pack
 
-### Git Smart HTTP - Upload Pack
+### Git Smart HTTP - Upload Pack (version-neutral)
 # POST {{baseUrl}}/packages/shelly.git/git-upload-pack
 # Content-Type: application/x-git-upload-pack-request

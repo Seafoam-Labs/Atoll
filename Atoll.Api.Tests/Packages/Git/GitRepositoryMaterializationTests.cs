@@ -1,6 +1,5 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
-using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
@@ -340,7 +339,6 @@ public class GitRepositoryMaterializationTests
         });
         var hidingRepo = new RevisionHidingRepository(repo, "rev-1");
         var cache = new GitRepositoryCache(hidingRepo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(hidingRepo, options, security, new PkgBuildSecurityScanner(), cache);
         try
         {
             await repo.InsertSeedAsync(

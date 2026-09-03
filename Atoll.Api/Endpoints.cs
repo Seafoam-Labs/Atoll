@@ -15,16 +15,22 @@ namespace Atoll.Api;
 
 public static class Endpoints
 {
+    private const string GetPackageEndpoint = "GetPackage";
+    private const string GetPackageSecurityEndpoint = "GetPackageSecurity";
+
     public static void MapEndpoints(this WebApplication app)
     {
         app.MapMethods("/health", ["GET", "HEAD"], TypedResults.Ok);
-        app.MapGet("/search", Search);
         app.MapAurRpcEndpoints();
 
-        var packages = app.MapGroup("/packages");
-        MapPackageRoutes(packages);
-        MapGitProtocolRoutes(packages);
+        MapGitProtocolRoutes(app.MapGroup("/packages"));
         MapGitProtocolRoutes(app.MapGroup(""));
+
+        var api = app.NewVersionedApi().MapGroup("v{version:apiVersion}");
+        var v1 = api.MapGroup("").HasApiVersion(1.0);
+
+        v1.MapGet("/search", Search);
+        MapPackageRoutes(v1.MapGroup("/packages"));
     }
 
     private static Ok<AurPackageMetadata[]> Search(
@@ -53,13 +59,15 @@ public static class Endpoints
                 async Task<Results<Created, ProblemHttpResult>> (
                     [FromRoute] string name,
                     [FromServices] DirectPackageSeeder seeder,
-                    [FromServices] IOptions<AtollOptions> options) =>
+                    [FromServices] LinkGenerator links,
+                    [FromServices] IOptions<AtollOptions> options,
+                    HttpContext context) =>
                 {
                     if (!options.Value.Mutations.Enabled)
                         return MutationsDisabled();
 
                     await seeder.SeedAsync(name);
-                    return TypedResults.Created($"/packages/{name}");
+                    return TypedResults.Created(GetRequiredPath(links, context, GetPackageEndpoint, new { name }));
                 })
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
@@ -80,6 +88,7 @@ public static class Endpoints
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         packages.MapGet("/{name}/security", SecurityStatus)
+            .WithName(GetPackageSecurityEndpoint)
             .ProducesJsonOneOf<PackageSecurityHistoryResponse, PackageSecurityRevisionResponse>();
         packages.MapPost("/{name}/security/rescan", SecurityRescan)
             .ProducesProblem(StatusCodes.Status403Forbidden);
@@ -90,19 +99,21 @@ public static class Endpoints
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         secured.MapGet("/{name}",
-            async ([FromRoute] string name, [FromServices] IPackageService repo) =>
-            TypedResults.Ok(await repo.GetAsync(name)));
+                async ([FromRoute] string name, [FromServices] IPackageService repo) =>
+                TypedResults.Ok(await repo.GetAsync(name)))
+            .WithName(GetPackageEndpoint);
 
         secured.MapGet("/{name}/versions/{sha}",
             async ([FromRoute] string name, [FromRoute] string sha, [FromServices] IPackageService repo) =>
             TypedResults.Ok(await repo.GetAsync(name, sha)));
     }
 
-    private static async Task<Results<Ok<PackageSecurityHistoryResponse>, Ok<PackageSecurityRevisionResponse>, NotFound>> SecurityStatus(
-        [FromRoute] string name,
-        [FromQuery(Name = "revision")] string? revision,
-        [FromServices] IPackageRepository packages,
-        [FromServices] IPackageSecurityRepository security)
+    private static async
+        Task<Results<Ok<PackageSecurityHistoryResponse>, Ok<PackageSecurityRevisionResponse>, NotFound>> SecurityStatus(
+            [FromRoute] string name,
+            [FromQuery(Name = "revision")] string? revision,
+            [FromServices] IPackageRepository packages,
+            [FromServices] IPackageSecurityRepository security)
     {
         var package = await packages.GetHeadAsync(name);
         if (package is null)
@@ -148,12 +159,14 @@ public static class Endpoints
         [FromServices] IPackageRepository packages,
         [FromServices] IPackageSecurityRepository security,
         [FromServices] IPackageSecurityScanner scanner,
-        [FromServices] IOptions<AtollOptions> options)
+        [FromServices] LinkGenerator links,
+        [FromServices] IOptions<AtollOptions> options,
+        HttpContext context)
     {
         if (!options.Value.Mutations.Enabled)
             return MutationsDisabled();
 
-        var package = await packages.GetHeadAsync(name);
+        var package = await packages.GetHeadAsync(name, context.RequestAborted);
         if (package is null)
             return TypedResults.NotFound();
 
@@ -161,9 +174,22 @@ public static class Endpoints
         if (package.Revisions.All(r => r.RevisionId != revisionId))
             return TypedResults.NotFound();
 
-        await security.MarkPendingAsync(name, revisionId, revisionId == package.HeadRevisionId, scanner.PolicyVersion);
-        return TypedResults.Accepted($"/packages/{name}/security?revision={revisionId}");
+        await security.MarkPendingAsync(name, revisionId, revisionId == package.HeadRevisionId, scanner.PolicyVersion,
+            context.RequestAborted);
+        return TypedResults.Accepted(GetRequiredPath(
+            links,
+            context,
+            GetPackageSecurityEndpoint,
+            new { name, revision = revisionId }));
     }
+
+    private static string GetRequiredPath(
+        LinkGenerator links,
+        HttpContext context,
+        string endpointName,
+        object values) =>
+        links.GetPathByName(context, endpointName, values) ??
+        throw new InvalidOperationException($"Could not generate a path for endpoint '{endpointName}'.");
 
     private static ProblemHttpResult MutationsDisabled()
     {
@@ -193,7 +219,8 @@ public static class Endpoints
         response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
 
         if (!string.Equals(service, "git-upload-pack", StringComparison.Ordinal))
-            return TypedResults.Problem("Only git-upload-pack is supported.", statusCode: StatusCodes.Status403Forbidden);
+            return TypedResults.Problem("Only git-upload-pack is supported.",
+                statusCode: StatusCodes.Status403Forbidden);
 
         response.ContentType = "application/x-git-upload-pack-advertisement";
 

@@ -1,5 +1,3 @@
-using Atoll.Api.Services.Catalog.Indexing;
-
 namespace Atoll.Api.Services.Catalog.Refresh;
 
 public sealed class PackageIndexWorker(

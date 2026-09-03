@@ -48,7 +48,7 @@ app.Use(async (context, next) =>
 
 app.UseRouting();
 
-app.MapOpenApi();
+app.MapOpenApi().WithDocumentPerVersion();
 app.MapScalarApiReference();
 app.MapEndpoints();
 app.MapPrometheusScrapingEndpoint();

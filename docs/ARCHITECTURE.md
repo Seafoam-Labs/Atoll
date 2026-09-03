@@ -148,17 +148,23 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 ## API
 
 - **Base URLs:** `http://localhost:8080` (container), `http://localhost:5290` (dev)
-- **Style:** REST, JSON · **Authentication:** none (open read/write; trusted networks only) · **Versioning:** none ·
-  **Error format:** RFC 9457 `ProblemDetails`
-- **OpenAPI:** `/openapi/v1.json` in Development mode. Minimal API handlers use typed results so response status codes
-  and JSON models are inferred. `GET /packages/{name}/security` documents its history and single-revision `200`
-  payloads with `oneOf`; `ProducesJsonOneOf` supplies this metadata because ASP.NET Core 10 otherwise retains only one
-  response type per status code and content type. Revisit the helper when upgrading to .NET 11, which supports this
-  composition natively.
+- **Style:** REST, JSON · **Authentication:** none (open read/write; trusted networks only) ·
+  **Versioning:** URL segment (`/v1/…`) via `Asp.Versioning` · **Error format:** RFC 9457 `ProblemDetails`
+- **Version semantics:** The JSON REST surface (`/v1/search`, `/v1/packages/…`) is versioned by URL segment;
+  unversioned paths and unknown versions (`/v2/…`) return `404`. Responses advertise supported versions via the
+  `api-supported-versions` header. Protocol-fixed surfaces stay version-neutral: AUR RPC (`/rpc`, `/rpc/v5/…`) and
+  Git Smart HTTP (`/packages/{name}.git`, `/{name}.git`) are built by yay/paru and git clients, which cannot carry
+  an API version segment; `/health` and `/metrics` are operational endpoints.
+- **OpenAPI:** One document per API version, served by `MapOpenApi().WithDocumentPerVersion()` (e.g.
+  `/openapi/v1.json`). Minimal API handlers use typed results so response status codes and JSON models are inferred.
+  `GET /v1/packages/{name}/security` documents its history and single-revision `200` payloads with `oneOf`;
+  `ProducesJsonOneOf` supplies this metadata because ASP.NET Core 10 otherwise retains only one response type per
+  status code and content type. Revisit the helper when upgrading to .NET 11, which supports this composition
+  natively.
 
 ### Search parameters
 
-`/search` accepts two query parameters:
+`/v1/search` accepts two query parameters:
 
 - `query` - a comma-separated list of values (e.g. `?query=linux,zen`). An omitted or empty query deliberately returns
   `200` with no results rather than `400`.
@@ -169,22 +175,22 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET/HEAD | `/health` | Liveness only - does not check MongoDB or index readiness |
-| GET | `/metrics` | OpenTelemetry metrics in Prometheus format (see Operations) |
-| GET | `/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
-| GET/POST | `/rpc` | aurweb-compatible RPC v5 endpoint for yay/paru |
-| GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint |
-| GET | `/packages` | List all seeded package names |
-| POST | `/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |
-| GET | `/packages/{name}` | Get head revision files |
-| GET | `/packages/{name}/versions` | Get revision history |
-| GET | `/packages/{name}/versions/{sha}` | Get specific revision files |
-| DELETE | `/packages/{name}` | Delete package data, security scans, and materialized Git repo. `403` when `Atoll:Mutations:Enabled=false` |
-| GET | `/packages/{name}/security` | Get per-revision security status (`?revision={sha}` for one revision) |
-| POST | `/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head). `403` when `Atoll:Mutations:Enabled=false` |
-| GET | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement |
-| POST | `/packages/{name}.git/git-upload-pack` | Git pack negotiation and transfer |
-| GET/POST | `/{pkgbase}.git/...` | AUR-compatible aliases for the same Git Smart HTTP operations |
+| GET/HEAD | `/health` | Liveness only - does not check MongoDB or index readiness (version-neutral) |
+| GET | `/metrics` | OpenTelemetry metrics in Prometheus format (see Operations; version-neutral) |
+| GET | `/v1/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
+| GET/POST | `/rpc` | aurweb-compatible RPC v5 endpoint for yay/paru (version-neutral) |
+| GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint (version-neutral) |
+| GET | `/v1/packages` | List all seeded package names |
+| POST | `/v1/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |
+| GET | `/v1/packages/{name}` | Get head revision files |
+| GET | `/v1/packages/{name}/versions` | Get revision history |
+| GET | `/v1/packages/{name}/versions/{sha}` | Get specific revision files |
+| DELETE | `/v1/packages/{name}` | Delete package data, security scans, and materialized Git repo. `403` when `Atoll:Mutations:Enabled=false` |
+| GET | `/v1/packages/{name}/security` | Get per-revision security status (`?revision={sha}` for one revision) |
+| POST | `/v1/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head). `403` when `Atoll:Mutations:Enabled=false` |
+| GET | `/packages/{name}.git/info/refs?service=git-upload-pack` | Git ref advertisement (version-neutral) |
+| POST | `/packages/{name}.git/git-upload-pack` | Git pack negotiation and transfer (version-neutral) |
+| GET/POST | `/{pkgbase}.git/...` | AUR-compatible aliases for the same Git Smart HTTP operations (version-neutral) |
 
 ### Web UI routes
 
@@ -220,6 +226,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | Cached sorted views in `PackageCatalogService` | Fast UI pagination over 100k+ packages. Each `(generation, sort)` is pre-sorted once into an array reference. | First request per sort pays O(N log N). Substring queries still scan linearly (~15–25 ms). | Active |
 | Response compression (Brotli + Gzip) | Reduces dynamic SSR and API payload sizes ~5× without external infrastructure. | Minor CPU overhead (mitigated by `Fastest` level). Disabled over HTTPS by default to prevent BREACH attacks. | Active |
 | Open endpoints / Trusted network model | Keeps the API and Git clone surface simple and standard for self-hosted instances. | Anyone on the network can mutate data unless `Atoll:Mutations:Enabled=false` is set. | Active |
+| URL-segment REST versioning (`Asp.Versioning`) | The JSON REST surface evolves without breaking pinned clients: `/v1/…` reserves the contract, and a future breaking revision ships side-by-side as `/v2/…`. Query/header readers are disabled so the version is unambiguous and cache-friendly. | AUR RPC, Git Smart HTTP, `/health`, and `/metrics` stay version-neutral forever (client-built URLs); unsupported or unversioned paths `404`. Breaking move off the old unversioned `/search` and `/packages` paths. | Active |
 
 Security notes not covered by the ADRs: options are validated on startup via Data Annotations (`[Required]`, `[Range]`,
 `[Url]`); raw stack traces are never returned to clients; `git-receive-pack` (push) is explicitly rejected with
