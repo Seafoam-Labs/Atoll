@@ -35,11 +35,11 @@ public static class Endpoints
 
     private static Ok<AurPackageMetadata[]> Search(
         [FromServices] PackageSearchService searchService,
-        [FromQuery(Name = "query")] ValuesQuery? query,
+        [FromQuery(Name = "query")] SearchQuery? query,
         [FromQuery(Name = "by")] ByQuery? by)
     {
-        var queryValues = query?.Values.ToHashSet() ?? [];
-        var byValue = by?.Value ?? By.Name;
+        var queryValues = query?.Query.ToHashSet() ?? [];
+        var byValue = by?.By ?? By.Name;
 
         return byValue switch
         {

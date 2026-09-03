@@ -7,7 +7,7 @@ public enum By
     Words
 }
 
-public readonly record struct ByQuery(By Value)
+public readonly record struct ByQuery(By By)
 {
     public static bool TryParse(string? s, out ByQuery result)
     {
@@ -22,17 +22,17 @@ public readonly record struct ByQuery(By Value)
     }
 }
 
-public readonly record struct ValuesQuery(string[] Values)
+public readonly record struct SearchQuery(string[] Query)
 {
-    public static bool TryParse(string source, out ValuesQuery result)
+    public static bool TryParse(string source, out SearchQuery result)
     {
         if (string.IsNullOrWhiteSpace(source))
         {
-            result = new ValuesQuery([]);
+            result = new SearchQuery([]);
             return true;
         }
 
-        result = new ValuesQuery(source.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+        result = new SearchQuery(source.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
         return true;
     }
 }

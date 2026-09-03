@@ -16,7 +16,7 @@ public class PackageQueryTests
         var parsed = ByQuery.TryParse(input, out var result);
 
         Assert.That(parsed, Is.True);
-        Assert.That(result.Value, Is.EqualTo(expected));
+        Assert.That(result.By, Is.EqualTo(expected));
     }
 
     [Test]
@@ -25,7 +25,7 @@ public class PackageQueryTests
         var parsed = ByQuery.TryParse("Invalid", out var result);
 
         Assert.That(parsed, Is.False);
-        Assert.That(result.Value, Is.EqualTo(default(By)));
+        Assert.That(result.By, Is.EqualTo(default(By)));
     }
 
     [Test]
@@ -34,7 +34,7 @@ public class PackageQueryTests
         var parsed = ByQuery.TryParse(null, out var result);
 
         Assert.That(parsed, Is.False);
-        Assert.That(result.Value, Is.EqualTo(default(By)));
+        Assert.That(result.By, Is.EqualTo(default(By)));
     }
 
     [Test]
@@ -43,7 +43,7 @@ public class PackageQueryTests
         var parsed = ByQuery.TryParse(string.Empty, out var result);
 
         Assert.That(parsed, Is.False);
-        Assert.That(result.Value, Is.EqualTo(default(By)));
+        Assert.That(result.By, Is.EqualTo(default(By)));
     }
 
     [Test]
@@ -52,26 +52,26 @@ public class PackageQueryTests
         var parsed = ByQuery.TryParse("   ", out var result);
 
         Assert.That(parsed, Is.False);
-        Assert.That(result.Value, Is.EqualTo(default(By)));
+        Assert.That(result.By, Is.EqualTo(default(By)));
     }
 
     [Test]
     public void NamesAreSplitByComma()
     {
-        var parsed = ValuesQuery.TryParse("shelly,portable,portable", out var result);
+        var parsed = SearchQuery.TryParse("shelly,portable,portable", out var result);
 
         Assert.That(parsed, Is.True);
-        Assert.That(result.Values.Length, Is.EqualTo(3));
-        Assert.That(result.Values[0], Is.EqualTo("shelly"));
-        Assert.That(result.Values[1], Is.EqualTo("portable"));
-        Assert.That(result.Values[2], Is.EqualTo("portable"));
+        Assert.That(result.Query.Length, Is.EqualTo(3));
+        Assert.That(result.Query[0], Is.EqualTo("shelly"));
+        Assert.That(result.Query[1], Is.EqualTo("portable"));
+        Assert.That(result.Query[2], Is.EqualTo("portable"));
     }
 
     [Test]
     public void EmptySourceProducesNoParts()
     {
-        _ = ValuesQuery.TryParse("", out var result);
+        _ = SearchQuery.TryParse("", out var result);
 
-        Assert.That(result.Values, Is.Empty);
+        Assert.That(result.Query, Is.Empty);
     }
 }
