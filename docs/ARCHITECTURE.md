@@ -176,6 +176,24 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - `by` - `name` (exact match), `words` (token intersection over Name/Description/Keywords, ordered by votes, capped at
   50), or `provides` (currently no cap or defined ordering - asymmetry worth resolving). Defaults to `name`.
 
+### Package index
+
+`GET /v1/packages` is the paged feed over the seeded-package set (MongoDB `packages` collection), designed for
+external UI clients:
+
+- `page` (1-based, default `1`) and `limit` (default `50`, max `200`); out-of-range or malformed values return `400`.
+- Ordering is fixed `packageName` ascending, so pages are deterministic. A `page` beyond the last returns `200` with
+  empty `items`; an empty corpus reports `totalItems: 0` and `totalPages: 0`.
+- Each row is a lean mirror-side projection (`name`, `createdAt`, `updatedAt`, `headRevisionId`, `revisionCount`,
+  nullable `upstreamPackageBase`); the embedded revisions array is never transferred. AUR catalog presentation
+  fields (`description`, `version`, `numVotes`, `popularity`, `outOfDate`) are joined per row from the live
+  in-memory index and are `null` when the package is absent from the current AUR dump (pruned upstream, or the
+  index has not loaded yet; `outOfDate` is also `null` when upstream reports the package as current). Detail-pane
+  catalog fields are hydrated by batching `GET /v1/search?by=name&query={page names}`
+  (keep batches ≤ 100 names so URLs stay short).
+- The total count and the page are two independent queries, so concurrent seeding can skew `totalItems` slightly
+  against `items`; acceptable for a browse feed.
+
 ### Endpoints
 
 | Method | Path | Description |
@@ -185,7 +203,7 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 | GET | `/v1/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
 | GET/POST | `/rpc` | aurweb-compatible RPC v5 endpoint for yay/paru (version-neutral) |
 | GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint (version-neutral) |
-| GET | `/v1/packages` | List all seeded package names |
+| GET | `/v1/packages?page=…&limit=…` | Paged seeded-package listing for UI clients (default 50, max 200 per page; fixed `packageName` ordering; rows carry nullable catalog fields `description`/`version`/`numVotes`/`popularity`/`outOfDate` joined from the live index) |
 | POST | `/v1/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/v1/packages/{name}` | Get head revision files |
 | GET | `/v1/packages/{name}/versions` | Get revision history |

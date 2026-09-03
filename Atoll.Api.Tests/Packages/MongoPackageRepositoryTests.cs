@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -140,6 +141,58 @@ public class MongoPackageRepositoryTests
         await _repo.DeleteAsync("shelly", CancellationToken.None);
 
         Assert.That(await _repo.ExistsAsync("shelly", CancellationToken.None), Is.False);
+    }
+
+    [Test]
+    public async Task ListIndexPageAsync_returns_ordered_windows_with_projection_fields()
+    {
+        foreach (var name in new[] { "c-carrot", "a-apple", "e-egg", "b-banana", "d-date" })
+        {
+            var (doc, revision) = NewSeed("pkg/" + name, name);
+            await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
+        }
+
+        await Append("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")));
+
+        var total = await _repo.CountAsync(CancellationToken.None);
+        var firstPage = await _repo.ListIndexPageAsync(0, 2, CancellationToken.None);
+        var secondPage = await _repo.ListIndexPageAsync(2, 2, CancellationToken.None);
+        var lastRow = await _repo.ListIndexPageAsync(4, 2, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(total, Is.EqualTo(5));
+            Assert.That(firstPage.Select(p => p.Name), Is.EqualTo(["a-apple", "b-banana"]));
+            Assert.That(secondPage.Select(p => p.Name), Is.EqualTo(["c-carrot", "d-date"]));
+            Assert.That(lastRow.Select(p => p.Name), Is.EqualTo(["e-egg"]));
+
+            var apple = firstPage.Single(p => p.Name == "a-apple");
+            Assert.That(apple.HeadRevisionId, Is.EqualTo("rev-a2"));
+            Assert.That(apple.RevisionCount, Is.EqualTo(2));
+            Assert.That(apple.CreatedAt, Is.GreaterThan(DateTimeOffset.MinValue));
+            Assert.That(apple.UpdatedAt, Is.GreaterThan(DateTimeOffset.MinValue));
+            Assert.That(apple.UpstreamPackageBase, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task ListIndexPageAsync_matches_in_memory_fake_paging()
+    {
+        var fake = new InMemoryPackageRepository();
+
+        foreach (var name in new[] { "c-carrot", "a-apple", "e-egg", "b-banana", "d-date" })
+        {
+            var (doc, revision) = NewSeed("pkg/" + name, name);
+            await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
+            await fake.InsertSeedAsync(doc, revision, CancellationToken.None);
+        }
+
+        var fromMongo = await _repo.ListIndexPageAsync(1, 3, CancellationToken.None);
+        var fromFake = await fake.ListIndexPageAsync(1, 3, CancellationToken.None);
+
+        Assert.That(
+            fromMongo.Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount)),
+            Is.EqualTo(fromFake.Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount))));
     }
 
     [Test]

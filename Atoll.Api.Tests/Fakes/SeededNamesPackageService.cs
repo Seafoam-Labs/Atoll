@@ -14,6 +14,9 @@ internal sealed class SeededNamesPackageService(IReadOnlyList<string> seededName
         return Task.FromResult(seededNames.Count);
     }
 
+    public Task<PackageIndexResponse> GetIndexPageAsync(int page, int limit, CancellationToken ct = default)
+        => throw new NotSupportedException();
+
     public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
         => throw new NotSupportedException();
 

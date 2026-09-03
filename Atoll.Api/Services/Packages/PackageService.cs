@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
@@ -11,8 +12,12 @@ public sealed class PackageService(
     IOptions<AtollOptions> options,
     IPackageSecurityRepository securityRepository,
     IPackageSecurityScanner scanner,
-    IGitRepositoryCache gitCache) : IPackageService
+    IGitRepositoryCache gitCache,
+    PackageIndexStore? indexStore = null) : IPackageService
 {
+    public const int DefaultIndexPageLimit = 50;
+    public const int MaxIndexPageLimit = 200;
+
     private readonly AtollOptions _options = options.Value;
 
     public Task<IReadOnlyList<string>> ListAsync()
@@ -23,6 +28,37 @@ public sealed class PackageService(
     public async Task<int> CountAsync()
     {
         return (int)await repo.CountAsync();
+    }
+
+    public async Task<PackageIndexResponse> GetIndexPageAsync(int page, int limit, CancellationToken ct = default)
+    {
+        var total = await repo.CountAsync(ct);
+        var totalPages = total == 0 ? 0 : (int)((total + limit - 1) / limit);
+
+        // Guard against arithmetic overflow (e.g. page = int.MaxValue) and skip beyond total/int.MaxValue.
+        var skip = (long)(page - 1) * limit;
+        if (skip >= total || skip > int.MaxValue)
+        {
+            return new PackageIndexResponse([], page, limit, total, totalPages);
+        }
+
+        var items = await repo.ListIndexPageAsync((int)skip, limit, ct);
+
+        var catalog = indexStore?.Current.ByNames;
+        var rows = items
+            .Select(item => catalog?.GetValueOrDefault(item.Name) is { } metadata
+                ? item with
+                {
+                    Description = metadata.Description,
+                    Version = metadata.Version,
+                    NumVotes = metadata.NumVotes,
+                    Popularity = metadata.Popularity,
+                    OutOfDate = metadata.OutOfDate
+                }
+                : item)
+            .ToArray();
+
+        return new PackageIndexResponse(rows, page, limit, total, totalPages);
     }
 
     public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)

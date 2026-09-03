@@ -50,8 +50,7 @@ public static class Endpoints
 
     private static void MapPackageRoutes(RouteGroupBuilder packages)
     {
-        packages.MapGet("",
-            async ([FromServices] IPackageService repo) => TypedResults.Ok(await repo.ListAsync()));
+        packages.MapGet("", GetPackageIndex);
 
         packages.MapPost("/{name}/seed",
                 async Task<Results<Created, ProblemHttpResult>> (
@@ -104,6 +103,28 @@ public static class Endpoints
         secured.MapGet("/{name}/versions/{sha}",
             async ([FromRoute] string name, [FromRoute] string sha, [FromServices] IPackageService repo) =>
             TypedResults.Ok(await repo.GetAsync(name, sha)));
+    }
+
+    private static async Task<Results<Ok<PackageIndexResponse>, ValidationProblem>> GetPackageIndex(
+        [FromQuery(Name = "page")] int? page,
+        [FromQuery(Name = "limit")] int? limit,
+        [FromServices] IPackageService packageService,
+        CancellationToken ct)
+    {
+        var pageNumber = page ?? 1;
+        var limitNumber = limit ?? PackageService.DefaultIndexPageLimit;
+
+        Dictionary<string, string[]>? errors = null;
+        if (pageNumber < 1)
+            (errors ??= [])["page"] = ["Must be >= 1."];
+
+        if (limitNumber < 1 || limitNumber > PackageService.MaxIndexPageLimit)
+            (errors ??= [])["limit"] = [$"Must be between 1 and {PackageService.MaxIndexPageLimit}."];
+
+        if (errors is not null)
+            return TypedResults.ValidationProblem(errors);
+
+        return TypedResults.Ok(await packageService.GetIndexPageAsync(pageNumber, limitNumber, ct));
     }
 
     private static async

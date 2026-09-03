@@ -418,6 +418,11 @@ public class GitRepositoryMaterializationTests
             return inner.CountAsync(ct);
         }
 
+        public Task<IReadOnlyList<PackageIndexEntry>> ListIndexPageAsync(int skip, int take, CancellationToken ct = default)
+        {
+            return inner.ListIndexPageAsync(skip, take, ct);
+        }
+
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
         {
             return inner.ExistsAsync(packageName, ct);

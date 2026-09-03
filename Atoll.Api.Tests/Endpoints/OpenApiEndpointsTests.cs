@@ -42,7 +42,7 @@ public class OpenApiEndpointsTests
 
             var paths = root.GetProperty("paths");
             Assert.That(paths.TryGetProperty("/v1/search", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/v1/packages", out _), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/packages", out var packagesPath), Is.True);
             Assert.That(paths.TryGetProperty("/v1/packages/{name}", out var packagePath), Is.True);
             Assert.That(paths.TryGetProperty("/v1/packages/{name}/seed", out var seedPath), Is.True);
             Assert.That(paths.TryGetProperty("/v1/packages/{name}/versions", out _), Is.True);
@@ -55,6 +55,12 @@ public class OpenApiEndpointsTests
             Assert.That(paths.TryGetProperty("/rpc/v5/suggest/{arg}", out _), Is.True);
 
             // Verify status codes on endpoints
+            var getIndexResponses = packagesPath.GetProperty("get").GetProperty("responses");
+            Assert.That(getIndexResponses.TryGetProperty("200", out _), Is.True);
+            Assert.That(getIndexResponses.TryGetProperty("400", out _), Is.True);
+            Assert.That(JsonSchemaReference(getIndexResponses, "200"),
+                Is.EqualTo("#/components/schemas/PackageIndexResponse"));
+
             var getSecurityResponses = securityPath.GetProperty("get").GetProperty("responses");
             Assert.That(getSecurityResponses.TryGetProperty("200", out _), Is.True);
             Assert.That(getSecurityResponses.TryGetProperty("404", out _), Is.True);
@@ -92,6 +98,11 @@ public class OpenApiEndpointsTests
             Assert.That(schemas.TryGetProperty("AurRpcPackage", out _), Is.True);
             Assert.That(schemas.TryGetProperty("PackageFiles", out _), Is.True);
             Assert.That(schemas.TryGetProperty("PackageVersion", out _), Is.True);
+            Assert.That(schemas.TryGetProperty("PackageIndexResponse", out _), Is.True);
+            Assert.That(schemas.TryGetProperty("PackageIndexEntry", out var indexEntrySchema), Is.True);
+            Assert.That(
+                indexEntrySchema.GetProperty("properties").EnumerateObject().Select(property => property.Name),
+                Is.SupersetOf(["name", "description", "version", "numVotes", "popularity", "outOfDate"]));
             Assert.That(schemas.TryGetProperty("PackageSecurityHistoryResponse", out _), Is.True);
             Assert.That(schemas.TryGetProperty("PackageSecurityRevisionResponse", out _), Is.True);
         });

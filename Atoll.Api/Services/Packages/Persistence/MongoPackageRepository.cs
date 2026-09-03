@@ -35,6 +35,22 @@ public sealed class MongoPackageRepository : IPackageRepository
             cancellationToken: ct);
     }
 
+    public async Task<IReadOnlyList<PackageIndexEntry>> ListIndexPageAsync(
+        int skip,
+        int take,
+        CancellationToken ct = default)
+    {
+        return await _packages
+            .Find(Builders<PackageDocument>.Filter.Empty)
+            .SortBy(p => p.PackageName)
+            .Skip(skip)
+            .Limit(take)
+            .Project(p => new PackageIndexEntry(
+                p.PackageName, p.CreatedAt, p.UpdatedAt, p.HeadRevisionId,
+                p.Revisions.Count, p.UpstreamPackageBase))
+            .ToListAsync(ct);
+    }
+
     public async Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
     {
         var count = await _packages.CountDocumentsAsync(

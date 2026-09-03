@@ -28,6 +28,27 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
         }
     }
 
+    public Task<IReadOnlyList<PackageIndexEntry>> ListIndexPageAsync(int skip, int take, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            // ASCII package names sort identically under StringComparer.Ordinal and Mongo's
+            // binary collation, so the fake's paging matches the repository's.
+            IReadOnlyList<PackageIndexEntry> result =
+            [
+                .. _docs.Values
+                    .OrderBy(d => d.PackageName, StringComparer.Ordinal)
+                    .Select(d => new PackageIndexEntry(
+                        d.PackageName, d.CreatedAt, d.UpdatedAt, d.HeadRevisionId,
+                        d.Revisions.Count, d.UpstreamPackageBase))
+                    .Skip(skip)
+                    .Take(take)
+            ];
+
+            return Task.FromResult(result);
+        }
+    }
+
     public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
     {
         lock (_gate)

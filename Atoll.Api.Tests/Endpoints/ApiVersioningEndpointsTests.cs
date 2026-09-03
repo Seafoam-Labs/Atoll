@@ -54,9 +54,14 @@ public class ApiVersioningEndpointsTests
     [Test]
     public async Task UnsupportedUrlSegmentVersionReturns404()
     {
-        var response = await _client.GetAsync("/v2/search?query=portable-kit");
+        var search = await _client.GetAsync("/v2/search?query=portable-kit");
+        var packages = await _client.GetAsync("/v2/packages");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Multiple(() =>
+        {
+            Assert.That(search.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+            Assert.That(packages.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        });
     }
 
     [Test]

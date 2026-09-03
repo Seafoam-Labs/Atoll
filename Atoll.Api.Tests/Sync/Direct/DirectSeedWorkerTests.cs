@@ -25,6 +25,9 @@ public class DirectSeedWorkerTests
         public Task<int> CountAsync()
             => Task.FromResult(seededNames.Count + SeedCalls.Count);
 
+        public Task<PackageIndexResponse> GetIndexPageAsync(int page, int limit, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => Task.FromResult(seededNames.Contains(packageName) || SeedCalls.Contains(packageName));
 
@@ -75,6 +78,9 @@ public class DirectSeedWorkerTests
 
         public Task<long> CountAsync(CancellationToken ct = default)
             => Task.FromResult((long)existing.Count);
+
+        public Task<IReadOnlyList<PackageIndexEntry>> ListIndexPageAsync(int skip, int take, CancellationToken ct = default)
+            => throw new NotSupportedException();
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => Task.FromResult(existing.Contains(packageName));

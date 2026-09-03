@@ -77,8 +77,67 @@ public class MongoApiEndpointsTests
 
         var listBody = await list.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(listBody);
-        Assert.That(doc.RootElement.GetArrayLength(), Is.EqualTo(1));
-        Assert.That(doc.RootElement[0].GetString(), Is.EqualTo("atoll-test"));
+        var items = doc.RootElement.GetProperty("items");
+        Assert.That(items.GetArrayLength(), Is.EqualTo(1));
+        Assert.That(items[0].GetProperty("name").GetString(), Is.EqualTo("atoll-test"));
+    }
+
+    [Test]
+    public async Task PackageIndexIsServedPagedFromRealMongoStorage()
+    {
+        var repo = _factory.CreatePackageRepository();
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var name in new[] { "zulu", "alpha", "mike" })
+        {
+            await repo.InsertSeedAsync(new PackageDocument
+            {
+                Id = name,
+                PackageName = name,
+                CreatedAt = now,
+                UpdatedAt = now,
+                HeadRevisionId = "rev-1",
+                Revisions =
+                [
+                    new PackageRevisionDocument { RevisionId = "rev-1", CreatedAt = now, Author = "test", Message = "seed" }
+                ]
+            }, new PackageRevisionContentDocument
+            {
+                Id = PackageSchema.RevisionDocumentId(name, "rev-1"),
+                PackageName = name,
+                RevisionId = "rev-1",
+                CreatedAt = now,
+                Author = "test",
+                Message = "seed",
+                Files = new Dictionary<string, PackageFile>
+                {
+                    ["PKGBUILD"] = new() { Content = $"pkgname={name}\n", Size = 8 + name.Length, Hash = "h" }
+                }
+            });
+        }
+
+        var response = await _client.GetAsync("/v1/packages?limit=2&page=2");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root.GetProperty("page").GetInt32(), Is.EqualTo(2));
+            Assert.That(root.GetProperty("limit").GetInt32(), Is.EqualTo(2));
+            Assert.That(root.GetProperty("totalItems").GetInt64(), Is.EqualTo(3));
+            Assert.That(root.GetProperty("totalPages").GetInt32(), Is.EqualTo(2));
+
+            var items = root.GetProperty("items");
+            Assert.That(items.GetArrayLength(), Is.EqualTo(1));
+            Assert.That(items[0].GetProperty("name").GetString(), Is.EqualTo("zulu"));
+            Assert.That(items[0].GetProperty("headRevisionId").GetString(), Is.EqualTo("rev-1"));
+            Assert.That(items[0].GetProperty("revisionCount").GetInt32(), Is.EqualTo(1));
+            Assert.That(items[0].GetProperty("upstreamPackageBase").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        });
     }
 
     [Test]

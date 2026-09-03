@@ -20,8 +20,12 @@ Accept: application/json
 GET {{baseUrl}}/v1/search?query=shelly&by=provides
 Accept: application/json
 
-### List All Packages
+### List Packages (paged, defaults: page 1, 50 per page)
 GET {{baseUrl}}/v1/packages
+Accept: application/json
+
+### List Packages (page 2, 100 per page)
+GET {{baseUrl}}/v1/packages?page=2&limit=100
 Accept: application/json
 
 ### Seed Package from AUR

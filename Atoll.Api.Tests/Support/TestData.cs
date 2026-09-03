@@ -23,6 +23,7 @@ internal static class TestData
             "License": ["MIT"],
             "Keywords": ["helper", "AUR"],
             "NumVotes": 10,
+            "OutOfDate": 1735689600,
             "Maintainer": "alice"
           },
           {

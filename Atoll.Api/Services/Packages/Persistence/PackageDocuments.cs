@@ -93,6 +93,24 @@ public sealed class PackageRevisionContentDocument
     [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
 }
 
+/// <summary>Lean listing row for the package index endpoint; never carries the embedded revisions array.</summary>
+public sealed record PackageIndexEntry(
+    string Name,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    string HeadRevisionId,
+    int RevisionCount,
+    string? UpstreamPackageBase)
+{
+    // Catalog presentation fields joined from the in-memory index at read time; null when the package
+    // is absent from the current dump (pruned upstream, or the index has not loaded yet).
+    public string? Description { get; init; }
+    public string? Version { get; init; }
+    public long? NumVotes { get; init; }
+    public double? Popularity { get; init; }
+    public long? OutOfDate { get; init; }
+}
+
 public sealed class PackageSyncState
 {
     [BsonElement("packageName")] public string PackageName { get; init; } = string.Empty;
