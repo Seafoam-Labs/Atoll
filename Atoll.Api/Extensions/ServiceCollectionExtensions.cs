@@ -202,6 +202,7 @@ internal static class ServiceCollectionExtensions
             services.AddSingleton<IPackageSecurityScanner, PkgBuildSecurityScanner>();
             services.AddSingleton<IPackageSecurityRepository, MongoPackageSecurityRepository>();
             services.AddSingleton<IPackageSecurityAccess, PackageSecurityAccess>();
+            services.AddSingleton<PackageSecurityStatusService>();
             services.AddSingleton<PackageSecurityFilter>();
             services.AddSingleton(new SecurityScanStatusStore(securityEnabled));
             services.AddHostedService<PackageSecurityWorker>();

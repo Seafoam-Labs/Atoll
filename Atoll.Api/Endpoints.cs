@@ -3,9 +3,7 @@ using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Rpc;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages;
-using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security;
-using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Services.Sync.Direct;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -112,53 +110,23 @@ public static class Endpoints
         Task<Results<Ok<PackageSecurityHistoryResponse>, Ok<PackageSecurityRevisionResponse>, NotFound>> SecurityStatus(
             [FromRoute] string name,
             [FromQuery(Name = "revision")] string? revision,
-            [FromServices] IPackageRepository packages,
-            [FromServices] IPackageSecurityRepository security)
+            [FromServices] PackageSecurityStatusService security,
+            CancellationToken ct)
     {
-        var package = await packages.GetHeadAsync(name);
-        if (package is null)
-            return TypedResults.NotFound();
-
         if (string.IsNullOrEmpty(revision))
         {
-            var scans = await security.ListForPackageAsync(name);
-            var history = new PackageSecurityHistoryResponse(
-                name,
-                package.HeadRevisionId,
-                [
-                    .. scans
-                        .OrderByDescending(s => s.IsHead)
-                        .ThenByDescending(s => s.ScannedAt)
-                        .Select(s => new PackageSecurityRevisionItem(
-                            s.RevisionId,
-                            s.Status.ToString(),
-                            s.IsHead,
-                            s.ScannedAt,
-                            s.Findings.Count
-                        ))
-                ]);
-
-            return TypedResults.Ok(history);
+            var history = await security.GetHistoryAsync(name, ct);
+            return history is null ? TypedResults.NotFound() : TypedResults.Ok(history);
         }
 
-        var scan = await security.GetAsync(name, revision);
-        var revisionStatus = new PackageSecurityRevisionResponse(
-            name,
-            revision,
-            (scan?.Status ?? Services.Security.SecurityStatus.Pending).ToString(),
-            revision == package.HeadRevisionId,
-            scan?.ScannedAt,
-            scan?.Findings.Count ?? 0);
-
-        return TypedResults.Ok(revisionStatus);
+        var revisionStatus = await security.GetRevisionAsync(name, revision, ct);
+        return revisionStatus is null ? TypedResults.NotFound() : TypedResults.Ok(revisionStatus);
     }
 
     private static async Task<Results<Accepted, NotFound, ProblemHttpResult>> SecurityRescan(
         [FromRoute] string name,
         [FromQuery(Name = "revision")] string? revision,
-        [FromServices] IPackageRepository packages,
-        [FromServices] IPackageSecurityRepository security,
-        [FromServices] IPackageSecurityScanner scanner,
+        [FromServices] PackageSecurityStatusService security,
         [FromServices] LinkGenerator links,
         [FromServices] IOptions<AtollOptions> options,
         HttpContext context)
@@ -166,16 +134,10 @@ public static class Endpoints
         if (!options.Value.Mutations.Enabled)
             return MutationsDisabled();
 
-        var package = await packages.GetHeadAsync(name, context.RequestAborted);
-        if (package is null)
+        var revisionId = await security.QueueRescanAsync(name, revision, context.RequestAborted);
+        if (revisionId is null)
             return TypedResults.NotFound();
 
-        var revisionId = string.IsNullOrEmpty(revision) ? package.HeadRevisionId : revision;
-        if (package.Revisions.All(r => r.RevisionId != revisionId))
-            return TypedResults.NotFound();
-
-        await security.MarkPendingAsync(name, revisionId, revisionId == package.HeadRevisionId, scanner.PolicyVersion,
-            context.RequestAborted);
         return TypedResults.Accepted(GetRequiredPath(
             links,
             context,
@@ -216,13 +178,13 @@ public static class Endpoints
         HttpResponse response,
         CancellationToken ct)
     {
-        response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
+        response.Headers.CacheControl = GitSmartHttp.NoCacheControl;
 
-        if (!string.Equals(service, "git-upload-pack", StringComparison.Ordinal))
-            return TypedResults.Problem("Only git-upload-pack is supported.",
+        if (!GitSmartHttp.IsSupportedService(service))
+            return TypedResults.Problem($"Only {GitSmartHttp.UploadPackService} is supported.",
                 statusCode: StatusCodes.Status403Forbidden);
 
-        response.ContentType = "application/x-git-upload-pack-advertisement";
+        response.ContentType = GitSmartHttp.AdvertisementMediaType;
 
         var result = await git.AdvertiseRefsAsync(name, response.Body, ct);
         if (result is GitTransferResult.Ok)
@@ -239,9 +201,9 @@ public static class Endpoints
         HttpResponse response,
         CancellationToken ct)
     {
-        response.Headers.CacheControl = "no-cache, max-age=0, must-revalidate";
+        response.Headers.CacheControl = GitSmartHttp.NoCacheControl;
 
-        response.ContentType = "application/x-git-upload-pack-result";
+        response.ContentType = GitSmartHttp.UploadPackResultMediaType;
 
         var result = await git.UploadPackAsync(name, request.Body, response.Body, ct);
         if (result is GitTransferResult.Ok)

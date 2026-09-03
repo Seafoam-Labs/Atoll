@@ -81,6 +81,9 @@ flowchart TD
   or unversioned policy versions. The pending queue is policy-aware: each document carries the minimum scanner
   policy that may claim and persist it, so a rolling deployment cannot let an older worker claim, complete, or
   downgrade work that a newer policy already claimed.
+- **PackageSecurityStatusService:** Builds the `GET /v1/packages/{name}/security` read model (head revision first, then
+  newest scan; an unscanned revision reads as `Pending`) and validates and queues `POST …/security/rescan` work, so the
+  security routes stay registration-only.
 - **PackageSearchService:** Serves Atoll-native search queries in-memory from `PackageIndexStore` snapshots with zero
   database I/O.
 - **AurRpcService:** Maps the same immutable metadata snapshot to the aurweb RPC v5 contract used by yay and paru. It
@@ -89,9 +92,11 @@ flowchart TD
   - `PackageCatalogService`: Powers `/` with cached pre-sorted views, live filtering, and server-side pagination.
   - `PackageDetailsService`: Assembles package metadata, relations, file trees, and security verdicts.
   - `StatusDashboardService`: Aggregates worker statuses, sync metrics, and exclusions for `/status`.
-- **Git services:** `GitTransferService` handles `git upload-pack` streams only. `GitRepositoryCache` owns repository
-  paths, per-package locks, markers, materialization, and deletion. It synthesizes deterministic commits from retained,
-  servable revisions; their SHAs are distinct from both Atoll revision IDs and upstream AUR commits.
+- **Git services:** `GitTransferService` handles `git upload-pack` streams only. `GitSmartHttp` holds the Smart HTTP
+  vocabulary (media types, cache policy) and the rule that only the fetch service is served. `GitRepositoryCache`
+  owns repository paths, per-package locks, markers, materialization, and deletion. It synthesizes deterministic
+  commits from retained, servable revisions; their SHAs are distinct from both Atoll revision IDs and upstream AUR
+  commits.
 - **Package name semantics:** `{name}` in routes is always the AUR **pkgname**. When interacting with Git mirrors or
   AUR, Atoll maps `pkgname` to its parent **pkgbase** using the in-memory index
   (`DirectPackageSeeder.ResolvePackageBase` for manual/direct seeding; the bulk and refresh candidate planners

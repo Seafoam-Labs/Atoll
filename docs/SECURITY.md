@@ -37,8 +37,9 @@ The implementation is in:
 - `Atoll.Api/Services/Security/PackageSecurityWorker.cs` (the polling worker),
   `Atoll.Api/Services/Security/Persistence/` (`IPackageSecurityRepository.cs`,
   `MongoPackageSecurityRepository.cs`, `PackageSecurityScanDocument.cs`), `PackageSecurityAccess.cs`,
-  `PackageSecurityFilter.cs` (the `IEndpointFilter` gating content routes), and `Endpoints.cs` (route
-  registration).
+  `PackageSecurityFilter.cs` (the `IEndpointFilter` gating content routes),
+  `PackageSecurityStatusService.cs` (the `/security` read model and rescan validation), and `Endpoints.cs`
+  (route registration only).
 
 The `Scanning/` types are `internal static` with focused unit tests under `Atoll.Api.Tests/Security/Scanning/`; the
 facade is covered end-to-end by `PkgBuildSecurityScannerTests`, which doubles as a regression fixture on a real-world
@@ -223,7 +224,8 @@ changes the ids visible in historical documents.
 The persisted `Pending` state is the durable work queue — there is no in-process queue:
 
 1. A new revision is seeded or a rescan is requested (`POST /v1/packages/{name}/security/rescan`, optionally
-   `?revision={sha}`); both call `MarkPendingAsync`, which upserts the `(package, revision)` document to `Pending`,
+   `?revision={sha}`); both call `MarkPendingAsync` (the endpoint through `PackageSecurityStatusService.QueueRescanAsync`,
+   which rejects unknown revisions first), which upserts the `(package, revision)` document to `Pending`,
    clears prior findings/lease, and stamps `requiredPolicyVersion` with the enqueuing scanner's current policy
    version (monotonic: an existing requirement is never lowered). On public instances set
    `Atoll:Mutations:Enabled=false` to make the rescan endpoint return `403` and hide the UI button (this also applies
