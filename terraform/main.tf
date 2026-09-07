@@ -223,8 +223,9 @@ resource "aws_lb" "main" {
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = data.aws_subnets.default.ids
 
-  # Blazor keeps a long-lived, mostly-idle WebSocket open per circuit; a
-  # generous idle timeout avoids tearing down live-but-quiet connections.
+  # Blazor's SignalR circuit sends keep-alive frames every ~15 s, so an open
+  # WebSocket rarely goes idle; this generous timeout is headroom for quiet
+  # stretches, not what keeps the circuit alive.
   idle_timeout = 300
 
   tags = {

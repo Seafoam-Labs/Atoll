@@ -54,7 +54,7 @@ variable "api_domain_name" {
 }
 
 variable "waf_rate_limit" {
-  description = "Requests per source IP per 5-minute window before the WAF blocks them (WAF minimum is 100)"
+  description = "Requests per viewer IP per 5-minute window before the WAF blocks them (WAF minimum is 10)"
   type        = number
   default     = 250
 }

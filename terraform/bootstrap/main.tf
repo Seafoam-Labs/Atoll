@@ -161,9 +161,9 @@ resource "aws_iam_policy" "github_deploy" {
           # prefix list (see cloudfront.tf).
           "ec2:DescribeManagedPrefixLists",
           "ec2:GetManagedPrefixListEntries",
-          # CloudFront validates these on the CALLER when creating a VPC
-          # origin; without all five, CreateVpcOrigin fails with 403 even
-          # though cloudfront:CreateVpcOrigin itself is allowed.
+          # Undocumented caller-side check observed via CloudTrail: without
+          # these five ec2:Describe* grants, CreateVpcOrigin fails with 403
+          # even though cloudfront:CreateVpcOrigin itself is allowed.
           "ec2:DescribeInstances",
           "ec2:DescribeRegions",
           "ec2:DescribeAddresses",

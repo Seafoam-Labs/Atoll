@@ -13,10 +13,15 @@ resource "aws_wafv2_web_acl" "main" {
     allow {}
   }
 
-  # Per-source-IP rate limit over a 5-minute window; offenders get blocked
-  # until their request rate drops back under the limit. The minimum value
-  # WAF accepts is 100. Tune via the `waf_rate_limit` variable — keep git
-  # clone/fetch bursts (many POSTs to the smart-HTTP endpoints) in mind.
+  # Per-viewer-IP rate limit. The CloudFront scope means WAF aggregates the
+  # real viewer IP directly (no X-Forwarded-For inspection to configure).
+  # The evaluation window defaults to 300s (60/120/300/600 are selectable via
+  # `evaluation_window_sec`, left at the default here); offenders are blocked
+  # until their rolling request count drops back under the limit. The minimum
+  # value WAF accepts is 10. Tune via the `waf_rate_limit` variable — keep
+  # git clone/fetch bursts (many POSTs to the smart-HTTP endpoints) in mind.
+  # Editing the rule resets its counters, so an apply clears in-flight blocks
+  # (rate limiting may pause up to a minute after the change).
   rule {
     name     = "rate-limit"
     priority = 1

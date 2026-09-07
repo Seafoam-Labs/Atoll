@@ -56,8 +56,9 @@ resource "aws_cloudfront_distribution" "main" {
   price_class = "PriceClass_100"
 
   # AWS WAF web ACL (see waf.tf): rate limiting and any future edge rules.
-  # WAF inspects the HTTP request/upgrade handshake; established WebSocket
-  # frames are not re-inspected.
+  # The web ACL's request-level inspection covers the HTTP request that
+  # starts a WebSocket (the `Upgrade: websocket` handshake); message frames
+  # on the established connection are not HTTP requests.
   web_acl_id = aws_wafv2_web_acl.main.arn
 
   origin {
