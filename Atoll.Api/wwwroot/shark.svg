@@ -2,25 +2,25 @@
   <defs>
     <!-- Ocean Depth Ambient Illumination -->
     <linearGradient id="ocean-depth" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="var(--color-atoll, #22d3ee)" stop-opacity="0.25" />
-      <stop offset="25%" stop-color="var(--color-sec-flagged, #fb7185)" stop-opacity="0.25" />
-      <stop offset="50%" stop-color="var(--color-ink, #f1f5f9)" stop-opacity="0.32" />
-      <stop offset="75%" stop-color="var(--color-sec-flagged, #fb7185)" stop-opacity="0.25" />
-      <stop offset="100%" stop-color="var(--color-atoll, #22d3ee)" stop-opacity="0.25" />
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.25" />
+      <stop offset="25%" stop-color="#fb7185" stop-opacity="0.25" />
+      <stop offset="50%" stop-color="#f1f5f9" stop-opacity="0.32" />
+      <stop offset="75%" stop-color="#fb7185" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0.25" />
     </linearGradient>
     <style>
       :root {
-        --shark-outline: var(--color-canvas, #0b1220);
-        --shark-body: var(--color-atoll, #22d3ee);
-        --shark-dark: var(--color-atoll-dark, #0891b2);
-        --shark-belly: var(--color-atoll-light, #67e8f9);
-        --shark-mouth: var(--color-sec-flagged, #fb7185);
+        --shark-outline: #0b1220;
+        --shark-body: #22d3ee;
+        --shark-dark: #0891b2;
+        --shark-belly: #67e8f9;
+        --shark-mouth: #fb7185;
       }
-      .shark-outline { fill: var(--shark-outline, #0b1220); }
-      .shark-body { fill: var(--shark-body, #22d3ee); }
-      .shark-dark { fill: var(--shark-dark, #0891b2); }
-      .shark-belly { fill: var(--shark-belly, #67e8f9); }
-      .shark-mouth { fill: var(--shark-mouth, #fb7185); }
+      .shark-outline { fill: #0b1220; }
+      .shark-body { fill: #22d3ee; }
+      .shark-dark { fill: #0891b2; }
+      .shark-belly { fill: #67e8f9; }
+      .shark-mouth { fill: #fb7185; }
     </style>
   </defs>
 
