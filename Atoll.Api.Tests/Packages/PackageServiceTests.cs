@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
@@ -21,13 +22,30 @@ public class PackageServiceTests
 
     private static PackageService CreateService(
         InMemoryPackageRepository repo,
-        IPackageSecurityRepository? securityRepository = null)
+        IPackageSecurityRepository? securityRepository = null,
+        PackageIndexStore? indexStore = null)
     {
         var options = Options.Create(new AtollOptions
         {
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         });
-        return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance));
+        return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance), indexStore);
+    }
+
+    private static async Task<PackageIndexStore> CreateIndexStoreAsync(string packagesJson)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"atoll-sort-test-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(path, packagesJson);
+        try
+        {
+            var store = new PackageIndexStore();
+            store.Replace(await PackageIndexBuilder.LoadAsync(path, CancellationToken.None));
+            return store;
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Test]
@@ -219,6 +237,138 @@ public class PackageServiceTests
         var names = await service.ListAsync();
 
         Assert.That(names, Is.EquivalentTo(["shelly", "other"]));
+    }
+
+    [Test]
+    public async Task GetIndexPageAsync_sorts_by_votes_ascending_across_pages()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
+            """
+            [
+              { "Name": "v-a", "NumVotes": 5 },
+              { "Name": "v-b", "NumVotes": 50 },
+              { "Name": "v-c", "NumVotes": 50 }
+            ]
+            """));
+
+        foreach (var name in new[] { "v-a", "v-b", "v-c", "v-missing" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Votes);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Votes);
+
+        Assert.Multiple(() =>
+        {
+            // Ascending is the uniform default; packages absent from the catalog rank as zero votes.
+            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "v-missing", "v-a" }));
+            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "v-b", "v-c" }));
+            Assert.That(secondPage.TotalItems, Is.EqualTo(4));
+            Assert.That(secondPage.TotalPages, Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task GetIndexPageAsync_sorts_by_votes_descending_when_requested()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
+            """
+            [
+              { "Name": "v-a", "NumVotes": 5 },
+              { "Name": "v-b", "NumVotes": 50 },
+              { "Name": "v-c", "NumVotes": 50 }
+            ]
+            """));
+
+        foreach (var name in new[] { "v-a", "v-b", "v-c", "v-missing" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+
+        Assert.Multiple(() =>
+        {
+            // Equal votes tie-break on name; packages absent from the catalog rank as zero votes.
+            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "v-b", "v-c" }));
+            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "v-a", "v-missing" }));
+            Assert.That(secondPage.Items[1].NumVotes, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task GetIndexPageAsync_sorts_by_popularity_descending_when_requested()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
+            """
+            [
+              { "Name": "p-a", "Popularity": 2.5 },
+              { "Name": "p-b", "Popularity": 10.5 },
+              { "Name": "p-c", "Popularity": 2.5 }
+            ]
+            """));
+
+        foreach (var name in new[] { "p-a", "p-b", "p-c" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "p-b", "p-a" }));
+            Assert.That(firstPage.Items[0].Popularity, Is.EqualTo(10.5));
+            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "p-c" }));
+        });
+    }
+
+    [Test]
+    public async Task GetIndexPageAsync_sorts_versions_by_ordinal_string_comparison_with_nulls_last()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
+            """
+            [
+              { "Name": "ver-a", "Version": "2.0.0-1" },
+              { "Name": "ver-b", "Version": "10.0.0-1" },
+              { "Name": "ver-c", "Version": "2.0.0-1" }
+            ]
+            """));
+
+        foreach (var name in new[] { "ver-a", "ver-b", "ver-c", "ver-missing" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Version, PackageIndexSortOrder.Desc);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Version, PackageIndexSortOrder.Desc);
+
+        Assert.Multiple(() =>
+        {
+            // Version strings compare ordinally, so "2.0.0-1" outranks "10.0.0-1"; a package
+            // absent from the catalog has no version and sorts last.
+            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "ver-a", "ver-c" }));
+            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "ver-b", "ver-missing" }));
+            Assert.That(secondPage.Items[1].Version, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task GetIndexPageAsync_sorts_by_name_descending_when_requested()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo);
+
+        foreach (var name in new[] { "n-a", "n-b", "n-c" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "n-c", "n-b" }));
+            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "n-a" }));
+        });
     }
 
     [Test]

@@ -181,9 +181,15 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 `GET /v1/packages` is the paged feed over the seeded-package set (MongoDB `packages` collection), designed for
 external UI clients:
 
-- `page` (1-based, default `1`) and `limit` (default `50`, max `200`); out-of-range or malformed values return `400`.
-- Ordering is fixed `packageName` ascending, so pages are deterministic. A `page` beyond the last returns `200` with
-  empty `items`; an empty corpus reports `totalItems: 0` and `totalPages: 0`.
+- `page` (1-based, default `1`), `limit` (default `50`, max `200`), `sortBy` (`name` (default), `votes`,
+  `popularity`, or `version`; a single key, no multi-key sorting), and `order` (`asc` (default) or `desc`, applied
+  uniformly to every key); out-of-range or malformed values return `400`.
+- Ordering is `packageName` ascending for the default `sortBy=name&order=asc` (paged in MongoDB, so pages are
+  deterministic). Every other combination ranks the whole enriched listing in memory - votes, popularity, and
+  version only exist in the in-memory catalog, not Mongo - tie-breaking on `packageName` ascending for
+  deterministic pages. Packages absent from the catalog rank as zero votes/popularity and sort first (ascending)
+  or last (descending) on version; version strings compare ordinally, not semver-aware. A `page` beyond the last
+  returns `200` with empty `items`; an empty corpus reports `totalItems: 0` and `totalPages: 0`.
 - Each row is a lean mirror-side projection (`name`, `createdAt`, `updatedAt`, `headRevisionId`, `revisionCount`,
   nullable `upstreamPackageBase`); the embedded revisions array is never transferred. AUR catalog presentation
   fields (`description`, `version`, `numVotes`, `popularity`, `outOfDate`) are joined per row from the live
@@ -203,7 +209,7 @@ external UI clients:
 | GET | `/v1/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
 | GET/POST | `/rpc` | aurweb-compatible RPC v5 endpoint for yay/paru (version-neutral) |
 | GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint (version-neutral) |
-| GET | `/v1/packages?page=…&limit=…` | Paged seeded-package listing for UI clients (default 50, max 200 per page; fixed `packageName` ordering; rows carry nullable catalog fields `description`/`version`/`numVotes`/`popularity`/`outOfDate` joined from the live index) |
+| GET | `/v1/packages?page=…&limit=…&sortBy=…&order=…` | Paged seeded-package listing for UI clients (default 50, max 200 per page; `sortBy` one of `name`\|`votes`\|`popularity`\|`version` with `order` `asc`\|`desc`, defaulting to `asc`; rows carry nullable catalog fields `description`/`version`/`numVotes`/`popularity`/`outOfDate` joined from the live index) |
 | POST | `/v1/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/v1/packages/{name}` | Get head revision files |
 | GET | `/v1/packages/{name}/versions` | Get revision history |

@@ -108,6 +108,8 @@ public static class Endpoints
     private static async Task<Results<Ok<PackageIndexResponse>, ValidationProblem>> GetPackageIndex(
         [FromQuery(Name = "page")] int? page,
         [FromQuery(Name = "limit")] int? limit,
+        [FromQuery(Name = "sortBy")] PackageIndexSortByQuery? sortBy,
+        [FromQuery(Name = "order")] PackageIndexSortOrderQuery? order,
         [FromServices] IPackageService packageService,
         CancellationToken ct)
     {
@@ -124,7 +126,8 @@ public static class Endpoints
         if (errors is not null)
             return TypedResults.ValidationProblem(errors);
 
-        return TypedResults.Ok(await packageService.GetIndexPageAsync(pageNumber, limitNumber, ct));
+        return TypedResults.Ok(await packageService.GetIndexPageAsync(
+            pageNumber, limitNumber, sortBy?.SortBy ?? PackageIndexSortBy.Name, order?.Order, ct));
     }
 
     private static async

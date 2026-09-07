@@ -308,7 +308,12 @@ public class PackageIndexUpdaterTests
             return Task.FromResult(_seeded.Count);
         }
 
-        public Task<PackageIndexResponse> GetIndexPageAsync(int page, int limit, CancellationToken ct = default)
+        public Task<PackageIndexResponse> GetIndexPageAsync(
+            int page,
+            int limit,
+            PackageIndexSortBy sortBy = PackageIndexSortBy.Name,
+            PackageIndexSortOrder? order = null,
+            CancellationToken ct = default)
             => throw new NotSupportedException();
 
         public Task DeleteAsync(string packageName, CancellationToken ct = default)

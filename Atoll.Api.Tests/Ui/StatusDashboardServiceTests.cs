@@ -215,7 +215,12 @@ public class StatusDashboardServiceTests
             return Task.FromResult(seededCount);
         }
 
-        public Task<PackageIndexResponse> GetIndexPageAsync(int page, int limit, CancellationToken ct = default)
+        public Task<PackageIndexResponse> GetIndexPageAsync(
+            int page,
+            int limit,
+            PackageIndexSortBy sortBy = PackageIndexSortBy.Name,
+            PackageIndexSortOrder? order = null,
+            CancellationToken ct = default)
             => throw new NotSupportedException();
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
@@ -247,7 +252,12 @@ public class StatusDashboardServiceTests
         public Task<int> CountAsync()
             => Task.FromException<int>(new InvalidOperationException("boom"));
 
-        public Task<PackageIndexResponse> GetIndexPageAsync(int page, int limit, CancellationToken ct = default)
+        public Task<PackageIndexResponse> GetIndexPageAsync(
+            int page,
+            int limit,
+            PackageIndexSortBy sortBy = PackageIndexSortBy.Name,
+            PackageIndexSortOrder? order = null,
+            CancellationToken ct = default)
             => throw new NotSupportedException();
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)

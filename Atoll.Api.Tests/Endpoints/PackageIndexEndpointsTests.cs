@@ -99,6 +99,8 @@ public class PackageIndexEndpointsTests
         var zeroLimit = await _client.GetAsync("/v1/packages?limit=0");
         var overMaxLimit = await _client.GetAsync("/v1/packages?limit=201");
         var malformedPage = await _client.GetAsync("/v1/packages?page=abc");
+        var malformedSort = await _client.GetAsync("/v1/packages?sortBy=bogus");
+        var malformedOrder = await _client.GetAsync("/v1/packages?order=bogus");
 
         Assert.Multiple(() =>
         {
@@ -106,6 +108,94 @@ public class PackageIndexEndpointsTests
             Assert.That(zeroLimit.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
             Assert.That(overMaxLimit.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
             Assert.That(malformedPage.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+            Assert.That(malformedSort.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+            Assert.That(malformedOrder.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        });
+    }
+
+    [Test]
+    public async Task Index_applies_order_parameter_to_name_sort()
+    {
+        foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
+            await SeedAsync(name);
+
+        var descending = await _client.GetAsync("/v1/packages?sortBy=name&order=desc");
+        var ascending = await _client.GetAsync("/v1/packages?sortBy=name&order=ASC");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(descending.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(ascending.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        });
+
+        var descendingBody = await descending.Content.ReadAsStringAsync();
+        using var descendingDoc = JsonDocument.Parse(descendingBody);
+        var descendingNames = descendingDoc.RootElement.GetProperty("items")
+            .EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToArray();
+
+        var ascendingBody = await ascending.Content.ReadAsStringAsync();
+        using var ascendingDoc = JsonDocument.Parse(ascendingBody);
+        var ascendingNames = ascendingDoc.RootElement.GetProperty("items")
+            .EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(descendingNames, Is.EqualTo(new[] { "c-carrot", "b-banana", "a-apple" }));
+            Assert.That(ascendingNames, Is.EqualTo(new[] { "a-apple", "b-banana", "c-carrot" }));
+        });
+    }
+
+    [Test]
+    public async Task Index_sorts_votes_ascending_by_default()
+    {
+        foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin", "a-absent" })
+            await SeedAsync(name);
+
+        var response = await _client.GetAsync("/v1/packages?sortBy=votes&limit=4");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var names = doc.RootElement.GetProperty("items")
+            .EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToArray();
+
+        // Sample index votes: portable-pro 20, shelly-bin 10, portable-kit 5; "a-absent" ranks as zero.
+        Assert.That(names, Is.EqualTo(new[] { "a-absent", "portable-kit", "shelly-bin", "portable-pro" }));
+    }
+
+    [Test]
+    public async Task Index_sorts_by_votes_descending_across_pages()
+    {
+        foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin", "a-absent" })
+            await SeedAsync(name);
+
+        var firstPage = await _client.GetAsync("/v1/packages?sortBy=votes&order=desc&limit=2&page=1");
+        var secondPage = await _client.GetAsync("/v1/packages?sortBy=VOTES&order=desc&limit=2&page=2");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstPage.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(secondPage.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        });
+
+        var firstBody = await firstPage.Content.ReadAsStringAsync();
+        using var firstDoc = JsonDocument.Parse(firstBody);
+        var firstItems = firstDoc.RootElement.GetProperty("items");
+
+        var secondBody = await secondPage.Content.ReadAsStringAsync();
+        using var secondDoc = JsonDocument.Parse(secondBody);
+        var secondItems = secondDoc.RootElement.GetProperty("items");
+
+        Assert.Multiple(() =>
+        {
+            // Sample index votes: portable-pro 20, shelly-bin 10, portable-kit 5;
+            // "a-absent" is not in the index and ranks as zero votes on the last page.
+            Assert.That(firstItems[0].GetProperty("name").GetString(), Is.EqualTo("portable-pro"));
+            Assert.That(firstItems[1].GetProperty("name").GetString(), Is.EqualTo("shelly-bin"));
+            Assert.That(secondItems[0].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
+            Assert.That(secondItems[1].GetProperty("name").GetString(), Is.EqualTo("a-absent"));
+            Assert.That(secondItems[1].GetProperty("numVotes").ValueKind, Is.EqualTo(JsonValueKind.Null));
         });
     }
 

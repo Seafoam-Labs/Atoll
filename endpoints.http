@@ -28,6 +28,14 @@ Accept: application/json
 GET {{baseUrl}}/v1/packages?page=2&limit=100
 Accept: application/json
 
+### List Packages (sorted by votes, descending; sortBy: name|votes|popularity|version, order: asc|desc, default asc)
+GET {{baseUrl}}/v1/packages?sortBy=votes&order=desc&page=1&limit=50
+Accept: application/json
+
+### List Packages (sorted by name, descending; order: asc|desc)
+GET {{baseUrl}}/v1/packages?sortBy=name&order=desc&page=1&limit=50
+Accept: application/json
+
 ### Seed Package from AUR
 POST {{baseUrl}}/v1/packages/shelly/seed
 Accept: application/json

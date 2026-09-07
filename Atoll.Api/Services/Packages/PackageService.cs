@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
@@ -30,7 +32,12 @@ public sealed class PackageService(
         return (int)await repo.CountAsync();
     }
 
-    public async Task<PackageIndexResponse> GetIndexPageAsync(int page, int limit, CancellationToken ct = default)
+    public async Task<PackageIndexResponse> GetIndexPageAsync(
+        int page,
+        int limit,
+        PackageIndexSortBy sortBy = PackageIndexSortBy.Name,
+        PackageIndexSortOrder? order = null,
+        CancellationToken ct = default)
     {
         var total = await repo.CountAsync(ct);
         var totalPages = total == 0 ? 0 : (int)((total + limit - 1) / limit);
@@ -42,10 +49,50 @@ public sealed class PackageService(
             return new PackageIndexResponse([], page, limit, total, totalPages);
         }
 
-        var items = await repo.ListIndexPageAsync((int)skip, limit, ct);
-
         var catalog = indexStore?.Current.ByNames;
-        var rows = items
+        var direction = order ?? PackageIndexSortOrder.Asc;
+
+        // Name ascending pages directly in MongoDB. Everything else ranks the whole enriched
+        // listing in memory and slices the requested window, because votes, popularity, and
+        // version live only in the in-memory catalog, not Mongo.
+        if (sortBy is PackageIndexSortBy.Name && direction is PackageIndexSortOrder.Asc)
+        {
+            var items = await repo.ListIndexPageAsync((int)skip, limit, ct);
+            return new PackageIndexResponse(EnrichWithCatalog(items, catalog), page, limit, total, totalPages);
+        }
+
+        var rows = EnrichWithCatalog(await repo.ListIndexPageAsync(0, (int)Math.Min(total, int.MaxValue), ct), catalog);
+        var sorted = sortBy switch
+        {
+            PackageIndexSortBy.Name => SortByKey(rows, direction, item => item.Name, StringComparer.Ordinal),
+            PackageIndexSortBy.Votes => SortByKey(rows, direction, item => item.NumVotes ?? 0),
+            PackageIndexSortBy.Popularity => SortByKey(rows, direction, item => item.Popularity ?? 0),
+            PackageIndexSortBy.Version => SortByKey(rows, direction, item => item.Version, StringComparer.Ordinal),
+            _ => throw new ArgumentOutOfRangeException(nameof(sortBy), sortBy, null)
+        };
+
+        if (sortBy is not PackageIndexSortBy.Name)
+            sorted = sorted.ThenBy(item => item.Name, StringComparer.Ordinal);
+
+        return new PackageIndexResponse(sorted.Skip((int)skip).Take(limit).ToArray(), page, limit, total, totalPages);
+    }
+
+    private static IOrderedEnumerable<PackageIndexEntry> SortByKey<TKey>(
+        IEnumerable<PackageIndexEntry> rows,
+        PackageIndexSortOrder order,
+        Func<PackageIndexEntry, TKey> key,
+        IComparer<TKey>? comparer = null)
+    {
+        return order is PackageIndexSortOrder.Desc
+            ? rows.OrderByDescending(key, comparer)
+            : rows.OrderBy(key, comparer);
+    }
+
+    private static PackageIndexEntry[] EnrichWithCatalog(
+        IReadOnlyList<PackageIndexEntry> items,
+        ImmutableDictionary<string, AurPackageMetadata>? catalog)
+    {
+        return items
             .Select(item => catalog?.GetValueOrDefault(item.Name) is { } metadata
                 ? item with
                 {
@@ -57,8 +104,6 @@ public sealed class PackageService(
                 }
                 : item)
             .ToArray();
-
-        return new PackageIndexResponse(rows, page, limit, total, totalPages);
     }
 
     public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
