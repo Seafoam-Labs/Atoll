@@ -247,7 +247,7 @@ internal static class HomographScanner
     private static bool IsInvisibleCodePoint(string text, int index, int codePoint)
     {
         if (codePoint is not '\t' and not '\n' and not '\r' &&
-            (codePoint < 0x20 || codePoint is >= 0x7F and <= 0x9F))
+            codePoint is < 0x20 or >= 0x7F and <= 0x9F)
             return true;
 
         return char.GetUnicodeCategory(text, index) is UnicodeCategory.Format

@@ -118,7 +118,7 @@ public static class Endpoints
         if (pageNumber < 1)
             (errors ??= [])["page"] = ["Must be >= 1."];
 
-        if (limitNumber < 1 || limitNumber > PackageService.MaxIndexPageLimit)
+        if (limitNumber is < 1 or > PackageService.MaxIndexPageLimit)
             (errors ??= [])["limit"] = [$"Must be between 1 and {PackageService.MaxIndexPageLimit}."];
 
         if (errors is not null)
