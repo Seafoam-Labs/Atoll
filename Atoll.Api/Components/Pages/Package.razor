@@ -54,11 +54,7 @@ else
     @if (_details.IsSeeded && _details.Access.Allowed)
     {
         <div class="mb-5">
-            <GitCloneBlock Name="@meta.Name" ExternalBaseUrl="@Ui.Value.ExternalBaseUrl"/>
-            <div class="text-ink-faint text-[13px] mt-2">
-                Served Git SHAs are synthesized by Atoll when it commits stored revisions - they do not match
-                upstream AUR. <code>/v1/packages/@meta.Name/versions</code> SHAs are authoritative.
-            </div>
+            <InstallCmdBlock Name="@meta.Name" ExternalBaseUrl="@Ui.Value.ExternalBaseUrl"/>
         </div>
     }
 

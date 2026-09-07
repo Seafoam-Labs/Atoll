@@ -1,0 +1,133 @@
+@rendermode InteractiveServer
+@inject IJSRuntime Js
+@implements IDisposable
+
+<div class="tabs mt-0 mb-3 gap-6" role="tablist" aria-label="Installation method">
+    <button type="button"
+            role="tab"
+            aria-selected="@(_activeTab == InstallTab.Shelly ? "true" : "false")"
+            aria-controls="install-panel-shelly"
+            id="tab-shelly"
+            class="tab py-1.5 @(_activeTab == InstallTab.Shelly ? "active" : "")"
+            @onclick="() => SelectTab(InstallTab.Shelly)">
+        Shelly
+    </button>
+    <button type="button"
+            role="tab"
+            aria-selected="@(_activeTab == InstallTab.Git ? "true" : "false")"
+            aria-controls="install-panel-git"
+            id="tab-git"
+            class="tab py-1.5 @(_activeTab == InstallTab.Git ? "active" : "")"
+            @onclick="() => SelectTab(InstallTab.Git)">
+        Git clone
+    </button>
+</div>
+
+<div id="install-panel-shelly"
+     role="tabpanel"
+     aria-labelledby="tab-shelly"
+     class="@(_activeTab == InstallTab.Shelly ? "" : "hidden")">
+    <div class="flex items-stretch gap-2">
+        <div class="cmd flex-1 min-w-0">@ShellyCommand</div>
+        <button type="button"
+                class="btn shrink-0"
+                @onclick="() => CopyAsync(ShellyCommand)">
+            @(_copied && _activeTab == InstallTab.Shelly ? "Copied" : "Copy")
+        </button>
+    </div>
+    <div class="text-ink-faint text-[13px] mt-2">
+        This can be permanently set in the shelly <a href="https://www.seafoam-labs.org/shelly-alpm/docs/config/" target="_blank" rel="noopener" class="underline hover:text-ink"><code>config.json</code></a> file.
+    </div>
+</div>
+
+<div id="install-panel-git"
+     role="tabpanel"
+     aria-labelledby="tab-git"
+     class="@(_activeTab == InstallTab.Git ? "" : "hidden")">
+    <div class="flex items-stretch gap-2">
+        <div class="cmd flex-1 min-w-0">@GitCommand</div>
+        <button type="button"
+                class="btn shrink-0"
+                @onclick="() => CopyAsync(GitCommand)">
+            @(_copied && _activeTab == InstallTab.Git ? "Copied" : "Copy")
+        </button>
+    </div>
+    <div class="text-ink-faint text-[13px] mt-2">
+        Served Git SHAs are synthesized by Atoll when it commits stored revisions - they do not match
+        upstream AUR. <code>/v1/packages/@Name/versions</code> SHAs are authoritative.
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public string ExternalBaseUrl { get; set; } = "";
+
+    private enum InstallTab
+    {
+        Shelly,
+        Git
+    }
+
+    private InstallTab _activeTab = InstallTab.Shelly;
+    private bool _copied;
+    private CancellationTokenSource? _resetCts;
+
+    private string BaseUrl => (ExternalBaseUrl ?? "").Trim().TrimEnd('/');
+    private string CloneUrl => $"{BaseUrl}/packages/{Name}.git";
+    private string ShellyCommand => $"shelly install aur {Name} --aur-url {BaseUrl}";
+    private string GitCommand => $"git clone {CloneUrl}";
+
+    private void SelectTab(InstallTab tab)
+    {
+        if (_activeTab == tab) return;
+        _activeTab = tab;
+        _copied = false;
+        var previous = _resetCts;
+        if (previous is not null)
+        {
+            previous.Cancel();
+            previous.Dispose();
+            _resetCts = null;
+        }
+    }
+
+    private async Task CopyAsync(string text)
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            _copied = true;
+            StateHasChanged();
+
+            var previous = _resetCts;
+            if (previous is not null)
+            {
+                await previous.CancelAsync();
+                previous.Dispose();
+            }
+            _resetCts = new CancellationTokenSource();
+            var token = _resetCts.Token;
+
+            try
+            {
+                await Task.Delay(1500, token);
+                _copied = false;
+                StateHasChanged();
+            }
+            catch (OperationCanceledException)
+            {
+                // A newer copy superseded the reset.
+            }
+        }
+        catch (JSException)
+        {
+            // Clipboard API unavailable (non-secure context); the text stays selectable.
+        }
+    }
+
+    public void Dispose()
+    {
+        _resetCts?.Cancel();
+        _resetCts?.Dispose();
+    }
+}

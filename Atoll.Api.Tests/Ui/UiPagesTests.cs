@@ -282,7 +282,9 @@ public class UiPagesTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.Multiple(() =>
         {
+            Assert.That(body, Does.Contain("shelly install aur shelly-bin --aur-url http://localhost:5290"));
             Assert.That(body, Does.Contain("git clone http://localhost:5290/packages/shelly-bin.git"));
+            Assert.That(body, Does.Contain("https://www.seafoam-labs.org/shelly-alpm/docs/config/"));
             Assert.That(body, Does.Contain("badge-verified"));
             Assert.That(body, Does.Contain("long-line"));
             Assert.That(body, Does.Contain("Rescan"));
@@ -307,7 +309,11 @@ public class UiPagesTests
         var body = await response.Content.ReadAsStringAsync();
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(body, Does.Contain("git clone https://atoll.example.com/packages/shelly-bin.git"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("shelly install aur shelly-bin --aur-url https://atoll.example.com"));
+            Assert.That(body, Does.Contain("git clone https://atoll.example.com/packages/shelly-bin.git"));
+        });
     }
 
     [Test]
@@ -324,6 +330,7 @@ public class UiPagesTests
             Assert.That(body, Does.Contain("Flagged"));
             Assert.That(body, Does.Contain("gated"));
             Assert.That(body, Does.Not.Contain("/packages/shelly-bin.git"));
+            Assert.That(body, Does.Not.Contain("shelly install aur"));
         });
     }
 
