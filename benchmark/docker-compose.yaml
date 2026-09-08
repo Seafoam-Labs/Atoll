@@ -1,0 +1,85 @@
+# Benchmark stack for loadtest.js. Same app image as the root compose.yaml,
+# but tuned to measure request serving in isolation. By default it starts with
+# an empty MongoDB and setup() seeds a small fixed corpus with security off.
+# For production-shaped read measurements, restore a fully seeded Mongo/data
+# volume, then set ATOLL_SECURITY_ENABLED=true and VERIFY_SECURITY=true.
+# Refresh remains disabled in both modes so background sync does not compete
+# with requests; exercise refresh and scanning in a separate soak test.
+# Resource limits mirror a small single-node deployment; adjust to taste
+# (verify with `docker stats --no-stream`).
+#
+# MongoDB is deliberately not published on the host to avoid clashing with a
+# dev instance of the root compose stack.
+
+services:
+  atoll:
+    build:
+      context: ..
+      dockerfile: Atoll.Api/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - Atoll__DataSource__DataFileUrl=https://aur.archlinux.org/packages-meta-ext-v1.json.gz
+      - Atoll__DataSource__RefreshIntervalMinutes=60
+      - Atoll__Mongo__ConnectionString=mongodb://admin:change_me@mongo:27017/atoll?authSource=admin
+      - Atoll__Mongo__Database=atoll
+      - Atoll__Git__RepositoriesPath=/app/data/repos
+      - Atoll__Seed__Mode=${ATOLL_SEED_MODE:-Off}
+      - Atoll__Refresh__Enabled=false
+      - Atoll__Security__Enabled=${ATOLL_SECURITY_ENABLED:-false}
+      - Atoll__Mutations__Enabled=true
+      - Atoll__Ui__ExternalBaseUrl=http://localhost:8080
+    volumes:
+      - atoll-data:/app/data
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-fsS", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  mongo:
+    image: mongo:8.3.7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      # https://jira.mongodb.org/browse/SERVER-121912
+      - GLIBC_TUNABLES=glibc.pthread.rseq=1
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=change_me
+    healthcheck:
+      test:
+        [ "CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok" ]
+      interval: 30s
+      retries: 5
+      start_period: 15s
+      timeout: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  # name: keeps these un-prefixed so the README's restored-copy volume names
+  # (atoll-benchmark-*) resolve as-is; point ATOLL_DATA_VOLUME/MONGO_DATA_VOLUME
+  # at other disposable copies to keep runs separate.
+  atoll-data:
+    name: ${ATOLL_DATA_VOLUME:-atoll-benchmark-data}
+  mongo-data:
+    name: ${MONGO_DATA_VOLUME:-atoll-benchmark-mongo}

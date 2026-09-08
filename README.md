@@ -46,6 +46,7 @@ is available at `http://localhost:3000` with the default login `admin` / `admin`
 ## Project layout
 
 - `Atoll.Api/` — ASP.NET Core application and Blazor UI
+- `benchmark/` — k6 load test and resource-constrained benchmark stack
 - `docs/` — the canonical source for architecture, sync, security, and deployment details
 - `observability/` — Grafana dashboards and OTLP config
 - `terraform/` — AWS deployment and infrastructure definitions
