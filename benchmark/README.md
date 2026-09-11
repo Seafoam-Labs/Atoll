@@ -49,6 +49,24 @@ boundary. Overall failures must stay below 1% with at least 99% passing checks
 per scenario; the default profile runs about 95 seconds, with the rate-driven
 scenarios bounded to match.
 
+### In-process cost probes
+
+k6 measures the served path end to end. To attribute a `ui` regression to the
+catalog search itself rather than the HTTP, serialization, or Blazor rendering
+leg, run `Atoll.Api.Tests/Ui/PackageCatalogServicePerfTests.cs`: a log-only
+steady-state probe of `PackageCatalogService.SearchAsync` — the code behind the
+catalog page the `ui` scenario drives — over a synthetic 85k-package index,
+reporting median/min latency and allocations per call for default page load,
+pagination, sort toggle, seeded filter, and broad/narrow queries.
+
+```sh
+dotnet test --filter PackageCatalogServicePerfTests --logger "console;verbosity=detailed"
+```
+
+A `ui` p95 increase with flat in-process numbers points at the rendering/HTTP
+leg; both rising points at the search path. Assertions are scale/behaviour
+sanity checks, not timing gates, so the probe stays in the normal test run.
+
 ## Corpora
 
 **Isolated (default).** MongoDB starts empty and `setup()` stores only the names
