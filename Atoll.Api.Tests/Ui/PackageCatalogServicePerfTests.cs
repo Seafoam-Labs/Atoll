@@ -104,8 +104,8 @@ public class PackageCatalogServicePerfTests
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.VotesDesc, expectedTotal: PackageCount);
 
-        // Only ~1k rows survive the seeded filter; row state is still probed per match,
-        // but rows are materialized only for the rendered page.
+        // Only ~1k rows survive the seeded filter; the filter probes row state for every
+        // candidate (all 85k), but rows are materialized only for the rendered page.
         await RunScenarioAsync("seeded filter (empty q, Seeded, VotesDesc)",
             null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.VotesDesc, expectedTotal: SeededCount);
@@ -131,10 +131,8 @@ public class PackageCatalogServicePerfTests
     {
         CatalogResult? last = null;
 
-        var watch = Stopwatch.StartNew();
         var measurement = await MeasureAsync(async () =>
             last = await _service.SearchAsync(query, seededFilter, securityFilter, mode, sort, page));
-        watch.Stop();
 
         TestContext.Out.WriteLine(
             $"{label,-44} matches={last!.TotalMatches,6}  rows={last.Rows.Count,3}  " +
