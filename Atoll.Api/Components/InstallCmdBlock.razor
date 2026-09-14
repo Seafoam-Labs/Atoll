@@ -72,7 +72,7 @@
     private bool _copied;
     private CancellationTokenSource? _resetCts;
 
-    private string BaseUrl => (ExternalBaseUrl ?? "").Trim().TrimEnd('/');
+    private string BaseUrl => (ExternalBaseUrl).Trim().TrimEnd('/');
     private string CloneUrl => $"{BaseUrl}/packages/{Name}.git";
     private string ShellyCommand => $"shelly install aur {Name} --aur-url {BaseUrl}";
     private string GitCommand => $"git clone {CloneUrl}";

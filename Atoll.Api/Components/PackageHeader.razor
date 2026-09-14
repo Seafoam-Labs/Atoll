@@ -36,7 +36,10 @@
         <PackageActions Name="@Meta.Name" IsSeeded="@Details.IsSeeded" HeadRevisionId="@Details.Head?.HeadRevisionId"/>
         @if (Details.IsSeeded)
         {
-            <a class="btn" href="@($"/v1/packages/{Meta.Name}/tarball")">Snapshot ↓</a>
+            @* data-enhance-nav="false" keeps blazor.web.js from intercepting the click: a
+               non-Blazor destination falls back to a full page load, tearing down the circuit
+               ("Connection lost") even though the response is only an attachment. *@
+            <a class="btn" download data-enhance-nav="false" href="@($"/v1/packages/{Meta.Name}/tarball")">Snapshot ↓</a>
         }
         <a class="btn" href="@($"https://aur.archlinux.org/packages/{Meta.Name}")" target="_blank" rel="noopener">AUR ↗</a>
         @if (!string.IsNullOrWhiteSpace(Meta.Url))
