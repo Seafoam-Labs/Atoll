@@ -94,7 +94,7 @@ public class MinimalApiEndpointsTests
             Assert.That(body, Does.Match("""atoll_index_size\{[^}]*index="words"[^}]*\} [1-9]"""));
 
             // Uptime gauge plus ASP.NET Core request metrics from instrumentation.
-            Assert.That(body, Does.Contain("process_uptime_seconds"));
+            Assert.That(body, Does.Contain("atoll_process_uptime_seconds"));
             Assert.That(body, Does.Contain("http_server_request_duration_seconds"));
         });
     }

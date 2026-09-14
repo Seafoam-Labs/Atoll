@@ -45,7 +45,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "process_uptime_seconds",
+          "expr": "atoll_process_uptime_seconds",
           "legendFormat": "uptime",
           "refId": "A"
         }

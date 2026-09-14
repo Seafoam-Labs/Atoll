@@ -9,13 +9,12 @@ using Atoll.Api.Services.Security;
 
 namespace Atoll.Api.Services.Metrics;
 
-public sealed class AtollMetrics : IDisposable
+public sealed class AtollMetrics
 {
     public const string MeterName = "Atoll.Api";
 
-    private readonly Meter _meter;
-
     public AtollMetrics(
+        IMeterFactory meterFactory,
         PackageSearchService searchService,
         PackageIndexStore indexStore,
         PackageIndexUpdater indexUpdater,
@@ -23,11 +22,11 @@ public sealed class AtollMetrics : IDisposable
         RefreshStatusStore packageRefreshStatus,
         SecurityScanStatusStore securityScanStatus)
     {
-        var meter = new Meter(MeterName, "1.0.0");
+        var meter = meterFactory.Create(MeterName, "1.0.0");
 
         var uptime = Stopwatch.StartNew();
         meter.CreateObservableGauge(
-            "process.uptime",
+            "atoll.process.uptime",
             () => uptime.Elapsed.TotalSeconds,
             "s",
             "Uptime of the process in seconds.");
@@ -130,13 +129,6 @@ public sealed class AtollMetrics : IDisposable
         RegisterTimestamp(meter, "atoll.securityscan.last_finished_timestamp",
             "Unix time of the last finished security scan.",
             () => securityScanStatus.GetSnapshot().LastScanFinishedUtc);
-
-        _meter = meter;
-    }
-
-    public void Dispose()
-    {
-        _meter.Dispose();
     }
 
     private static void RegisterSnapshotCounters<TSnapshot>(
