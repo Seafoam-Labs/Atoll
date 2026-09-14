@@ -214,6 +214,7 @@ external UI clients:
 | GET | `/v1/packages/{name}` | Get head revision files |
 | GET | `/v1/packages/{name}/versions` | Get revision history |
 | GET | `/v1/packages/{name}/versions/{sha}` | Get specific revision files |
+| GET | `/v1/packages/{name}/tarball` | Download a revision snapshot as `.tar.gz` (`?rev={sha}`, defaults to head; ungated human review surface, see the SECURITY.md gating section) |
 | DELETE | `/v1/packages/{name}` | Delete package data, security scans, and materialized Git repo. `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/v1/packages/{name}/security` | Get per-revision security status (`?revision={sha}` for one revision) |
 | POST | `/v1/packages/{name}/security/rescan` | Mark a revision for re-scan (`?revision={sha}`, defaults to head). `403` when `Atoll:Mutations:Enabled=false` |

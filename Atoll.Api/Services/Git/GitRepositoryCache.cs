@@ -229,7 +229,8 @@ public sealed class GitRepositoryCache(
         return (await GitClient.ExecuteAsync(repoPath, ["write-tree"], null, env, ct)).Trim();
     }
 
-    private static bool IsExecutable(string name, string? content)
+    // Shared with the tarball snapshot builder so downloads and clones agree on exec bits.
+    internal static bool IsExecutable(string name, string? content)
     {
         if (name.EndsWith(".sh", StringComparison.OrdinalIgnoreCase))
             return true;

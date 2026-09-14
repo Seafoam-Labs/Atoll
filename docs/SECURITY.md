@@ -224,12 +224,12 @@ changes the ids visible in historical documents.
 The persisted `Pending` state is the durable work queue — there is no in-process queue:
 
 1. A new revision is seeded or a rescan is requested (`POST /v1/packages/{name}/security/rescan`, optionally
-   `?revision={sha}`); both call `MarkPendingAsync` (the endpoint through `PackageSecurityStatusService.QueueRescanAsync`,
-   which rejects unknown revisions first), which upserts the `(package, revision)` document to `Pending`,
-   clears prior findings/lease, and stamps `requiredPolicyVersion` with the enqueuing scanner's current policy
-   version (monotonic: an existing requirement is never lowered). On public instances set
-   `Atoll:Mutations:Enabled=false` to make the rescan endpoint return `403` and hide the UI button (this also applies
-   to the seed and delete endpoints).
+   `?revision={sha}`); both call `MarkPendingAsync` (the endpoint through
+   `PackageSecurityStatusService.QueueRescanAsync`, which rejects unknown revisions first), which upserts the
+   `(package, revision)` document to `Pending`, clears prior findings/lease, and stamps `requiredPolicyVersion` with the
+   enqueuing scanner's current policy version (monotonic: an existing requirement is never lowered). On public instances
+   set `Atoll:Mutations:Enabled=false` to make the rescan endpoint return `403` and hide the UI button (this also
+   applies to the seed and delete endpoints).
 2. `PackageSecurityWorker` runs `ScannerConcurrency` poll loops. Each atomically (`FindOneAndUpdate`) leases one
    `Pending` document whose lease has expired or is unset **and whose `requiredPolicyVersion` the worker's policy
    satisfies**, stamping `leaseUntil = now + 5m`. An older worker can never claim work that a newer deployment
@@ -295,8 +295,13 @@ Blocked requests return `403 Forbidden` with an RFC 9457 `application/problem+js
 `reason` extension code; no file content or finding detail is leaked. Version history and the security status
 endpoint stay ungated (metadata and scan summaries only).
 
-**UI exception:** the Blazor Files tab is deliberately *not* gated — it serves flagged revisions read-only with a
-warning banner, so users can inspect the content that triggered the findings.
+**Human review surfaces:** the Blazor Files tab and the snapshot download (`GET /v1/packages/{name}/tarball`) are
+deliberately *not* gated — both serve flagged revisions read-only (the Files tab with a warning banner) so users can
+inspect the content that triggered the findings. The gate is an automation boundary, not content confidentiality: it
+blocks the paths AUR helpers drive (REST content JSON and Git Smart HTTP) while deliberate human fetches stay
+available; with the tarball ungated, a determined caller can always fetch flagged content that way. Snapshots are
+built from the stored revision documents, so flagged revisions stay downloadable even though they are excluded from
+materialized Git history.
 
 **Git materialization is scan-status aware:** the bare repository is materialized from `Verified` revisions only, so
 a `Flagged`/`Pending`/`Error` historical revision cannot be reached via `git clone` + `git checkout <sha>`. The

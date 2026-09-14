@@ -34,6 +34,10 @@
     </div>
     <div class="mt-5 flex gap-2 lg:mt-0 lg:ml-4">
         <PackageActions Name="@Meta.Name" IsSeeded="@Details.IsSeeded" HeadRevisionId="@Details.Head?.HeadRevisionId"/>
+        @if (Details.IsSeeded)
+        {
+            <a class="btn" href="@($"/v1/packages/{Meta.Name}/tarball")">Snapshot ↓</a>
+        }
         <a class="btn" href="@($"https://aur.archlinux.org/packages/{Meta.Name}")" target="_blank" rel="noopener">AUR ↗</a>
         @if (!string.IsNullOrWhiteSpace(Meta.Url))
         {

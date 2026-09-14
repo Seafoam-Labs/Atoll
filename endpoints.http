@@ -52,6 +52,12 @@ Accept: application/json
 GET {{baseUrl}}/v1/packages/shelly/versions/bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
 Accept: application/json
 
+### Download Package Snapshot (tar.gz, defaults to head revision)
+GET {{baseUrl}}/v1/packages/shelly/tarball
+
+### Download Package Snapshot (specific revision)
+GET {{baseUrl}}/v1/packages/shelly/tarball?rev=bff52a7644df373cf669c818f0d4f4cc6730fe1a4bb776f0dad2785649f5f835
+
 ### Delete Package
 DELETE {{baseUrl}}/v1/packages/shelly
 Accept: application/json

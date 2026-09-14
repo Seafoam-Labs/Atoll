@@ -185,6 +185,7 @@ internal static class ServiceCollectionExtensions
             services.AddSingleton<IAurPackageSource, AurGitPackageSource>();
             services.AddSingleton<DirectPackageSeeder>();
             services.AddSingleton<IPackageService, PackageService>();
+            services.AddSingleton<PackageTarballService>();
             return services;
         }
 

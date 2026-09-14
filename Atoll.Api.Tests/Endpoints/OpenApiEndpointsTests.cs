@@ -48,6 +48,7 @@ public class OpenApiEndpointsTests
             Assert.That(paths.TryGetProperty("/v1/packages/{name}/versions", out _), Is.True);
             Assert.That(paths.TryGetProperty("/v1/packages/{name}/security", out var securityPath), Is.True);
             Assert.That(paths.TryGetProperty("/v1/packages/{name}/security/rescan", out var rescanPath), Is.True);
+            Assert.That(paths.TryGetProperty("/v1/packages/{name}/tarball", out var tarballPath), Is.True);
             Assert.That(paths.TryGetProperty("/rpc", out _), Is.True);
             Assert.That(paths.TryGetProperty("/rpc/v5/info", out _), Is.True);
             Assert.That(paths.TryGetProperty("/rpc/v5/info/{arg}", out var rpcInfoArgPath), Is.True);
@@ -73,6 +74,14 @@ public class OpenApiEndpointsTests
             Assert.That(postRescanResponses.TryGetProperty("202", out _), Is.True);
             Assert.That(postRescanResponses.TryGetProperty("403", out _), Is.True);
             Assert.That(postRescanResponses.TryGetProperty("404", out _), Is.True);
+
+            // The tarball is deliberately ungated (human review surface): 200/404 only, no 403.
+            var getTarballResponses = tarballPath.GetProperty("get").GetProperty("responses");
+            Assert.That(getTarballResponses.TryGetProperty("200", out _), Is.True);
+            Assert.That(getTarballResponses.TryGetProperty("404", out _), Is.True);
+            Assert.That(
+                getTarballResponses.GetProperty("200").GetProperty("content").TryGetProperty("application/gzip", out _),
+                Is.True);
 
             var getPackageResponses = packagePath.GetProperty("get").GetProperty("responses");
             Assert.That(getPackageResponses.TryGetProperty("200", out _), Is.True);

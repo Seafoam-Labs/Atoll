@@ -90,6 +90,13 @@ public static class Endpoints
         packages.MapPost("/{name}/security/rescan", SecurityRescan)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
+        // Snapshot downloads are a human review surface and stay ungated like the Files tab;
+        // the security gate blocks the automated paths (REST content JSON and Git Smart HTTP).
+        // FileContentHttpResult carries no OpenAPI response metadata of its own, so the 200 body
+        // is declared here.
+        packages.MapGet("/{name}/tarball", Tarball)
+            .Produces(StatusCodes.Status200OK, typeof(byte[]), "application/gzip");
+
         var secured = packages
             .MapGroup("")
             .AddEndpointFilter<PackageSecurityFilter>()
@@ -167,6 +174,18 @@ public static class Endpoints
             context,
             GetPackageSecurityEndpoint,
             new { name, revision = revisionId }));
+    }
+
+    private static async Task<Results<FileContentHttpResult, NotFound>> Tarball(
+        [FromRoute] string name,
+        [FromQuery(Name = "rev")] string? revision,
+        [FromServices] PackageTarballService tarballs,
+        CancellationToken ct)
+    {
+        var tarball = await tarballs.BuildAsync(name, revision, ct);
+        return tarball is null
+            ? TypedResults.NotFound()
+            : TypedResults.Bytes(tarball.Bytes, "application/gzip", tarball.FileName);
     }
 
     private static string GetRequiredPath(
