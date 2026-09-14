@@ -154,6 +154,26 @@ public class UiPagesTests
     }
 
     [Test]
+    public async Task RootPageSearchFormCannotNavigateNatively()
+    {
+        var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
+
+        // @onsubmit:preventDefault is a marker only the circuit honors, so until the WebSocket
+        // connects Enter submits the form for real and the browser cannot be stopped from
+        // navigating. A GET submission replaces the whole query string, so target the current
+        // document (action="", which Blazor would otherwise render as action="/") and carry the
+        // query in the parameter the page binds ([SupplyParameterFromQuery(Name = "q")]), so the
+        // early submit runs a search instead of resetting to an empty catalog.
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("<form class=\"flex min-w-0 gap-2 w-full lg:flex-1 lg:max-w-135\" action=\"\""));
+            var formStart = body.IndexOf("<form", StringComparison.Ordinal);
+            var form = body[formStart..body.IndexOf("</form>", StringComparison.Ordinal)];
+            Assert.That(form, Does.Contain("name=\"q\""));
+        });
+    }
+
+    [Test]
     public async Task RootPageRendersPaginationFooter()
     {
         var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();

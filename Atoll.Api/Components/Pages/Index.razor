@@ -11,10 +11,11 @@
 <h1>Packages</h1>
 
 <div class="flex flex-col gap-3 mt-4 mb-2 lg:flex-row lg:flex-wrap lg:items-start">
-    <form class="flex min-w-0 gap-2 w-full lg:flex-1 lg:max-w-135"
+    <form class="flex min-w-0 gap-2 w-full lg:flex-1 lg:max-w-135" action=""
           @onsubmit="ReloadNow" @onsubmit:preventDefault>
         <div class="grid min-w-0 flex-1 grid-cols-1">
             <input type="search"
+                   name="q"
                    class="field col-start-1 row-start-1 pl-10"
                    placeholder="Search packages…"
                    aria-label="Search packages"
