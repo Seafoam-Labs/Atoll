@@ -10,6 +10,7 @@ riderModule.iml
 packages-meta-ext-v1.json
 /Atoll.Api/data
 /Atoll.Api/wwwroot/app.min.css
+.playwright-*
 
 # Terraform
 **/.terraform/

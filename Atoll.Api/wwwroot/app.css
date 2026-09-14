@@ -150,6 +150,13 @@
         @apply text-ink-faint;
     }
 
+    /* The catalog search field ships its own clear button; WebKit/Blink draw a
+       non-standard one over non-empty type=search inputs, so drop theirs. */
+    input[type="search"]::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+        appearance: none;
+    }
+
     /* ===== Command blocks ===== */
     .cmd {
         @apply bg-canvas border border-line rounded-lg px-4 py-3 text-sm text-atoll-light font-mono overflow-x-auto whitespace-pre;

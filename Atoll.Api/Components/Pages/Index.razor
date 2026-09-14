@@ -16,7 +16,7 @@
         <div class="grid min-w-0 flex-1 grid-cols-1">
             <input type="search"
                    name="q"
-                   class="field col-start-1 row-start-1 pl-10"
+                   class="field peer col-start-1 row-start-1 pl-10 pr-10"
                    placeholder="Search packages…"
                    aria-label="Search packages"
                    @bind="_query"/>
@@ -24,6 +24,21 @@
                  class="pointer-events-none col-start-1 row-start-1 ml-3 size-5 self-center text-ink-faint">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
             </svg>
+            @* Visibility is the union of two states: the typed text is tracked in CSS with
+               :placeholder-shown on the peer input (no round trip per keystroke, the binding
+               stays on "change"), while the selects only change through a round trip, so
+               _filtersActive is known server-side. Without the second half the control would
+               vanish exactly when only filters need clearing. *@
+            <button type="button"
+                    class="col-start-1 row-start-1 mr-2 size-7 self-center justify-self-end @(_filtersActive ? "flex" : "hidden") items-center justify-center rounded text-ink-faint transition-colors duration-150 hover:text-atoll focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-atoll peer-not-placeholder-shown:flex"
+                    aria-label="Clear search and filters"
+                    title="Clear search and filters"
+                    @onclick="ClearFilters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"
+                     class="size-4.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+                </svg>
+            </button>
         </div>
         <button type="submit" class="btn btn-primary shrink-0">Search</button>
     </form>
@@ -290,6 +305,13 @@ else if (_result is not null)
         _sort = _sort == primary ? secondary : primary;
         ReloadNow();
     }
+
+    // Same "equals its default, so it is absent from the URL" conditions as CatalogState.ToUri.
+    private bool _filtersActive =>
+        _mode != CatalogSearchMode.Name
+        || _seededFilter != CatalogSeededFilter.All
+        || _securityFilter != CatalogSecurityFilter.Any
+        || _sort != CatalogSort.NameAsc;
 
     private void ClearFilters()
     {

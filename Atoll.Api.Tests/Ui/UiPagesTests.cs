@@ -170,6 +170,10 @@ public class UiPagesTests
             var formStart = body.IndexOf("<form", StringComparison.Ordinal);
             var form = body[formStart..body.IndexOf("</form>", StringComparison.Ordinal)];
             Assert.That(form, Does.Contain("name=\"q\""));
+            // The embedded reset control has to stay type="button", and Search has to remain the
+            // form's only submit control, or clicking it would navigate for real as well.
+            Assert.That(form, Does.Contain("<button type=\"button\""));
+            Assert.That(form.Split("type=\"submit\"", StringSplitOptions.None).Length, Is.EqualTo(2));
         });
     }
 
