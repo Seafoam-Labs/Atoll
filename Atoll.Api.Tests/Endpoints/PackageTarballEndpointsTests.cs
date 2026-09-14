@@ -212,7 +212,8 @@ public class PackageTarballEndpointsTests
         var entries = new List<TarEntryData>();
         while (await tar.GetNextEntryAsync() is { } entry)
         {
-            using var reader = new StreamReader(entry.DataStream);
+            if (entry.DataStream is not { } data) continue;
+            using var reader = new StreamReader(data);
             entries.Add(new TarEntryData(entry.Name, entry.Mode, entry.EntryType, await reader.ReadToEndAsync()));
         }
 

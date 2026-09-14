@@ -42,6 +42,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  test:
+    name: Test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Fast tier
+        run: dotnet test -p:SkipTailwind=true --filter "Category!=RequiresGit&Category!=RequiresMongo"
+
+      - name: Git tier
+        run: dotnet test -p:SkipTailwind=true --filter "Category=RequiresGit"
+
+      - name: Mongo tier
+        run: dotnet test -p:SkipTailwind=true --filter "Category=RequiresMongo"
+
   plan:
     name: Terraform plan
     runs-on: ubuntu-latest

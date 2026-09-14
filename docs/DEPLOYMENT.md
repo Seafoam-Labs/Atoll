@@ -82,9 +82,11 @@ changes.
 ## What the pipeline does
 
 1. `build-image` — builds the container image on every PR (validates the Dockerfile, no AWS).
-2. `plan` — same-repo PRs: `terraform fmt`, `init`, `plan`. The plan output is posted as a
+2. `test` on every PR runs the three test tiers (fast, `RequiresGit`, `RequiresMongo` via
+   Testcontainers) with `-p:SkipTailwind=true`; no AWS.
+3. `plan` — same-repo PRs: `terraform fmt`, `init`, `plan`. The plan output is posted as a
    sticky comment on the PR (updated in place on each push, using the built-in `GITHUB_TOKEN`).
-3. `deploy` — pushes to `main`: builds and pushes the image to ECR tagged with the commit SHA
+4. `deploy` — pushes to `main`: builds and pushes the image to ECR tagged with the commit SHA
    (tags are immutable), then `terraform apply -var image_tag=<sha>`. Updating the task definition
    makes ECS roll the service to the new image.
 
