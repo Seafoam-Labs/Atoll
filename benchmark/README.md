@@ -60,7 +60,7 @@ reporting median/min latency and allocations per call for default page load,
 pagination, sort toggle, seeded filter, and broad/narrow queries.
 
 ```sh
-dotnet test --filter PackageCatalogServicePerfTests --logger "console;verbosity=detailed"
+dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj --filter-class Atoll.Api.Tests.Ui.PackageCatalogServicePerfTests --output Detailed
 ```
 
 A `ui` p95 increase with flat in-process numbers points at the rendering/HTTP

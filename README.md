@@ -95,13 +95,13 @@ Note: double underscores (`__`) are the standard .NET convention for nesting con
 Fast tests without Docker:
 
 ```bash
-dotnet test --filter "Category!=RequiresGit&Category!=RequiresMongo"
+dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj --filter-not-trait "Category=RequiresGit" --filter-not-trait "Category=RequiresMongo"
 ```
 
 Mongo-backed tests:
 
 ```bash
-dotnet test --filter "Category=RequiresMongo"
+dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj --filter-trait "Category=RequiresMongo"
 ```
 
 Full suite:

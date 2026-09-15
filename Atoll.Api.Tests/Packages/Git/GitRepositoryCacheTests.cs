@@ -1,6 +1,6 @@
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Packages.Git;
@@ -11,33 +11,33 @@ public class GitRepositoryCacheTests
     private static readonly DateTimeOffset T1 = new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset T2 = new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero);
 
-    [Test]
+    [Fact]
     public void IsRevisionServable_security_disabled_serves_every_revision()
     {
         Assert.Multiple(() =>
         {
-            Assert.That(GitRepositoryCache.IsRevisionServable(false, null), Is.True);
-            Assert.That(GitRepositoryCache.IsRevisionServable(false, SecurityStatus.Pending), Is.True);
-            Assert.That(GitRepositoryCache.IsRevisionServable(false, SecurityStatus.Verified), Is.True);
-            Assert.That(GitRepositoryCache.IsRevisionServable(false, SecurityStatus.Flagged), Is.True);
-            Assert.That(GitRepositoryCache.IsRevisionServable(false, SecurityStatus.Error), Is.True);
+            Assert.True(GitRepositoryCache.IsRevisionServable(false, null));
+            Assert.True(GitRepositoryCache.IsRevisionServable(false, SecurityStatus.Pending));
+            Assert.True(GitRepositoryCache.IsRevisionServable(false, SecurityStatus.Verified));
+            Assert.True(GitRepositoryCache.IsRevisionServable(false, SecurityStatus.Flagged));
+            Assert.True(GitRepositoryCache.IsRevisionServable(false, SecurityStatus.Error));
         });
     }
 
-    [Test]
+    [Fact]
     public void IsRevisionServable_security_enabled_serves_only_verified_revisions()
     {
         Assert.Multiple(() =>
         {
-            Assert.That(GitRepositoryCache.IsRevisionServable(true, SecurityStatus.Verified), Is.True);
-            Assert.That(GitRepositoryCache.IsRevisionServable(true, SecurityStatus.Pending), Is.False);
-            Assert.That(GitRepositoryCache.IsRevisionServable(true, SecurityStatus.Flagged), Is.False);
-            Assert.That(GitRepositoryCache.IsRevisionServable(true, SecurityStatus.Error), Is.False);
-            Assert.That(GitRepositoryCache.IsRevisionServable(true, null), Is.False);
+            Assert.True(GitRepositoryCache.IsRevisionServable(true, SecurityStatus.Verified));
+            Assert.False(GitRepositoryCache.IsRevisionServable(true, SecurityStatus.Pending));
+            Assert.False(GitRepositoryCache.IsRevisionServable(true, SecurityStatus.Flagged));
+            Assert.False(GitRepositoryCache.IsRevisionServable(true, SecurityStatus.Error));
+            Assert.False(GitRepositoryCache.IsRevisionServable(true, null));
         });
     }
 
-    [Test]
+    [Fact]
     public void ComputeHistoryMarker_security_disabled_ignores_scan_statuses()
     {
         var doc = TestDoc("rev-3", ("rev-1", T0), ("rev-2", T1), ("rev-3", T2));
@@ -53,12 +53,12 @@ public class GitRepositoryCacheTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(without, Is.EqualTo("git-v2\nrev-3\nrev-1\nrev-2\nrev-3"));
-            Assert.That(with, Is.EqualTo(without), "statuses must not affect the marker when security is disabled");
+            Assert.Equal("git-v2\nrev-3\nrev-1\nrev-2\nrev-3", without);
+            Assert.Equal(without, with);
         });
     }
 
-    [Test]
+    [Fact]
     public void ComputeHistoryMarker_security_enabled_includes_statuses_in_materialization_order()
     {
         // Revisions are stored newest-first; the marker must enumerate them in CreatedAt order.
@@ -70,11 +70,11 @@ public class GitRepositoryCacheTests
             ["rev-3"] = SecurityStatus.Flagged
         };
 
-        Assert.That(GitRepositoryCache.ComputeHistoryMarker(doc, true, statuses),
-            Is.EqualTo("git-v2\nrev-3\nrev-1:Pending\nrev-2:Verified\nrev-3:Flagged"));
+        Assert.Equal("git-v2\nrev-3\nrev-1:Pending\nrev-2:Verified\nrev-3:Flagged",
+            GitRepositoryCache.ComputeHistoryMarker(doc, true, statuses));
     }
 
-    [Test]
+    [Fact]
     public void ComputeHistoryMarker_changes_when_a_scan_status_flips()
     {
         var doc = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
@@ -89,12 +89,11 @@ public class GitRepositoryCacheTests
             ["rev-2"] = SecurityStatus.Verified
         };
 
-        Assert.That(GitRepositoryCache.ComputeHistoryMarker(doc, true, flagged),
-            Is.Not.EqualTo(GitRepositoryCache.ComputeHistoryMarker(doc, true, verified)),
-            "a rescan flipping a revision's status must invalidate the marker");
+        Assert.NotEqual(GitRepositoryCache.ComputeHistoryMarker(doc, true, verified),
+            GitRepositoryCache.ComputeHistoryMarker(doc, true, flagged));
     }
 
-    [Test]
+    [Fact]
     public void ComputeHistoryMarker_changes_when_a_scan_document_appears_or_disappears()
     {
         var doc = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
@@ -105,21 +104,21 @@ public class GitRepositoryCacheTests
         };
         var neverScanned = new Dictionary<string, SecurityStatus> { ["rev-2"] = SecurityStatus.Verified };
 
-        Assert.That(GitRepositoryCache.ComputeHistoryMarker(doc, true, full),
-            Is.Not.EqualTo(GitRepositoryCache.ComputeHistoryMarker(doc, true, neverScanned)));
+        Assert.NotEqual(GitRepositoryCache.ComputeHistoryMarker(doc, true, neverScanned),
+            GitRepositoryCache.ComputeHistoryMarker(doc, true, full));
     }
 
-    [Test]
+    [Fact]
     public void ComputeHistoryMarker_changes_when_security_is_toggled()
     {
         var doc = TestDoc("rev-1", ("rev-1", T0));
         var statuses = new Dictionary<string, SecurityStatus> { ["rev-1"] = SecurityStatus.Verified };
 
-        Assert.That(GitRepositoryCache.ComputeHistoryMarker(doc, true, statuses),
-            Is.Not.EqualTo(GitRepositoryCache.ComputeHistoryMarker(doc, false, null)));
+        Assert.NotEqual(GitRepositoryCache.ComputeHistoryMarker(doc, false, null),
+            GitRepositoryCache.ComputeHistoryMarker(doc, true, statuses));
     }
 
-    [Test]
+    [Fact]
     public void ComputeHistoryMarker_changes_when_history_ages_out_a_revision()
     {
         var withOldRevision = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
@@ -130,9 +129,8 @@ public class GitRepositoryCacheTests
             ["rev-2"] = SecurityStatus.Verified
         };
 
-        Assert.That(GitRepositoryCache.ComputeHistoryMarker(withOldRevision, true, statuses),
-            Is.Not.EqualTo(GitRepositoryCache.ComputeHistoryMarker(withoutOldRevision, true, statuses)),
-            "aging out an old revision must invalidate the marker even when the head is unchanged");
+        Assert.NotEqual(GitRepositoryCache.ComputeHistoryMarker(withoutOldRevision, true, statuses),
+            GitRepositoryCache.ComputeHistoryMarker(withOldRevision, true, statuses));
     }
 
     private static PackageDocument TestDoc(string headRevisionId, params (string Id, DateTimeOffset At)[] revisions)

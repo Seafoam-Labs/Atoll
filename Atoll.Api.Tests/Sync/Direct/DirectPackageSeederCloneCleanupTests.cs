@@ -6,7 +6,7 @@ using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Sync.Direct;
 
@@ -15,17 +15,21 @@ namespace Atoll.Api.Tests.Sync.Direct;
 ///     under the system temp path must be removed on failure as well as success. The failed-clone
 ///     path is exercised with a package name that cannot exist upstream.
 /// </summary>
-[Category("RequiresGit")]
-public class DirectPackageSeederCloneCleanupTests
+[Trait("Category", "RequiresGit")]
+public class DirectPackageSeederCloneCleanupTests : IAsyncLifetime
 {
-    [SetUp]
-    public async Task SetUp()
+    public async ValueTask InitializeAsync()
     {
         var (exitCode, _) = await GitClient.TryExecuteAsync(["--version"], CancellationToken.None);
-        Assume.That(exitCode == 0, "git binary is required for these tests");
+        Assert.SkipUnless(exitCode == 0, "git binary is required for these tests");
     }
 
-    [Test]
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    [Fact]
     public async Task Failed_clone_cleans_up_its_temporary_directory()
     {
         var repo = new InMemoryPackageRepository();
@@ -45,16 +49,14 @@ public class DirectPackageSeederCloneCleanupTests
         var pattern = "atoll-cleanup probe *";
         var before = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet();
 
-        Assert.ThrowsAsync<InvalidOperationException>(async () => await seeder.SeedAsync(probe));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await seeder.SeedAsync(probe));
 
         var after = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet();
         var packagePersisted = await repo.ExistsAsync(probe);
         Assert.Multiple(() =>
         {
-            Assert.That(after.Except(before), Is.Empty,
-                "the failed clone's temporary directory must be deleted");
-            Assert.That(packagePersisted, Is.False,
-                "a failed seed must not persist the package");
+            Assert.Empty(after.Except(before));
+            Assert.False(packagePersisted, "a failed seed must not persist the package");
         });
     }
 }

@@ -1,25 +1,23 @@
 using System.Net;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Ui;
 
-public class UiPagesTests
+public class UiPagesTests : IDisposable
 {
-    private HttpClient _client = null!;
-    private SecurityTestFactory _factory = null!;
+    private readonly HttpClient _client;
+    private readonly SecurityTestFactory _factory;
 
-    [SetUp]
-    public void SetUp()
+    public UiPagesTests()
     {
         _factory = new SecurityTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
@@ -134,26 +132,26 @@ public class UiPagesTests
         };
     }
 
-    [Test]
+    [Fact]
     public async Task RootPageRendersCatalogWithPackages()
     {
         var response = await _client.GetAsync("/");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/html"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("3 packages"));
-            Assert.That(body, Does.Contain("href=\"/package/portable-kit\""));
-            Assert.That(body, Does.Contain("shelly-bin"));
-            Assert.That(body, Does.Contain("portable-pro"));
-            Assert.That(body, Does.Contain("type=\"submit\""));
-            Assert.That(body, Does.Contain(">Search</button>"));
+            Assert.Contains("3 packages", body);
+            Assert.Contains("href=\"/package/portable-kit\"", body);
+            Assert.Contains("shelly-bin", body);
+            Assert.Contains("portable-pro", body);
+            Assert.Contains("type=\"submit\"", body);
+            Assert.Contains(">Search</button>", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RootPageSearchFormCannotNavigateNatively()
     {
         var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
@@ -166,32 +164,32 @@ public class UiPagesTests
         // early submit runs a search instead of resetting to an empty catalog.
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("<form class=\"flex min-w-0 gap-2 w-full lg:flex-1 lg:max-w-135\" action=\"\""));
+            Assert.Contains("<form class=\"flex min-w-0 gap-2 w-full lg:flex-1 lg:max-w-135\" action=\"\"", body);
             var formStart = body.IndexOf("<form", StringComparison.Ordinal);
             var form = body[formStart..body.IndexOf("</form>", StringComparison.Ordinal)];
-            Assert.That(form, Does.Contain("name=\"q\""));
+            Assert.Contains("name=\"q\"", form);
             // The embedded reset control has to stay type="button", and Search has to remain the
             // form's only submit control, or clicking it would navigate for real as well.
-            Assert.That(form, Does.Contain("<button type=\"button\""));
-            Assert.That(form.Split("type=\"submit\"", StringSplitOptions.None).Length, Is.EqualTo(2));
+            Assert.Contains("<button type=\"button\"", form);
+            Assert.Equal(2, form.Split("type=\"submit\"", StringSplitOptions.None).Length);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RootPageRendersPaginationFooter()
     {
         var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
 
-        Assert.That(body, Does.Contain("Page 1 of 1"));
-        Assert.That(body, Does.Contain("showing 1-3 of 3"));
-        Assert.That(body, Does.Contain("aria-label=\"Pagination\""));
+        Assert.Contains("Page 1 of 1", body);
+        Assert.Contains("showing 1-3 of 3", body);
+        Assert.Contains("aria-label=\"Pagination\"", body);
         // A single-page result disables both pagination buttons in the prerendered HTML.
-        Assert.That(body, Does.Contain("<button type=\"button\" class=\"btn\" disabled"));
+        Assert.Contains("<button type=\"button\" class=\"btn\" disabled", body);
         // The page-number strip marks the active page for assistive tech.
-        Assert.That(body, Does.Contain("aria-current=\"page\""));
+        Assert.Contains("aria-current=\"page\"", body);
     }
 
-    [Test]
+    [Fact]
     public async Task RootPageCompressesResponseWithGzip()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");
@@ -199,11 +197,11 @@ public class UiPagesTests
 
         using var response = await _client.SendAsync(request);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(response.Content.Headers.ContentEncoding, Contains.Item("gzip"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("gzip", response.Content.Headers.ContentEncoding);
     }
 
-    [Test]
+    [Fact]
     public async Task RootPageCompressesResponseWithBrotli()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");
@@ -211,11 +209,11 @@ public class UiPagesTests
 
         using var response = await _client.SendAsync(request);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(response.Content.Headers.ContentEncoding, Contains.Item("br"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("br", response.Content.Headers.ContentEncoding);
     }
 
-    [Test]
+    [Fact]
     public async Task RootPageDecoratesRowsWithBadges()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
@@ -226,31 +224,31 @@ public class UiPagesTests
         Assert.Multiple(() =>
         {
             // Unseeded catalog rows are index-only.
-            Assert.That(body, Does.Contain("badge-pending"));
-            Assert.That(body, Does.Contain("Index-only"));
+            Assert.Contains("badge-pending", body);
+            Assert.Contains("Index-only", body);
             // A non-verified head status is surfaced; a verified seeded row stays clean.
-            Assert.That(body, Does.Contain("badge-flagged"));
-            Assert.That(body, Does.Not.Contain("badge-verified"));
+            Assert.Contains("badge-flagged", body);
+            Assert.DoesNotContain("badge-verified", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task PackageDetailsRenderMetadataForKnownUnseededPackage()
     {
         var response = await _client.GetAsync("/package/portable-kit");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("Handheld gaming toolkit 1337 i3"));
-            Assert.That(body, Does.Contain("Metadata"));
-            Assert.That(body, Does.Contain("not seeded yet"));
-            Assert.That(body, Does.Contain("Seed from AUR"));
+            Assert.Contains("Handheld gaming toolkit 1337 i3", body);
+            Assert.Contains("Metadata", body);
+            Assert.Contains("not seeded yet", body);
+            Assert.Contains("Seed from AUR", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Mutations_disabled_hides_seed_button_for_unseeded_package()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
@@ -259,13 +257,13 @@ public class UiPagesTests
         var response = await client.GetAsync("/package/portable-kit");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(body, Does.Not.Contain("Seed from AUR"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("Seed from AUR", body);
         // The read-only AUR link remains available.
-        Assert.That(body, Does.Contain("href=\"https://aur.archlinux.org/packages/portable-kit\""));
+        Assert.Contains("href=\"https://aur.archlinux.org/packages/portable-kit\"", body);
     }
 
-    [Test]
+    [Fact]
     public async Task Mutations_disabled_hides_rescan_button_for_seeded_package()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
@@ -283,14 +281,14 @@ public class UiPagesTests
         var response = await client.GetAsync("/package/shelly-bin");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(body, Does.Contain("badge-seeded"));
-        Assert.That(body, Does.Not.Contain("Rescan"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("badge-seeded", body);
+        Assert.DoesNotContain("Rescan", body);
         // Content is still served when verified; only the mutation button is hidden.
-        Assert.That(body, Does.Contain("git clone"));
+        Assert.Contains("git clone", body);
     }
 
-    [Test]
+    [Fact]
     public async Task PackageDetailsRenderCloneBlockAndFindingsWhenSeededAndVerified()
     {
         var findings = new[]
@@ -303,19 +301,19 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("shelly install aur shelly-bin --aur-url http://localhost:5290"));
-            Assert.That(body, Does.Contain("git clone http://localhost:5290/packages/shelly-bin.git"));
-            Assert.That(body, Does.Contain("https://www.seafoam-labs.org/shelly-alpm/docs/config/"));
-            Assert.That(body, Does.Contain("badge-verified"));
-            Assert.That(body, Does.Contain("long-line"));
-            Assert.That(body, Does.Contain("Rescan"));
+            Assert.Contains("shelly install aur shelly-bin --aur-url http://localhost:5290", body);
+            Assert.Contains("git clone http://localhost:5290/packages/shelly-bin.git", body);
+            Assert.Contains("https://www.seafoam-labs.org/shelly-alpm/docs/config/", body);
+            Assert.Contains("badge-verified", body);
+            Assert.Contains("long-line", body);
+            Assert.Contains("Rescan", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task PackageDetailsRendersCustomExternalBaseUrlInCloneBlock()
     {
         using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
@@ -332,15 +330,15 @@ public class UiPagesTests
         var response = await client.GetAsync("/package/shelly-bin");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("shelly install aur shelly-bin --aur-url https://atoll.example.com"));
-            Assert.That(body, Does.Contain("git clone https://atoll.example.com/packages/shelly-bin.git"));
+            Assert.Contains("shelly install aur shelly-bin --aur-url https://atoll.example.com", body);
+            Assert.Contains("git clone https://atoll.example.com/packages/shelly-bin.git", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task PackageDetailsRenderBlockedBannerWhenFlagged()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);
@@ -348,48 +346,48 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("Flagged"));
-            Assert.That(body, Does.Contain("gated"));
-            Assert.That(body, Does.Not.Contain("/packages/shelly-bin.git"));
-            Assert.That(body, Does.Not.Contain("shelly install aur"));
+            Assert.Contains("Flagged", body);
+            Assert.Contains("gated", body);
+            Assert.DoesNotContain("/packages/shelly-bin.git", body);
+            Assert.DoesNotContain("shelly install aur", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task UnknownPackageReturnsNotFound()
     {
         var response = await _client.GetAsync("/package/no-such-package");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task UnknownRouteReturnsNotFound()
     {
         var response = await _client.GetAsync("/some/unknown/route");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task PackageDetailsRenderTabLinks()
     {
         var response = await _client.GetAsync("/package/portable-kit");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("href=\"/package/portable-kit/revisions\""));
-            Assert.That(body, Does.Contain("href=\"/package/portable-kit/files\""));
-            Assert.That(body, Does.Contain("tab-count"));
+            Assert.Contains("href=\"/package/portable-kit/revisions\"", body);
+            Assert.Contains("href=\"/package/portable-kit/files\"", body);
+            Assert.Contains("tab-count", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RevisionsTabRendersHistoryRowsWithBadges()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Flagged, SecurityStatus.Verified);
@@ -397,31 +395,31 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin/revisions");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("rev-list"));
-            Assert.That(body, Does.Contain("sync from upstream"));
-            Assert.That(body, Does.Contain(">seed</p>"));
-            Assert.That(body, Does.Contain("badge-verified"));
-            Assert.That(body, Does.Contain("badge-flagged"));
-            Assert.That(body, Does.Contain(">head</span>"));
-            Assert.That(body, Does.Contain($"href=\"/package/shelly-bin?rev=rev-1\""));
-            Assert.That(body, Does.Contain($"href=\"/package/shelly-bin/files?rev=rev-2\""));
+            Assert.Contains("rev-list", body);
+            Assert.Contains("sync from upstream", body);
+            Assert.Contains(">seed</p>", body);
+            Assert.Contains("badge-verified", body);
+            Assert.Contains("badge-flagged", body);
+            Assert.Contains(">head</span>", body);
+            Assert.Contains($"href=\"/package/shelly-bin?rev=rev-1\"", body);
+            Assert.Contains($"href=\"/package/shelly-bin/files?rev=rev-2\"", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RevisionsTabShowsUnseededStateForIndexOnlyPackage()
     {
         var response = await _client.GetAsync("/package/portable-kit/revisions");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(body, Does.Contain("not seeded"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("not seeded", body);
     }
 
-    [Test]
+    [Fact]
     public async Task FilesTabShowsWarningBannerAndFilesForFlaggedRevision()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);
@@ -429,17 +427,17 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin/files");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("Flagged"));
-            Assert.That(body, Does.Contain("remain blocked"));
-            Assert.That(body, Does.Contain("file-tree"));
-            Assert.That(body, Does.Contain("PKGBUILD"));
+            Assert.Contains("Flagged", body);
+            Assert.Contains("remain blocked", body);
+            Assert.Contains("file-tree", body);
+            Assert.Contains("PKGBUILD", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FilesTabRendersTreeAndKeepsSelectionInUrl()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
@@ -447,20 +445,20 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin/files");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("file-tree"));
-            Assert.That(body, Does.Contain("rev=rev-2&amp;path=PKGBUILD"));
-            Assert.That(body, Does.Contain("rev=rev-2&amp;path=.SRCINFO"));
+            Assert.Contains("file-tree", body);
+            Assert.Contains("rev=rev-2&amp;path=PKGBUILD", body);
+            Assert.Contains("rev=rev-2&amp;path=.SRCINFO", body);
             // Directory-free sample keeps the root order ordinal: .SRCINFO before PKGBUILD.
-            Assert.That(body.IndexOf("path=.SRCINFO", StringComparison.Ordinal),
-                Is.LessThan(body.IndexOf("path=PKGBUILD", StringComparison.Ordinal)));
-            Assert.That(body, Does.Contain("Pick a file to preview"));
+            Assert.True(body.IndexOf("path=.SRCINFO", StringComparison.Ordinal)
+                < body.IndexOf("path=PKGBUILD", StringComparison.Ordinal));
+            Assert.Contains("Pick a file to preview", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FilesTabRendersSelectedFileContent()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
@@ -468,23 +466,23 @@ public class UiPagesTests
         var head = await _client.GetAsync("/package/shelly-bin/files?path=PKGBUILD");
         var headBody = await head.Content.ReadAsStringAsync();
 
-        Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, head.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(headBody, Does.Contain("code-view"));
-            Assert.That(headBody, Does.Contain("language-pkgbuild"));
-            Assert.That(headBody, Does.Contain("pkgname=new"));
-            Assert.That(headBody, Does.Contain("PKGBUILD"));
+            Assert.Contains("code-view", headBody);
+            Assert.Contains("language-pkgbuild", headBody);
+            Assert.Contains("pkgname=new", headBody);
+            Assert.Contains("PKGBUILD", headBody);
         });
 
         var pinned = await _client.GetAsync("/package/shelly-bin/files?rev=rev-1&path=PKGBUILD");
         var pinnedBody = await pinned.Content.ReadAsStringAsync();
 
-        Assert.That(pinned.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(pinnedBody, Does.Contain("pkgname=old"));
+        Assert.Equal(HttpStatusCode.OK, pinned.StatusCode);
+        Assert.Contains("pkgname=old", pinnedBody);
     }
 
-    [Test]
+    [Fact]
     public async Task FilesTabFallsBackToHeadForUnknownRevision()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
@@ -492,15 +490,15 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin/files?rev=garbage");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("Revision not found"));
-            Assert.That(body, Does.Contain("PKGBUILD"));
+            Assert.Contains("Revision not found", body);
+            Assert.Contains("PKGBUILD", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FilesTabMarksMissingPathAsNotFound()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
@@ -508,11 +506,11 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin/files?path=nope.txt");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(body, Does.Contain("File not found"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("File not found", body);
     }
 
-    [Test]
+    [Fact]
     public async Task PackageOverviewPinsToRevisionAndShowsItsScan()
     {
         var findings = new[]
@@ -524,19 +522,19 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin?rev=rev-1");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
             // Head is verified, so the page renders; the pinned revision's own scan and findings show instead.
-            Assert.That(body, Does.Contain("evil-curl"));
-            Assert.That(body, Does.Contain("(not head)"));
-            Assert.That(body, Does.Contain("Revision findings"));
-            Assert.That(body, Does.Contain("href=\"/package/shelly-bin/files?rev=rev-1\""));
-            Assert.That(body, Does.Contain("back to head"));
+            Assert.Contains("evil-curl", body);
+            Assert.Contains("(not head)", body);
+            Assert.Contains("Revision findings", body);
+            Assert.Contains("href=\"/package/shelly-bin/files?rev=rev-1\"", body);
+            Assert.Contains("back to head", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task PackageOverviewFallsBackToHeadForUnknownRevision()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
@@ -544,21 +542,21 @@ public class UiPagesTests
         var response = await _client.GetAsync("/package/shelly-bin?rev=garbage");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("Revision not found"));
-            Assert.That(body, Does.Contain("Metadata"));
+            Assert.Contains("Revision not found", body);
+            Assert.Contains("Metadata", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task UnknownPackageOnPhase2TabsReturnsNotFound()
     {
         var revisions = await _client.GetAsync("/package/no-such-package/revisions");
         var files = await _client.GetAsync("/package/no-such-package/files");
 
-        Assert.That(revisions.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-        Assert.That(files.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.NotFound, revisions.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, files.StatusCode);
     }
 }

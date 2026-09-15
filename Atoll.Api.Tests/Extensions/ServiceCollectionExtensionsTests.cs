@@ -11,7 +11,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Extensions;
 
@@ -47,12 +47,13 @@ public class ServiceCollectionExtensionsTests
         }
     }
 
-    [TestCase("Off", false)]
-    [TestCase("Direct", false)]
-    [TestCase("Bulk", false)]
-    [TestCase("Off", true)]
-    [TestCase("Direct", true)]
-    [TestCase("Bulk", true)]
+    [Theory]
+    [InlineData("Off", false)]
+    [InlineData("Direct", false)]
+    [InlineData("Bulk", false)]
+    [InlineData("Off", true)]
+    [InlineData("Direct", true)]
+    [InlineData("Bulk", true)]
     public void Host_registers_expected_workers_and_shared_mirror_per_configuration(
         string seedMode,
         bool refreshEnabled)
@@ -68,36 +69,38 @@ public class ServiceCollectionExtensionsTests
         var hosted = factory.HostedServiceTypes;
         Assert.Multiple(() =>
         {
-            Assert.That(hosted, Does.Contain(typeof(PackageSecurityWorker)));
-            Assert.That(hosted, Does.Contain(typeof(PackageIndexWorker)));
+            Assert.Contains(typeof(PackageSecurityWorker), hosted);
+            Assert.Contains(typeof(PackageIndexWorker), hosted);
 
-            Assert.That(hosted, seedMode == "Off"
-                ? Does.Not.Contain(typeof(DirectSeedWorker))
-                : Does.Contain(seedMode == "Bulk" ? typeof(PackageBulkSeedWorker) : typeof(DirectSeedWorker)));
-            Assert.That(hosted, refreshEnabled
-                ? Does.Contain(typeof(PackageRefreshWorker))
-                : Does.Not.Contain(typeof(PackageRefreshWorker)));
+            if (seedMode == "Off")
+                Assert.DoesNotContain(typeof(DirectSeedWorker), hosted);
+            else
+                Assert.Contains(seedMode == "Bulk" ? typeof(PackageBulkSeedWorker) : typeof(DirectSeedWorker), hosted);
+
+            if (refreshEnabled)
+                Assert.Contains(typeof(PackageRefreshWorker), hosted);
+            else
+                Assert.DoesNotContain(typeof(PackageRefreshWorker), hosted);
         });
 
         var expectMirror = seedMode == "Bulk" || refreshEnabled;
-        Assert.That(factory.MirrorRegistrations, Is.EqualTo(expectMirror ? 1 : 0),
-            "bulk seed and refresh must share exactly one mirror registration");
+        Assert.Equal(expectMirror ? 1 : 0, factory.MirrorRegistrations);
 
         var bulkEnabled = factory.Services.GetRequiredService<BulkSeedStatusStore>().GetSnapshot().Enabled;
         var directEnabled = factory.Services.GetRequiredService<DirectSeedStatusStore>().GetSnapshot().Enabled;
         var refreshSnapshotEnabled = factory.Services.GetRequiredService<RefreshStatusStore>().GetSnapshot().Enabled;
         Assert.Multiple(() =>
         {
-            Assert.That(bulkEnabled, Is.EqualTo(seedMode == "Bulk"));
-            Assert.That(directEnabled, Is.EqualTo(seedMode == "Direct"));
-            Assert.That(refreshSnapshotEnabled, Is.EqualTo(refreshEnabled));
+            Assert.Equal(seedMode == "Bulk", bulkEnabled);
+            Assert.Equal(seedMode == "Direct", directEnabled);
+            Assert.Equal(refreshEnabled, refreshSnapshotEnabled);
         });
 
         if (expectMirror)
-            Assert.That(factory.Services.GetRequiredService<IAurMirror>(), Is.Not.Null);
+            Assert.NotNull(factory.Services.GetRequiredService<IAurMirror>());
     }
 
-    [Test]
+    [Fact]
     public void AddSyncServices_without_seed_or_refresh_sections_defaults_to_direct_without_mirror()
     {
         var services = new ServiceCollection();
@@ -111,22 +114,22 @@ public class ServiceCollectionExtensionsTests
             .ToList();
         Assert.Multiple(() =>
         {
-            Assert.That(hosted, Does.Contain(typeof(DirectSeedWorker)));
-            Assert.That(hosted, Does.Not.Contain(typeof(PackageBulkSeedWorker)));
-            Assert.That(hosted, Does.Not.Contain(typeof(PackageRefreshWorker)));
-            Assert.That(services.Count(d => d.ServiceType == typeof(IAurMirror)), Is.Zero);
+            Assert.Contains(typeof(DirectSeedWorker), hosted);
+            Assert.DoesNotContain(typeof(PackageBulkSeedWorker), hosted);
+            Assert.DoesNotContain(typeof(PackageRefreshWorker), hosted);
+            Assert.Equal(0, services.Count(d => d.ServiceType == typeof(IAurMirror)));
         });
 
         using var provider = services.BuildServiceProvider();
         Assert.Multiple(() =>
         {
-            Assert.That(provider.GetRequiredService<DirectSeedStatusStore>().GetSnapshot().Enabled, Is.True);
-            Assert.That(provider.GetRequiredService<BulkSeedStatusStore>().GetSnapshot().Enabled, Is.False);
-            Assert.That(provider.GetRequiredService<RefreshStatusStore>().GetSnapshot().Enabled, Is.False);
+            Assert.True(provider.GetRequiredService<DirectSeedStatusStore>().GetSnapshot().Enabled);
+            Assert.False(provider.GetRequiredService<BulkSeedStatusStore>().GetSnapshot().Enabled);
+            Assert.False(provider.GetRequiredService<RefreshStatusStore>().GetSnapshot().Enabled);
         });
     }
 
-    [Test]
+    [Fact]
     public void AddSecurityServices_without_security_section_defaults_to_enabled()
     {
         var services = new ServiceCollection();
@@ -135,6 +138,6 @@ public class ServiceCollectionExtensionsTests
         services.AddSecurityServices(configuration);
 
         using var provider = services.BuildServiceProvider();
-        Assert.That(provider.GetRequiredService<SecurityScanStatusStore>().GetSnapshot().Enabled, Is.True);
+        Assert.True(provider.GetRequiredService<SecurityScanStatusStore>().GetSnapshot().Enabled);
     }
 }

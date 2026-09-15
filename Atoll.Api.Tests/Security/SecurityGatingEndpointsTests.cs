@@ -2,25 +2,23 @@ using System.Net;
 using System.Net.Http.Headers;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Security;
 
-public class SecurityGatingEndpointsTests
+public class SecurityGatingEndpointsTests : IDisposable
 {
-    private HttpClient _client = null!;
-    private SecurityTestFactory _factory = null!;
+    private readonly HttpClient _client;
+    private readonly SecurityTestFactory _factory;
 
-    [SetUp]
-    public void SetUp()
+    public SecurityGatingEndpointsTests()
     {
         _factory = new SecurityTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
@@ -73,91 +71,91 @@ public class SecurityGatingEndpointsTests
             await _factory.SecurityRepository.CompleteScanAsync("pkg", status);
     }
 
-    [Test]
+    [Fact]
     public async Task Verified_package_files_are_served()
     {
         await SeedAsync(SecurityStatus.Verified);
 
         var response = await _client.GetAsync("/v1/packages/pkg");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Pending_package_files_are_blocked_with_403_and_reason()
     {
         await SeedAsync(SecurityStatus.Pending);
 
         var response = await _client.GetAsync("/v1/packages/pkg");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.That(body, Does.Contain("security_status_pending"));
+        Assert.Contains("security_status_pending", body);
     }
 
-    [Test]
+    [Fact]
     public async Task Flagged_package_files_are_blocked_with_403()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
         var response = await _client.GetAsync("/v1/packages/pkg");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.That(body, Does.Contain("security_status_flagged"));
+        Assert.Contains("security_status_flagged", body);
     }
 
-    [Test]
+    [Fact]
     public async Task Flagged_revision_read_is_blocked()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
         var response = await _client.GetAsync("/v1/packages/pkg/versions/rev-1");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Version_history_remains_visible_when_blocked()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
         var response = await _client.GetAsync("/v1/packages/pkg/versions");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Search_remains_ungated()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
         var response = await _client.GetAsync("/v1/search?query=portable-kit");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Package_list_remains_ungated()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
         var response = await _client.GetAsync("/v1/packages");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Git_info_refs_is_blocked_for_pending_package()
     {
         await SeedAsync(SecurityStatus.Pending);
 
         var response = await _client.GetAsync("/packages/pkg.git/info/refs?service=git-upload-pack");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Git_upload_pack_is_blocked_for_pending_package()
     {
         await SeedAsync(SecurityStatus.Pending);
@@ -167,10 +165,10 @@ public class SecurityGatingEndpointsTests
 
         var response = await _client.PostAsync("/packages/pkg.git/git-upload-pack", content);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Flagged_revision_is_blocked_but_other_revisions_are_served()
     {
         var rev2 = new PackageRevisionContentDocument
@@ -189,7 +187,7 @@ public class SecurityGatingEndpointsTests
 
         await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
         await _factory.Repository.AppendRevisionAsync("pkg", rev2, 10);
-        Assert.That(await _factory.Repository.GetHeadRevisionIdAsync("pkg"), Is.EqualTo("rev-2"));
+        Assert.Equal("rev-2", await _factory.Repository.GetHeadRevisionIdAsync("pkg"));
 
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
@@ -202,21 +200,21 @@ public class SecurityGatingEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(flagged.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
-            Assert.That(clean.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+            Assert.Equal(HttpStatusCode.Forbidden, flagged.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, clean.StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, head.StatusCode);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Security_status_endpoint_reports_status()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
         var response = await _client.GetAsync("/v1/packages/pkg/security");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.That(body, Does.Contain("Flagged"));
+        Assert.Contains("Flagged", body);
     }
 }

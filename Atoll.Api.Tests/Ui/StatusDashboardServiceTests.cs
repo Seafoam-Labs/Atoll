@@ -10,7 +10,7 @@ using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Ui;
 
@@ -65,7 +65,7 @@ public class StatusDashboardServiceTests
             Options.Create(new AtollOptions { Seed = new SeedOptions { Mode = seedMode } }));
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsync_assembles_counts_from_all_sources()
     {
         var store = IndexWithPackages(Meta("one"), Meta("two"), Meta("three"));
@@ -84,21 +84,21 @@ public class StatusDashboardServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.IndexPackages, Is.EqualTo(3));
-            Assert.That(model.SeededPackages, Is.EqualTo(1));
-            Assert.That(model.PendingScans, Is.EqualTo(1));
-            Assert.That(model.ExcludedPackageBases, Is.EqualTo(1));
-            Assert.That(model.ExcludedPackageBaseNames, Is.EqualTo(["big-base"]));
-            Assert.That(model.SeedMode, Is.EqualTo(SeedMode.Direct));
-            Assert.That(model.DirectSeed.Enabled, Is.True);
-            Assert.That(model.BulkSeed.Enabled, Is.False);
-            Assert.That(model.Refresh.Enabled, Is.False);
-            Assert.That(model.Security.Enabled, Is.True);
-            Assert.That(model.IndexRefresh.Attempts, Is.Zero);
+            Assert.Equal(3, model.IndexPackages);
+            Assert.Equal(1, model.SeededPackages);
+            Assert.Equal(1, model.PendingScans);
+            Assert.Equal(1, model.ExcludedPackageBases);
+            Assert.Equal(["big-base"], model.ExcludedPackageBaseNames);
+            Assert.Equal(SeedMode.Direct, model.SeedMode);
+            Assert.True(model.DirectSeed.Enabled);
+            Assert.False(model.BulkSeed.Enabled);
+            Assert.False(model.Refresh.Enabled);
+            Assert.True(model.Security.Enabled);
+            Assert.Equal(0, model.IndexRefresh.Attempts);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsync_reports_disabled_seed_and_enabled_refresh_states()
     {
         var service = CreateService(
@@ -110,16 +110,16 @@ public class StatusDashboardServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.SeedMode, Is.EqualTo(SeedMode.Off));
-            Assert.That(model.DirectSeed.Enabled, Is.False);
-            Assert.That(model.BulkSeed.Enabled, Is.False);
-            Assert.That(model.Refresh.Enabled, Is.True);
-            Assert.That(model.DirectSeed.LastStartedUtc, Is.Null);
-            Assert.That(model.DirectSeed.LastFinishedUtc, Is.Null);
+            Assert.Equal(SeedMode.Off, model.SeedMode);
+            Assert.False(model.DirectSeed.Enabled);
+            Assert.False(model.BulkSeed.Enabled);
+            Assert.True(model.Refresh.Enabled);
+            Assert.Null(model.DirectSeed.LastStartedUtc);
+            Assert.Null(model.DirectSeed.LastFinishedUtc);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsync_returns_null_timestamps_untouched_and_orders_exclusions()
     {
         var exclusions = new InMemorySeedExclusionRepository();
@@ -131,15 +131,15 @@ public class StatusDashboardServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.IndexRefresh.LastStartedUtc, Is.Null);
-            Assert.That(model.IndexRefresh.LastSucceededUtc, Is.Null);
-            Assert.That(model.IndexRefresh.LastLoadedFromCacheUtc, Is.Null);
-            Assert.That(model.Security.LastScanFinishedUtc, Is.Null);
-            Assert.That(model.ExcludedPackageBaseNames, Is.EqualTo(["alpha", "zeta"]));
+            Assert.Null(model.IndexRefresh.LastStartedUtc);
+            Assert.Null(model.IndexRefresh.LastSucceededUtc);
+            Assert.Null(model.IndexRefresh.LastLoadedFromCacheUtc);
+            Assert.Null(model.Security.LastScanFinishedUtc);
+            Assert.Equal(["alpha", "zeta"], model.ExcludedPackageBaseNames);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsync_caps_rendered_exclusions_but_reports_the_true_count()
     {
         var exclusions = new InMemorySeedExclusionRepository();
@@ -151,23 +151,23 @@ public class StatusDashboardServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.ExcludedPackageBases, Is.EqualTo(StatusDashboardService.ExclusionRenderCap + 5));
-            Assert.That(model.ExcludedPackageBaseNames.Count, Is.EqualTo(StatusDashboardService.ExclusionRenderCap));
-            Assert.That(model.ExcludedPackageBaseNames.First(), Is.EqualTo("base-000"));
+            Assert.Equal(StatusDashboardService.ExclusionRenderCap + 5, model.ExcludedPackageBases);
+            Assert.Equal(StatusDashboardService.ExclusionRenderCap, model.ExcludedPackageBaseNames.Count);
+            Assert.Equal("base-000", model.ExcludedPackageBaseNames.First());
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsync_counts_seeded_packages_without_enumerating_names()
     {
         var service = CreateService(IndexWithPackages(Meta("one")), packageService: new CountingPackageService(7));
 
         var model = await service.GetAsync();
 
-        Assert.That(model.SeededPackages, Is.EqualTo(7));
+        Assert.Equal(7, model.SeededPackages);
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsync_caches_the_assembled_model_for_repeated_reads()
     {
         var counting = new CountingPackageService(3);
@@ -178,28 +178,28 @@ public class StatusDashboardServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(ReferenceEquals(first, second), Is.True);
-            Assert.That(counting.CountCalls, Is.EqualTo(1));
-            Assert.That(second.AssembledUtc, Is.EqualTo(first.AssembledUtc));
+            Assert.True(ReferenceEquals(first, second));
+            Assert.Equal(1, counting.CountCalls);
+            Assert.Equal(first.AssembledUtc, second.AssembledUtc);
         });
     }
 
-    [Test]
-    public void GetAsync_propagates_cancellation()
+    [Fact]
+    public async Task GetAsync_propagates_cancellation()
     {
         var service = CreateService(IndexWithPackages(Meta("one")));
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        Assert.ThrowsAsync<OperationCanceledException>(() => service.GetAsync(cts.Token));
+        await Assert.ThrowsAsync<OperationCanceledException>(() => service.GetAsync(cts.Token));
     }
 
-    [Test]
-    public void GetAsync_propagates_repository_failures()
+    [Fact]
+    public async Task GetAsync_propagates_repository_failures()
     {
         var service = CreateService(IndexWithPackages(), packageService: new ThrowingPackageService());
 
-        Assert.ThrowsAsync<InvalidOperationException>(() => service.GetAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetAsync());
     }
 
     private sealed class CountingPackageService(int seededCount) : IPackageService

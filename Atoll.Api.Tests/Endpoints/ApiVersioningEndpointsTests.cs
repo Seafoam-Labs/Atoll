@@ -1,42 +1,39 @@
 using System.Net;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class ApiVersioningEndpointsTests
+public class ApiVersioningEndpointsTests : IDisposable
 {
-    private HttpClient _client = null!;
-    private ApiTestFactory _factory = null!;
+    private readonly HttpClient _client;
+    private readonly ApiTestFactory _factory;
 
-    [SetUp]
-    public void SetUp()
+    public ApiVersioningEndpointsTests()
     {
         _factory = new ApiTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
     }
 
-    [Test]
+    [Fact]
     public async Task V1RestSurfaceIsServedAndAdvertisesSupportedVersions()
     {
         var response = await _client.GetAsync("/v1/search?query=portable-kit");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(
             response.Headers.TryGetValues("api-supported-versions", out var versions) &&
             versions.SequenceEqual(["1.0"]),
-            Is.True,
             "Expected api-supported-versions: 1.0");
     }
 
-    [Test]
+    [Fact]
     public async Task UnversionedRestRoutesReturn404()
     {
         var search = await _client.GetAsync("/search?query=portable-kit");
@@ -45,13 +42,13 @@ public class ApiVersioningEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(search.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-            Assert.That(packages.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-            Assert.That(package.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+            Assert.Equal(HttpStatusCode.NotFound, search.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, packages.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, package.StatusCode);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task UnsupportedUrlSegmentVersionReturns404()
     {
         var search = await _client.GetAsync("/v2/search?query=portable-kit");
@@ -59,20 +56,20 @@ public class ApiVersioningEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(search.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-            Assert.That(packages.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+            Assert.Equal(HttpStatusCode.NotFound, search.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, packages.StatusCode);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task QueryStringVersioningIsNotHonored()
     {
         var response = await _client.GetAsync("/packages?api-version=1.0");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task ProtocolFixedSurfacesRemainVersionNeutral()
     {
         var health = await _client.GetAsync("/health");
@@ -80,12 +77,12 @@ public class ApiVersioningEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(health.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(rpc.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, rpc.StatusCode);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task OpenApiDocumentIsServedPerVersionWithSubstitutedPaths()
     {
         var v1 = await _client.GetAsync("/openapi/v1.json");
@@ -93,8 +90,8 @@ public class ApiVersioningEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(v1.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(bare.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+            Assert.Equal(HttpStatusCode.OK, v1.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, bare.StatusCode);
         });
 
         var json = await v1.Content.ReadAsStringAsync();
@@ -103,9 +100,9 @@ public class ApiVersioningEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(paths.TryGetProperty("/v1/packages", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/packages", out _), Is.False);
-            Assert.That(paths.TryGetProperty("/rpc", out _), Is.True);
+            Assert.True(paths.TryGetProperty("/v1/packages", out _));
+            Assert.False(paths.TryGetProperty("/packages", out _));
+            Assert.True(paths.TryGetProperty("/rpc", out _));
         });
     }
 }

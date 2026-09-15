@@ -10,7 +10,7 @@ using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Sync.Bulk;
 
@@ -79,7 +79,7 @@ public class PackageBulkSeedWorkerTests
             NullLogger<PackageBulkSeedWorker>.Instance);
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_seeds_non_split_package_from_mirror_files()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -93,14 +93,14 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.EqualTo(1));
-            Assert.That(skipped, Is.Zero);
-            Assert.That(shellySeeded, Is.True);
-            Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(1));
+            Assert.Equal(1, seeded);
+            Assert.Equal(0, skipped);
+            Assert.True(shellySeeded);
+            Assert.Single(mirror.FetchedBatches);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_fetches_pkgbase_once_and_fans_out_to_split_pkgnames()
     {
         // libfoo + libfoo-devel share pkgbase "foo": one fetch, two seeds, identical files.
@@ -116,15 +116,15 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.EqualTo(2));
-            Assert.That(libfooSeeded, Is.True);
-            Assert.That(libfooDevelSeeded, Is.True);
+            Assert.Equal(2, seeded);
+            Assert.True(libfooSeeded);
+            Assert.True(libfooDevelSeeded);
             // Only one pkgbase fetched despite two pkgnames.
-            Assert.That(mirror.FetchedBatches.Sum(b => b.Count), Is.EqualTo(1));
+            Assert.Equal(1, mirror.FetchedBatches.Sum(b => b.Count));
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_skips_pkgbases_not_on_mirror_and_records_in_status()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("ghost", "ghost"));
@@ -141,16 +141,16 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.EqualTo(1));
-            Assert.That(skipped, Is.EqualTo(1));
-            Assert.That(shellySeeded, Is.True);
-            Assert.That(ghostSeeded, Is.False);
-            Assert.That(snapshot.RefsSkipped, Is.EqualTo(1));
-            Assert.That(snapshot.PackagesSkipped, Is.EqualTo(1));
+            Assert.Equal(1, seeded);
+            Assert.Equal(1, skipped);
+            Assert.True(shellySeeded);
+            Assert.False(ghostSeeded);
+            Assert.Equal(1, snapshot.RefsSkipped);
+            Assert.Equal(1, snapshot.PackagesSkipped);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_does_not_refetch_document_too_large_exclusions()
     {
         var store = IndexWithPackages(
@@ -168,15 +168,15 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.EqualTo(1));
-            Assert.That(skipped, Is.Zero);
-            Assert.That(backedOff, Is.False);
-            Assert.That(mirror.FetchedBatches.SelectMany(x => x), Is.EquivalentTo(["small-package"]));
-            Assert.That(status.GetSnapshot().PackagesExcluded, Is.EqualTo(2));
+            Assert.Equal(1, seeded);
+            Assert.Equal(0, skipped);
+            Assert.False(backedOff);
+            Assert.Equivalent(new[] { "small-package" }, mirror.FetchedBatches.SelectMany(x => x), strict: true);
+            Assert.Equal(2, status.GetSnapshot().PackagesExcluded);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_reports_failed_refs_after_bisection()
     {
         var store = IndexWithPackages(Meta("good", "good"), Meta("broken", "broken"));
@@ -193,13 +193,13 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.EqualTo(1));
-            Assert.That(skipped, Is.EqualTo(1));
-            Assert.That(status.GetSnapshot().RefsFailed, Is.EqualTo(1));
+            Assert.Equal(1, seeded);
+            Assert.Equal(1, skipped);
+            Assert.Equal(1, status.GetSnapshot().RefsFailed);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_skips_already_seeded_packages()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("other", "other"));
@@ -217,13 +217,13 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.EqualTo(1));
-            Assert.That(mirror.FetchedBatches.Sum(b => b.Count), Is.EqualTo(1));
-            Assert.That(mirror.FetchedBatches[0], Is.EquivalentTo(["other"]));
+            Assert.Equal(1, seeded);
+            Assert.Equal(1, mirror.FetchedBatches.Sum(b => b.Count));
+            Assert.Equivalent(new[] { "other" }, mirror.FetchedBatches[0], strict: true);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_empty_index_seeds_nothing()
     {
         var store = new PackageIndexStore(); // empty
@@ -235,12 +235,12 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.Zero);
-            Assert.That(mirror.FetchedBatches, Is.Empty);
+            Assert.Equal(0, seeded);
+            Assert.Empty(mirror.FetchedBatches);
         });
     }
 
-    [Test]
+    [Fact]
     public void BulkSeedStatusStore_disabled_reports_zeros()
     {
         var store = new BulkSeedStatusStore(false);
@@ -249,13 +249,13 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(snapshot.Enabled, Is.False);
-            Assert.That(snapshot.BatchesAttempted, Is.Zero);
-            Assert.That(snapshot.PackagesSeeded, Is.Zero);
+            Assert.False(snapshot.Enabled);
+            Assert.Equal(0, snapshot.BatchesAttempted);
+            Assert.Equal(0, snapshot.PackagesSeeded);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_seeds_all_packages_in_parallel_across_batches()
     {
         var metas = Enumerable.Range(0, 40)
@@ -274,18 +274,18 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.EqualTo(40));
-            Assert.That(skipped, Is.Zero);
-            Assert.That(backedOff, Is.False);
-            Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(4));
-            Assert.That(status.GetSnapshot().PackagesSeeded, Is.EqualTo(40));
+            Assert.Equal(40, seeded);
+            Assert.Equal(0, skipped);
+            Assert.False(backedOff);
+            Assert.Equal(4, mirror.FetchedBatches.Count);
+            Assert.Equal(40, status.GetSnapshot().PackagesSeeded);
         });
 
         foreach (var meta in metas)
-            Assert.That(await repo.ExistsAsync(meta.Name), Is.True, $"package {meta.Name} should be seeded");
+            Assert.True(await repo.ExistsAsync(meta.Name), $"package {meta.Name} should be seeded");
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_handles_read_files_failure_without_killing_cycle()
     {
         var store = IndexWithPackages(Meta("a", "a"), Meta("b", "b"));
@@ -300,10 +300,10 @@ public class PackageBulkSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeded, Is.EqualTo(1)); // "a" still seeds
-            Assert.That(aSeeded, Is.True);
-            Assert.That(bSeeded, Is.False);
-            Assert.That(skipped, Is.EqualTo(1));
+            Assert.Equal(1, seeded); // "a" still seeds
+            Assert.True(aSeeded);
+            Assert.False(bSeeded);
+            Assert.Equal(1, skipped);
         });
     }
 

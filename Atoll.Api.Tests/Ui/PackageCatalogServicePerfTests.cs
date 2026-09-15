@@ -4,7 +4,7 @@ using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Ui;
 
@@ -14,10 +14,9 @@ namespace Atoll.Api.Tests.Ui;
 /// the 30s seeded/head snapshot; warmup iterations absorb it, so measured calls reflect what
 /// every page load, sort toggle, or filter change costs - not the periodic repository read.
 ///
-/// Log-only measurements: run with
-/// <c>dotnet test --filter PackageCatalogServicePerfTests --logger "console;verbosity=detailed"</c>
-/// and read the table from the test output. Assertions are scale/behaviour sanity checks,
-/// not timing gates, so this is safe to keep in the normal test run.
+/// Log-only measurements: output goes to <see cref="ITestOutputHelper"/>; run the single test
+/// and read the table from the runner's detailed test output. Assertions are scale/behaviour
+/// sanity checks, not timing gates, so this is safe to keep in the normal test run.
 /// </summary>
 public class PackageCatalogServicePerfTests
 {
@@ -29,12 +28,13 @@ public class PackageCatalogServicePerfTests
     private static readonly string[] Syllables =
         ["core", "lib", "gtk", "python", "kernel", "net", "data", "util", "graph", "media", "text", "crypto", "web", "ai", "shell", "tool"];
 
-    private PackageCatalogService _service = null!;
-    private string _singleHitQuery = null!;
+    private readonly PackageCatalogService _service;
+    private readonly string _singleHitQuery = null!;
+    private readonly ITestOutputHelper _output;
 
-    [OneTimeSetUp]
-    public void SetUp()
+    public PackageCatalogServicePerfTests(ITestOutputHelper output)
     {
+        _output = output;
         var rng = new Random(12345);
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
         var seeded = new string[SeededCount];
@@ -82,10 +82,10 @@ public class PackageCatalogServicePerfTests
             new InMemoryPackageSecurityRepository());
     }
 
-    [Test]
+    [Fact]
     public async Task SearchAsyncCostAtRealisticIndexScale()
     {
-        TestContext.Out.WriteLine(
+        _output.WriteLine(
             $"index={PackageCount:N0} packages, seeded={SeededCount:N0}, " +
             $"page size={PackageCatalogService.PageSize}, iterations={Iterations}, .NET {Environment.Version}");
 
@@ -134,7 +134,7 @@ public class PackageCatalogServicePerfTests
         var measurement = await MeasureAsync(async () =>
             last = await _service.SearchAsync(query, seededFilter, securityFilter, mode, sort, page));
 
-        TestContext.Out.WriteLine(
+        _output.WriteLine(
             $"{label,-44} matches={last!.TotalMatches,6}  rows={last.Rows.Count,3}  " +
             $"median={measurement.MedianMs,8:F2} ms  min={measurement.MinMs,7:F2} ms  " +
             $"alloc={measurement.AllocatedBytesPerCall / 1024.0,9:F0} KB/call");
@@ -142,14 +142,12 @@ public class PackageCatalogServicePerfTests
         Assert.Multiple(() =>
         {
             if (expectedTotal is { } total)
-                Assert.That(last.TotalMatches, Is.EqualTo(total), $"unexpected match count for '{label}'");
+                Assert.Equal(total, last.TotalMatches);
 
-            Assert.That(last.Rows.Count,
-                Is.EqualTo(Math.Min(last.TotalMatches, PackageCatalogService.PageSize)),
-                $"rendered row count for '{label}'");
-            Assert.That(last.TotalPages,
-                Is.EqualTo((last.TotalMatches + PackageCatalogService.PageSize - 1) / PackageCatalogService.PageSize),
-                $"total page count for '{label}'");
+            Assert.Equal(Math.Min(last.TotalMatches, PackageCatalogService.PageSize), last.Rows.Count);
+            Assert.Equal(
+                (last.TotalMatches + PackageCatalogService.PageSize - 1) / PackageCatalogService.PageSize,
+                last.TotalPages);
         });
     }
 

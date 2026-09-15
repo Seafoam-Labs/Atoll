@@ -102,19 +102,19 @@ lines in `compose.yaml` to point the app at it.
 Fast tests (no Docker, no MongoDB, no Git binary):
 
 ```bash
-dotnet test --filter "Category!=RequiresGit&Category!=RequiresMongo"
+dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj --filter-not-trait "Category=RequiresGit" --filter-not-trait "Category=RequiresMongo"
 ```
 
 Git-backed tests (needs system `git` CLI on `PATH`):
 
 ```bash
-dotnet test --filter "Category=RequiresGit"
+dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj --filter-trait "Category=RequiresGit"
 ```
 
 Mongo-backed tests (needs a MongoDB; the bundled compose one works):
 
 ```bash
-dotnet test --filter "Category=RequiresMongo"
+dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj --filter-trait "Category=RequiresMongo"
 ```
 
 Full suite:

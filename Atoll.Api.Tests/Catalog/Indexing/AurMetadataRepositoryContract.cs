@@ -1,6 +1,6 @@
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Persistence;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Catalog.Indexing;
 
@@ -8,7 +8,7 @@ public abstract class AurMetadataRepositoryContract
 {
     private protected abstract IAurMetadataRepository CreateRepository();
 
-    [Test]
+    [Fact]
     public async Task EmptyRepository_HasNoData_AndZeroCount()
     {
         var repo = CreateRepository();
@@ -19,13 +19,13 @@ public abstract class AurMetadataRepositoryContract
 
         Assert.Multiple(() =>
         {
-            Assert.That(exists, Is.False);
-            Assert.That(count, Is.EqualTo(0));
-            Assert.That(loaded, Is.Empty);
+            Assert.False(exists);
+            Assert.Equal(0, count);
+            Assert.Empty(loaded);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task SaveAsync_Then_LoadAsync_RoundTripsPackages()
     {
         var repo = CreateRepository();
@@ -39,21 +39,21 @@ public abstract class AurMetadataRepositoryContract
 
         Assert.Multiple(() =>
         {
-            Assert.That(exists, Is.True);
-            Assert.That(count, Is.EqualTo(packages.Count));
-            Assert.That(loaded, Has.Count.EqualTo(packages.Count));
-            Assert.That(loaded.Select(p => p.Name).Order(), Is.EquivalentTo(packages.Select(p => p.Name).Order()));
+            Assert.True(exists);
+            Assert.Equal(packages.Count, count);
+            Assert.Equal(packages.Count, loaded.Count);
+            Assert.Equivalent(packages.Select(p => p.Name).Order(), loaded.Select(p => p.Name).Order(), strict: true);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task SaveAsync_ReplacesPreviousBatch_AndRemovesOldDocuments()
     {
         var repo = CreateRepository();
 
         var firstBatch = SamplePackages("v1").ToList();
         await repo.SaveAsync(firstBatch, CancellationToken.None);
-        Assert.That(await repo.CountAsync(CancellationToken.None), Is.EqualTo(firstBatch.Count));
+        Assert.Equal(firstBatch.Count, await repo.CountAsync(CancellationToken.None));
 
         var secondBatch = SamplePackages("v2").ToList();
         await repo.SaveAsync(secondBatch, CancellationToken.None);
@@ -64,14 +64,14 @@ public abstract class AurMetadataRepositoryContract
 
         Assert.Multiple(() =>
         {
-            Assert.That(activeCount, Is.EqualTo(secondBatch.Count));
-            Assert.That(loadedNames.Overlaps(firstBatch.Select(p => p.Name)), Is.False);
+            Assert.Equal(secondBatch.Count, activeCount);
+            Assert.False(loadedNames.Overlaps(firstBatch.Select(p => p.Name)));
             foreach (var expected in secondBatch.Select(p => p.Name))
-                Assert.That(loadedNames.Contains(expected), Is.True, $"Missing {expected}");
+                Assert.True(loadedNames.Contains(expected), $"Missing {expected}");
         });
     }
 
-    [Test]
+    [Fact]
     public async Task SaveAsync_PreservesAllFields()
     {
         var repo = CreateRepository();
@@ -109,47 +109,47 @@ public abstract class AurMetadataRepositoryContract
         await repo.SaveAsync([original], CancellationToken.None);
         var loaded = await repo.LoadAsync(CancellationToken.None);
 
-        Assert.That(loaded, Has.Count.EqualTo(1));
+        Assert.Single(loaded);
         var pkg = loaded[0];
 
         Assert.Multiple(() =>
         {
-            Assert.That(pkg.Id, Is.EqualTo(original.Id));
-            Assert.That(pkg.Name, Is.EqualTo(original.Name));
-            Assert.That(pkg.PackageBaseId, Is.EqualTo(original.PackageBaseId));
-            Assert.That(pkg.PackageBase, Is.EqualTo(original.PackageBase));
-            Assert.That(pkg.Version, Is.EqualTo(original.Version));
-            Assert.That(pkg.Description, Is.EqualTo(original.Description));
-            Assert.That(pkg.Url, Is.EqualTo(original.Url));
-            Assert.That(pkg.NumVotes, Is.EqualTo(original.NumVotes));
-            Assert.That(pkg.Popularity, Is.EqualTo(original.Popularity));
-            Assert.That(pkg.OutOfDate, Is.EqualTo(original.OutOfDate));
-            Assert.That(pkg.Maintainer, Is.EqualTo(original.Maintainer));
-            Assert.That(pkg.Submitter, Is.EqualTo(original.Submitter));
-            Assert.That(pkg.FirstSubmitted, Is.EqualTo(original.FirstSubmitted));
-            Assert.That(pkg.LastModified, Is.EqualTo(original.LastModified));
-            Assert.That(pkg.UrlPath, Is.EqualTo(original.UrlPath));
-            Assert.That(pkg.Depends, Is.EquivalentTo(original.Depends));
-            Assert.That(pkg.MakeDepends, Is.EquivalentTo(original.MakeDepends));
-            Assert.That(pkg.OptDepends, Is.EquivalentTo(original.OptDepends));
-            Assert.That(pkg.Conflicts, Is.EquivalentTo(original.Conflicts));
-            Assert.That(pkg.Provides, Is.EquivalentTo(original.Provides));
-            Assert.That(pkg.License, Is.EquivalentTo(original.License));
-            Assert.That(pkg.Keywords, Is.EquivalentTo(original.Keywords));
-            Assert.That(pkg.CoMaintainers, Is.EquivalentTo(original.CoMaintainers));
-            Assert.That(pkg.CheckDepends, Is.EquivalentTo(original.CheckDepends));
-            Assert.That(pkg.Groups, Is.EquivalentTo(original.Groups));
-            Assert.That(pkg.Replaces, Is.EquivalentTo(original.Replaces));
+            Assert.Equal(original.Id, pkg.Id);
+            Assert.Equal(original.Name, pkg.Name);
+            Assert.Equal(original.PackageBaseId, pkg.PackageBaseId);
+            Assert.Equal(original.PackageBase, pkg.PackageBase);
+            Assert.Equal(original.Version, pkg.Version);
+            Assert.Equal(original.Description, pkg.Description);
+            Assert.Equal(original.Url, pkg.Url);
+            Assert.Equal(original.NumVotes, pkg.NumVotes);
+            Assert.Equal(original.Popularity, pkg.Popularity);
+            Assert.Equal(original.OutOfDate, pkg.OutOfDate);
+            Assert.Equal(original.Maintainer, pkg.Maintainer);
+            Assert.Equal(original.Submitter, pkg.Submitter);
+            Assert.Equal(original.FirstSubmitted, pkg.FirstSubmitted);
+            Assert.Equal(original.LastModified, pkg.LastModified);
+            Assert.Equal(original.UrlPath, pkg.UrlPath);
+            Assert.Equivalent(original.Depends, pkg.Depends, strict: true);
+            Assert.Equivalent(original.MakeDepends, pkg.MakeDepends, strict: true);
+            Assert.Equivalent(original.OptDepends, pkg.OptDepends, strict: true);
+            Assert.Equivalent(original.Conflicts, pkg.Conflicts, strict: true);
+            Assert.Equivalent(original.Provides, pkg.Provides, strict: true);
+            Assert.Equivalent(original.License, pkg.License, strict: true);
+            Assert.Equivalent(original.Keywords, pkg.Keywords, strict: true);
+            Assert.Equivalent(original.CoMaintainers, pkg.CoMaintainers, strict: true);
+            Assert.Equivalent(original.CheckDepends, pkg.CheckDepends, strict: true);
+            Assert.Equivalent(original.Groups, pkg.Groups, strict: true);
+            Assert.Equivalent(original.Replaces, pkg.Replaces, strict: true);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task DeleteAsync_RemovesEverything()
     {
         var repo = CreateRepository();
 
         await repo.SaveAsync([.. SamplePackages()], CancellationToken.None);
-        Assert.That(await repo.ExistsAsync(CancellationToken.None), Is.True);
+        Assert.True(await repo.ExistsAsync(CancellationToken.None));
 
         await repo.DeleteAsync(CancellationToken.None);
 
@@ -159,19 +159,19 @@ public abstract class AurMetadataRepositoryContract
 
         Assert.Multiple(() =>
         {
-            Assert.That(exists, Is.False);
-            Assert.That(count, Is.EqualTo(0));
-            Assert.That(loaded, Is.Empty);
+            Assert.False(exists);
+            Assert.Equal(0, count);
+            Assert.Empty(loaded);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task SaveAsync_EmptyInput_SwapsPointerToEmptyBatch()
     {
         var repo = CreateRepository();
 
         await repo.SaveAsync([.. SamplePackages()], CancellationToken.None);
-        Assert.That(await repo.CountAsync(CancellationToken.None), Is.GreaterThan(0));
+        Assert.True(await repo.CountAsync(CancellationToken.None) > 0);
 
         await repo.SaveAsync([], CancellationToken.None);
 
@@ -181,9 +181,9 @@ public abstract class AurMetadataRepositoryContract
 
         Assert.Multiple(() =>
         {
-            Assert.That(existsAfterEmpty, Is.True);
-            Assert.That(countAfterEmpty, Is.EqualTo(0));
-            Assert.That(loadedAfterEmpty, Is.Empty);
+            Assert.True(existsAfterEmpty);
+            Assert.Equal(0, countAfterEmpty);
+            Assert.Empty(loadedAfterEmpty);
         });
     }
 

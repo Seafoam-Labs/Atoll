@@ -2,7 +2,7 @@ using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Security;
@@ -40,10 +40,11 @@ public class PackageSecurityAccessTests
         return new PackageSecurityAccess(packages, security, options);
     }
 
-    [TestCase(SecurityStatus.Verified, true, null)]
-    [TestCase(SecurityStatus.Pending, false, SecurityAccessReasonCodes.Pending)]
-    [TestCase(SecurityStatus.Flagged, false, SecurityAccessReasonCodes.Flagged)]
-    [TestCase(SecurityStatus.Error, false, SecurityAccessReasonCodes.Error)]
+    [Theory]
+    [InlineData(SecurityStatus.Verified, true, null)]
+    [InlineData(SecurityStatus.Pending, false, SecurityAccessReasonCodes.Pending)]
+    [InlineData(SecurityStatus.Flagged, false, SecurityAccessReasonCodes.Flagged)]
+    [InlineData(SecurityStatus.Error, false, SecurityAccessReasonCodes.Error)]
     public async Task Status_is_enforced(SecurityStatus status, bool allowed, string? reason)
     {
         var packages = new InMemoryPackageRepository();
@@ -61,11 +62,11 @@ public class PackageSecurityAccessTests
         var access = Create(packages, security);
         var result1 = await access.CheckAsync("pkg");
 
-        Assert.That(result1.Allowed, Is.EqualTo(allowed));
-        Assert.That(result1.ReasonCode, Is.EqualTo(reason));
+        Assert.Equal(allowed, result1.Allowed);
+        Assert.Equal(reason, result1.ReasonCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Missing_scan_is_pending_and_blocked()
     {
         var packages = new InMemoryPackageRepository();
@@ -73,11 +74,11 @@ public class PackageSecurityAccessTests
 
         var result = await Create(packages, new InMemoryPackageSecurityRepository()).CheckAsync("pkg");
 
-        Assert.That(result.Allowed, Is.False);
-        Assert.That(result.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Pending));
+        Assert.False(result.Allowed);
+        Assert.Equal(SecurityAccessReasonCodes.Pending, result.ReasonCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Disabled_feature_allows_everything()
     {
         var packages = new InMemoryPackageRepository();
@@ -87,10 +88,10 @@ public class PackageSecurityAccessTests
 
         var result = await Create(packages, security, false).CheckAsync("pkg");
 
-        Assert.That(result.Allowed, Is.True);
+        Assert.True(result.Allowed);
     }
 
-    [Test]
+    [Fact]
     public async Task Flagged_revision_blocks_only_itself()
     {
         var packages = new InMemoryPackageRepository();
@@ -121,15 +122,15 @@ public class PackageSecurityAccessTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(flagged.Allowed, Is.False);
-            Assert.That(flagged.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Flagged));
-            Assert.That(clean.Allowed, Is.True);
-            Assert.That(head.Allowed, Is.False);
-            Assert.That(head.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Flagged));
+            Assert.False(flagged.Allowed);
+            Assert.Equal(SecurityAccessReasonCodes.Flagged, flagged.ReasonCode);
+            Assert.True(clean.Allowed);
+            Assert.False(head.Allowed);
+            Assert.Equal(SecurityAccessReasonCodes.Flagged, head.ReasonCode);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Unknown_revision_is_blocked_as_pending()
     {
         var packages = new InMemoryPackageRepository();
@@ -137,15 +138,15 @@ public class PackageSecurityAccessTests
 
         var result = await Create(packages, new InMemoryPackageSecurityRepository()).CheckAsync("pkg", "rev-missing");
 
-        Assert.That(result.Allowed, Is.False);
-        Assert.That(result.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Pending));
+        Assert.False(result.Allowed);
+        Assert.Equal(SecurityAccessReasonCodes.Pending, result.ReasonCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Unknown_package_is_allowed()
     {
         var result = await Create(new InMemoryPackageRepository(), new InMemoryPackageSecurityRepository()).CheckAsync("missing");
 
-        Assert.That(result.Allowed, Is.True);
+        Assert.True(result.Allowed);
     }
 }

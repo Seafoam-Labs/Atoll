@@ -3,12 +3,12 @@ using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Support;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Security;
 
-[Category("RequiresMongo")]
-public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryContract
+[Trait("Category", "RequiresMongo")]
+public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryContract, IAsyncLifetime
 {
     /// <summary>The index set <see cref="MongoPackageSecurityRepository" /> leaves behind, including the primary key.</summary>
     private static readonly string[] EnsuredIndexNames =
@@ -19,28 +19,31 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         "isHead_1_status_1_packageName_1"
     ];
 
-    private IMongoClient _client = null!;
-    private string _database = null!;
-    private MongoPackageSecurityRepository _repo = null!;
+    private readonly IMongoClient _client;
+    private readonly string _database;
+    private readonly MongoPackageSecurityRepository _repo;
 
-    private IMongoCollection<PackageSecurityScanDocument> Scans =>
-        _client.GetDatabase(_database).GetCollection<PackageSecurityScanDocument>("package-security-scans");
-
-    [SetUp]
-    public void SetUp()
+    public PackageSecurityRepositoryMongoTests()
     {
-        Assume.That(MongoFixture.IsAvailable, Is.True, $"Mongo unavailable: {MongoFixture.UnavailableReason}");
+        Assert.SkipUnless(MongoFixture.IsAvailable, $"Mongo unavailable: {MongoFixture.UnavailableReason}");
 
         _client = MongoRepositoryFactory.CreateClient();
         _database = MongoRepositoryFactory.NewDatabaseName();
         _repo = MongoRepositoryFactory.CreatePackageSecurityRepository(_client, _database);
     }
 
-    [TearDown]
-    public async Task TearDown()
+    public ValueTask InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
     {
         await MongoRepositoryFactory.DropDatabaseAsync(_client, _database);
     }
+
+    private IMongoCollection<PackageSecurityScanDocument> Scans =>
+        _client.GetDatabase(_database).GetCollection<PackageSecurityScanDocument>("package-security-scans");
 
     private protected override IPackageSecurityRepository CreateRepository()
     {
@@ -58,7 +61,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         return indexes.Select(index => index["name"].AsString).ToArray();
     }
 
-    [Test]
+    [Fact]
     public async Task Constructor_drops_superseded_indexes_left_by_an_older_deployment()
     {
         // Recreate the shapes earlier releases ensured: the pre-policy-aware claim index, the
@@ -74,14 +77,16 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
             await Scans.Indexes.CreateOneAsync(new CreateIndexModel<PackageSecurityScanDocument>(superseded));
         }
 
-        Assert.That(await IndexNamesAsync(), Is.SupersetOf(new[] { "packageName_1", "isHead_1_status_1" }));
+        Assert.Superset(
+            new HashSet<string> { "packageName_1", "isHead_1_status_1" },
+            new HashSet<string>(await IndexNamesAsync()));
 
         NewRepository();
 
-        Assert.That(await IndexNamesAsync(), Is.EquivalentTo(EnsuredIndexNames));
+        Assert.Equivalent(EnsuredIndexNames, await IndexNamesAsync(), strict: true);
     }
 
-    [Test]
+    [Fact]
     public async Task Constructor_is_idempotent_when_the_superseded_indexes_are_already_absent()
     {
         NewRepository();
@@ -90,10 +95,10 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         // same index set rather than fail on the missing indexes.
         NewRepository();
 
-        Assert.That(await IndexNamesAsync(), Is.EquivalentTo(EnsuredIndexNames));
+        Assert.Equivalent(EnsuredIndexNames, await IndexNamesAsync(), strict: true);
     }
 
-    [Test]
+    [Fact]
     public async Task Head_status_query_shape_is_covered_by_the_index_without_fetching_documents()
     {
         for (var i = 0; i < 25; i++)
@@ -130,8 +135,8 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
 
         Assert.Multiple(() =>
         {
-            Assert.That(stages, Does.Contain("PROJECTION_COVERED"), $"winning plan was {string.Join(" → ", stages)}");
-            Assert.That(docsExamined, Is.Zero, "head-status reads must not touch the documents behind the index");
+            Assert.Contains("PROJECTION_COVERED", stages);
+            Assert.Equal(0, docsExamined);
         });
     }
 
@@ -159,7 +164,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         }
     }
 
-    [Test]
+    [Fact]
     public async Task Legacy_pending_work_without_requirement_is_claimable_and_backfilled()
     {
         var collection = _client.GetDatabase(_database).GetCollection<PackageSecurityScanDocument>("package-security-scans");
@@ -174,23 +179,23 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         });
 
         var claim = await _repo.TryClaimPendingScanAsync("v2-worker", TimeSpan.FromMinutes(1), workerPolicyVersion: 2);
-        Assert.That(claim, Is.Not.Null, "a missing requirement is treated as unconstrained");
+        Assert.NotNull(claim);
 
         await _repo.ReleaseScanClaimAsync("legacy-pending", "rev-1", "v2-worker");
 
         var requeued = await _repo.RequeueOutdatedAsync(3);
-        Assert.That(requeued, Is.EqualTo(1));
+        Assert.Equal(1, requeued);
 
         var scan = await _repo.GetAsync("legacy-pending", "rev-1");
-        Assert.That(scan, Is.Not.Null);
+        Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
-            Assert.That(scan!.RequiredPolicyVersion, Is.EqualTo(3), "reconciliation backfills the requirement");
-            Assert.That(scan.Status, Is.EqualTo(SecurityStatus.Pending));
+            Assert.Equal(3, scan!.RequiredPolicyVersion);
+            Assert.Equal(SecurityStatus.Pending, scan.Status);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RequeueOutdatedAsync_requeues_unversioned_and_older_versions_only()
     {
         // 1. Legacy unversioned verified document (directly inserted into Mongo)
@@ -264,66 +269,66 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
 
         // Requeue outdated scans with current policy version 2
         var requeuedCount = await _repo.RequeueOutdatedAsync(2);
-        Assert.That(requeuedCount, Is.EqualTo(4), "three completed outcomes plus one pending requirement are updated");
+        Assert.Equal(4, requeuedCount);
 
         // Verify legacy-verified is now Pending, unversioned, timestamps cleared
         var doc1 = await _repo.GetAsync("legacy-verified", "rev-1");
-        Assert.That(doc1, Is.Not.Null);
+        Assert.NotNull(doc1);
         Assert.Multiple(() =>
         {
-            Assert.That(doc1!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(doc1.PolicyVersion, Is.Null);
-            Assert.That(doc1.RequiredPolicyVersion, Is.EqualTo(2), "requeued work now requires the current policy");
-            Assert.That(doc1.ScannedAt, Is.Null);
-            Assert.That(doc1.Findings, Is.Empty);
-            Assert.That(doc1.IsHead, Is.True);
+            Assert.Equal(SecurityStatus.Pending, doc1!.Status);
+            Assert.Null(doc1.PolicyVersion);
+            Assert.Equal(2, doc1.RequiredPolicyVersion);
+            Assert.Null(doc1.ScannedAt);
+            Assert.Empty(doc1.Findings);
+            Assert.True(doc1.IsHead);
         });
 
         // Verify legacy-flagged is now Pending, findings cleared
         var doc2 = await _repo.GetAsync("legacy-flagged", "rev-1");
-        Assert.That(doc2, Is.Not.Null);
+        Assert.NotNull(doc2);
         Assert.Multiple(() =>
         {
-            Assert.That(doc2!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(doc2.PolicyVersion, Is.Null);
-            Assert.That(doc2.Findings, Is.Empty);
+            Assert.Equal(SecurityStatus.Pending, doc2!.Status);
+            Assert.Null(doc2.PolicyVersion);
+            Assert.Empty(doc2.Findings);
         });
 
         // Verify v1-error is now Pending, IsHead preserved
         var doc3 = await _repo.GetAsync("v1-error", "rev-1");
-        Assert.That(doc3, Is.Not.Null);
+        Assert.NotNull(doc3);
         Assert.Multiple(() =>
         {
-            Assert.That(doc3!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(doc3.PolicyVersion, Is.Null);
-            Assert.That(doc3.IsHead, Is.False);
+            Assert.Equal(SecurityStatus.Pending, doc3!.Status);
+            Assert.Null(doc3.PolicyVersion);
+            Assert.False(doc3.IsHead);
         });
 
         // Verify the pending requirement was raised in place
         var doc6 = await _repo.GetAsync("already-pending", "rev-1");
-        Assert.That(doc6, Is.Not.Null);
-        Assert.That(doc6!.RequiredPolicyVersion, Is.EqualTo(2));
+        Assert.NotNull(doc6);
+        Assert.Equal(2, doc6!.RequiredPolicyVersion);
 
         // Verify v2-verified is unchanged
         var doc4 = await _repo.GetAsync("v2-verified", "rev-1");
-        Assert.That(doc4, Is.Not.Null);
+        Assert.NotNull(doc4);
         Assert.Multiple(() =>
         {
-            Assert.That(doc4!.Status, Is.EqualTo(SecurityStatus.Verified));
-            Assert.That(doc4.PolicyVersion, Is.EqualTo(2));
+            Assert.Equal(SecurityStatus.Verified, doc4!.Status);
+            Assert.Equal(2, doc4.PolicyVersion);
         });
 
         // Verify a newer result is not downgraded by an older worker
         var doc5 = await _repo.GetAsync("v3-verified", "rev-1");
-        Assert.That(doc5, Is.Not.Null);
+        Assert.NotNull(doc5);
         Assert.Multiple(() =>
         {
-            Assert.That(doc5!.Status, Is.EqualTo(SecurityStatus.Verified));
-            Assert.That(doc5.PolicyVersion, Is.EqualTo(3));
+            Assert.Equal(SecurityStatus.Verified, doc5!.Status);
+            Assert.Equal(3, doc5.PolicyVersion);
         });
 
         // Idempotency: Running RequeueOutdatedAsync again returns 0
         var secondRequeue = await _repo.RequeueOutdatedAsync(2);
-        Assert.That(secondRequeue, Is.EqualTo(0));
+        Assert.Equal(0, secondRequeue);
     }
 }

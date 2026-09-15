@@ -1,49 +1,47 @@
 using System.Net;
 using System.Text.Json;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class MinimalApiEndpointsTests
+public class MinimalApiEndpointsTests : IDisposable
 {
-    private HttpClient _client = null!;
-    private ApiTestFactory _factory = null!;
+    private readonly HttpClient _client;
+    private readonly ApiTestFactory _factory;
 
-    [SetUp]
-    public void SetUp()
+    public MinimalApiEndpointsTests()
     {
         _factory = new ApiTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
     }
 
-    [Test]
+    [Fact]
     public async Task HealthGetAndHeadReturnOk()
     {
         var get = await _client.GetAsync("/health");
         var head = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/health"));
 
-        Assert.That(get.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, head.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task PackagesSupportsNameProvidesAndWordsQueries()
     {
         var byName = await _client.GetAsync("/v1/search?query=portable-kit,not-real");
         var byProv = await _client.GetAsync("/v1/search?query=shelly&by=provides");
         var byDesc = await _client.GetAsync("/v1/search?query=handheld,portable&by=words");
 
-        Assert.That(byName.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(byProv.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(byDesc.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, byName.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, byProv.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, byDesc.StatusCode);
 
         var byNameBody = await byName.Content.ReadAsStringAsync();
         var byProvBody = await byProv.Content.ReadAsStringAsync();
@@ -53,28 +51,28 @@ public class MinimalApiEndpointsTests
         using var byProvidesDoc = JsonDocument.Parse(byProvBody);
         using var byWordsDoc = JsonDocument.Parse(byDescBody);
 
-        Assert.That(byNameDoc.RootElement.GetArrayLength(), Is.EqualTo(1));
-        Assert.That(byNameDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
+        Assert.Equal(1, byNameDoc.RootElement.GetArrayLength());
+        Assert.Equal("portable-kit", byNameDoc.RootElement[0].GetProperty("name").GetString());
 
-        Assert.That(byProvidesDoc.RootElement.GetArrayLength(), Is.EqualTo(1));
-        Assert.That(byProvidesDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("shelly-bin"));
+        Assert.Equal(1, byProvidesDoc.RootElement.GetArrayLength());
+        Assert.Equal("shelly-bin", byProvidesDoc.RootElement[0].GetProperty("name").GetString());
 
-        Assert.That(byWordsDoc.RootElement.GetArrayLength(), Is.EqualTo(2));
-        Assert.That(byWordsDoc.RootElement[0].GetProperty("name").GetString(), Is.EqualTo("portable-pro"));
-        Assert.That(byWordsDoc.RootElement[1].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
+        Assert.Equal(2, byWordsDoc.RootElement.GetArrayLength());
+        Assert.Equal("portable-pro", byWordsDoc.RootElement[0].GetProperty("name").GetString());
+        Assert.Equal("portable-kit", byWordsDoc.RootElement[1].GetProperty("name").GetString());
     }
 
-    [Test]
+    [Fact]
     public async Task InvalidPackagesByAndUnknownRouteReturnTextHtml404()
     {
         var invalidBy = await _client.GetAsync("/v1/search?query=shelly&by=unknown");
         var unknown = await _client.GetAsync("/does-not-exist");
 
-        Assert.That(invalidBy.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-        Assert.That(unknown.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidBy.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task MetricsReturnsPrometheusText()
     {
         _ = await _client.GetAsync("/v1/search?query=portable-kit");
@@ -82,20 +80,20 @@ public class MinimalApiEndpointsTests
         var response = await _client.GetAsync("/metrics");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/plain"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);
 
         Assert.Multiple(() =>
         {
             // The search request above is counted, and the sample index has 3 names / 3 provides.
-            Assert.That(body, Does.Match(@"atoll_search_requests_total\{[^}]*\} [1-9]"));
-            Assert.That(body, Does.Match("""atoll_index_size\{[^}]*index="names"[^}]*\} 3"""));
-            Assert.That(body, Does.Match("""atoll_index_size\{[^}]*index="provides"[^}]*\} 3"""));
-            Assert.That(body, Does.Match("""atoll_index_size\{[^}]*index="words"[^}]*\} [1-9]"""));
+            Assert.Matches(@"atoll_search_requests_total\{[^}]*\} [1-9]", body);
+            Assert.Matches("""atoll_index_size\{[^}]*index="names"[^}]*\} 3""", body);
+            Assert.Matches("""atoll_index_size\{[^}]*index="provides"[^}]*\} 3""", body);
+            Assert.Matches("""atoll_index_size\{[^}]*index="words"[^}]*\} [1-9]""", body);
 
             // Uptime gauge plus ASP.NET Core request metrics from instrumentation.
-            Assert.That(body, Does.Contain("atoll_process_uptime_seconds"));
-            Assert.That(body, Does.Contain("http_server_request_duration_seconds"));
+            Assert.Contains("atoll_process_uptime_seconds", body);
+            Assert.Contains("http_server_request_duration_seconds", body);
         });
     }
 }

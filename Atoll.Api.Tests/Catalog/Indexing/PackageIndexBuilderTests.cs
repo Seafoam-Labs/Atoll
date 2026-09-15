@@ -1,13 +1,13 @@
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Catalog.Indexing;
 
 public class PackageIndexBuilderTests
 {
-    [Test]
+    [Fact]
     public async Task LoaderBuildsAllThreeIndexes()
     {
         var path = await TestData.WriteSamplePackagesAsync();
@@ -17,7 +17,7 @@ public class PackageIndexBuilderTests
         AssertIndexesMatchSample(indexes);
     }
 
-    [Test]
+    [Fact]
     public async Task BuildFromPackagesProducesSameIndexesAsLoadAsync()
     {
         var path = await TestData.WriteSamplePackagesAsync();
@@ -28,14 +28,14 @@ public class PackageIndexBuilderTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(fromPackages.ByNames.Keys, Is.EquivalentTo(fromFile.ByNames.Keys));
-            Assert.That(fromPackages.ByProvides.Keys, Is.EquivalentTo(fromFile.ByProvides.Keys));
-            Assert.That(fromPackages.ByWords.Keys, Is.EquivalentTo(fromFile.ByWords.Keys));
+            Assert.Equivalent(fromFile.ByNames.Keys, fromPackages.ByNames.Keys, strict: true);
+            Assert.Equivalent(fromFile.ByProvides.Keys, fromPackages.ByProvides.Keys, strict: true);
+            Assert.Equivalent(fromFile.ByWords.Keys, fromPackages.ByWords.Keys, strict: true);
             AssertIndexesMatchSample(fromPackages);
         });
     }
 
-    [Test]
+    [Fact]
     public void BuildFromPackagesSkipsPackagesWithoutAName()
     {
         var packages = new List<AurPackageMetadata>
@@ -48,8 +48,8 @@ public class PackageIndexBuilderTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(indexes.ByNames.ContainsKey("valid-pkg"), Is.True);
-            Assert.That(indexes.ByNames, Has.Count.EqualTo(1));
+            Assert.True(indexes.ByNames.ContainsKey("valid-pkg"));
+            Assert.Single(indexes.ByNames);
         });
     }
 
@@ -57,13 +57,13 @@ public class PackageIndexBuilderTests
     {
         Assert.Multiple(() =>
         {
-            Assert.That(indexes.ByNames.ContainsKey("shelly-bin"), Is.True);
-            Assert.That(indexes.ByProvides.ContainsKey("shelly"), Is.True);
-            Assert.That(indexes.ByProvides.ContainsKey("portable-kit"), Is.True);
-            Assert.That(indexes.ByWords.ContainsKey("handheld"), Is.True);
-            Assert.That(indexes.ByWords.ContainsKey("portable"), Is.True);
-            Assert.That(indexes.ByWords.ContainsKey("i3"), Is.True);
-            Assert.That(indexes.ByWords.ContainsKey("1337"), Is.False);
+            Assert.True(indexes.ByNames.ContainsKey("shelly-bin"));
+            Assert.True(indexes.ByProvides.ContainsKey("shelly"));
+            Assert.True(indexes.ByProvides.ContainsKey("portable-kit"));
+            Assert.True(indexes.ByWords.ContainsKey("handheld"));
+            Assert.True(indexes.ByWords.ContainsKey("portable"));
+            Assert.True(indexes.ByWords.ContainsKey("i3"));
+            Assert.False(indexes.ByWords.ContainsKey("1337"));
         });
     }
 

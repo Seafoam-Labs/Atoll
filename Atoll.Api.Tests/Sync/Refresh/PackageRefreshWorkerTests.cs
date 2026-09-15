@@ -8,7 +8,7 @@ using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Sync.Refresh;
@@ -75,7 +75,7 @@ public class PackageRefreshWorkerTests
             NullLogger<PackageRefreshWorker>.Instance);
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_appends_revision_when_upstream_head_changes()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -107,15 +107,15 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(outcome, Is.EqualTo(RefreshCycleOutcome.Completed));
-            Assert.That(newHead, Is.Not.EqualTo(originalHead));
-            Assert.That(mirror.FetchedBatches.Sum(b => b.Count), Is.EqualTo(1));
-            Assert.That(status.GetSnapshot().PackagesUpdated, Is.EqualTo(1));
-            Assert.That(status.GetSnapshot().PackagesUnchanged, Is.Zero);
+            Assert.Equal(RefreshCycleOutcome.Completed, outcome);
+            Assert.NotEqual(originalHead, newHead);
+            Assert.Equal(1, mirror.FetchedBatches.Sum(b => b.Count));
+            Assert.Equal(1, status.GetSnapshot().PackagesUpdated);
+            Assert.Equal(0, status.GetSnapshot().PackagesUnchanged);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_marks_new_head_pending_and_demotes_old_head_scan()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -153,15 +153,15 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(newHeadScan!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(newHeadScan.IsHead, Is.True);
+            Assert.Equal(SecurityStatus.Pending, newHeadScan!.Status);
+            Assert.True(newHeadScan.IsHead);
             // Old head scan is demoted from the head slot but its verdict is preserved.
-            Assert.That(oldHeadScan!.IsHead, Is.False);
-            Assert.That(oldHeadScan.Status, Is.EqualTo(SecurityStatus.Verified));
+            Assert.False(oldHeadScan!.IsHead);
+            Assert.Equal(SecurityStatus.Verified, oldHeadScan.Status);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_skips_fetch_when_upstream_head_unchanged()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -181,12 +181,12 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(mirror.FetchedBatches, Is.Empty);
-            Assert.That(status.GetSnapshot().PackagesUpdated, Is.Zero);
+            Assert.Empty(mirror.FetchedBatches);
+            Assert.Equal(0, status.GetSnapshot().PackagesUpdated);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_fans_out_one_fetch_to_split_package_members()
     {
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
@@ -222,15 +222,15 @@ public class PackageRefreshWorkerTests
         Assert.Multiple(() =>
         {
             // One pkgbase fetched, both members updated.
-            Assert.That(mirror.FetchedBatches.Sum(b => b.Count), Is.EqualTo(1));
+            Assert.Equal(1, mirror.FetchedBatches.Sum(b => b.Count));
             // Revision IDs are pkgname-scoped, so they differ across members but both must change.
-            Assert.That(libfooUpdated, Is.Not.EqualTo(libfooOriginalHead));
-            Assert.That(libfooDevelUpdated, Is.Not.EqualTo(libfooDevelOriginalHead));
-            Assert.That(status.GetSnapshot().PackagesUpdated, Is.EqualTo(2));
+            Assert.NotEqual(libfooOriginalHead, libfooUpdated);
+            Assert.NotEqual(libfooDevelOriginalHead, libfooDevelUpdated);
+            Assert.Equal(2, status.GetSnapshot().PackagesUpdated);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_advances_watermark_only_for_succeeded_members_on_partial_failure()
     {
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
@@ -268,15 +268,15 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(libfooUpdated, Is.Not.EqualTo(libfooOriginalHead));
-            Assert.That(status.GetSnapshot().PackagesUpdated, Is.EqualTo(1));
+            Assert.NotEqual(libfooOriginalHead, libfooUpdated);
+            Assert.Equal(1, status.GetSnapshot().PackagesUpdated);
             // The succeeded member's watermark advances so it won't be refetched next cycle.
-            Assert.That(libfooState.LastSyncedUpstreamHead, Is.EqualTo("sha-new"));
-            Assert.That(libfooDoc!.LastSyncError, Is.Null);
+            Assert.Equal("sha-new", libfooState.LastSyncedUpstreamHead);
+            Assert.Null(libfooDoc!.LastSyncError);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_no_ops_when_computed_revision_matches_current_head()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -306,15 +306,15 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(newHead, Is.EqualTo(originalHead));
-            Assert.That(status.GetSnapshot().PackagesUnchanged, Is.EqualTo(1));
-            Assert.That(status.GetSnapshot().PackagesUpdated, Is.Zero);
+            Assert.Equal(originalHead, newHead);
+            Assert.Equal(1, status.GetSnapshot().PackagesUnchanged);
+            Assert.Equal(0, status.GetSnapshot().PackagesUpdated);
             // Watermark still advances so we don't refetch next cycle.
-            Assert.That(state.LastSyncedUpstreamHead, Is.EqualTo("sha-moved-but-same-content"));
+            Assert.Equal("sha-moved-but-same-content", state.LastSyncedUpstreamHead);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_skips_pkgbases_missing_from_mirror_and_records_in_status()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("ghost", "ghost"));
@@ -344,12 +344,12 @@ public class PackageRefreshWorkerTests
         var snapshot = status.GetSnapshot();
         Assert.Multiple(() =>
         {
-            Assert.That(snapshot.RefsSkipped, Is.EqualTo(1));
-            Assert.That(snapshot.PackagesUpdated, Is.EqualTo(1));
+            Assert.Equal(1, snapshot.RefsSkipped);
+            Assert.Equal(1, snapshot.PackagesUpdated);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_isolates_failed_refs_after_bisection_and_continues()
     {
         var store = IndexWithPackages(Meta("good", "good"), Meta("broken", "broken"));
@@ -382,14 +382,14 @@ public class PackageRefreshWorkerTests
         var goodNewHead = (await repo.GetHeadAsync("good"))!.HeadRevisionId;
         Assert.Multiple(() =>
         {
-            Assert.That(goodNewHead, Is.Not.EqualTo(goodOriginalHead));
-            Assert.That(status.GetSnapshot().PackagesUpdated, Is.EqualTo(1));
-            Assert.That(status.GetSnapshot().RefsFailed, Is.EqualTo(1));
-            Assert.That(status.GetSnapshot().PackagesSkipped, Is.EqualTo(1));
+            Assert.NotEqual(goodOriginalHead, goodNewHead);
+            Assert.Equal(1, status.GetSnapshot().PackagesUpdated);
+            Assert.Equal(1, status.GetSnapshot().RefsFailed);
+            Assert.Equal(1, status.GetSnapshot().PackagesSkipped);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_safety_sweep_includes_stale_packages_even_when_head_unchanged()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -420,10 +420,10 @@ public class PackageRefreshWorkerTests
             DateTimeOffset.UtcNow.AddHours(2),
             TimeSpan.FromHours(1));
 
-        Assert.That(candidates, Has.Count.EqualTo(1));
+        Assert.Single(candidates);
     }
 
-    [Test]
+    [Fact]
     public async Task SelectCandidates_marks_stale_but_unchanged_head_as_no_fetch()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -444,13 +444,13 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(candidates, Has.Count.EqualTo(1));
+            Assert.Single(candidates);
             // Head unchanged -> worker must advance watermark without fetching.
-            Assert.That(candidates[0].HeadUnchanged, Is.True);
+            Assert.True(candidates[0].HeadUnchanged);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_caps_candidates_per_run()
     {
         var store = IndexWithPackages(Meta("a", "a"), Meta("b", "b"), Meta("c", "c"));
@@ -487,12 +487,12 @@ public class PackageRefreshWorkerTests
         Assert.Multiple(() =>
         {
             // Only two of the three pkgbases selected.
-            Assert.That(mirror.FetchedBatches.Sum(b => b.Count), Is.EqualTo(2));
-            Assert.That(status.GetSnapshot().CandidatePackages, Is.EqualTo(2));
+            Assert.Equal(2, mirror.FetchedBatches.Sum(b => b.Count));
+            Assert.Equal(2, status.GetSnapshot().CandidatePackages);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_refreshes_many_changed_pkgbases_across_batches()
     {
         var metas = Enumerable.Range(0, 25)
@@ -525,15 +525,15 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(outcome, Is.EqualTo(RefreshCycleOutcome.Completed));
-            Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(3));
-            Assert.That(status.GetSnapshot().PackagesUpdated, Is.EqualTo(25));
-            Assert.That(status.GetSnapshot().PackagesUnchanged, Is.Zero);
-            Assert.That(status.GetSnapshot().PackagesSkipped, Is.Zero);
+            Assert.Equal(RefreshCycleOutcome.Completed, outcome);
+            Assert.Equal(3, mirror.FetchedBatches.Count);
+            Assert.Equal(25, status.GetSnapshot().PackagesUpdated);
+            Assert.Equal(0, status.GetSnapshot().PackagesUnchanged);
+            Assert.Equal(0, status.GetSnapshot().PackagesSkipped);
         });
     }
 
-    [Test]
+    [Fact]
     public void RefreshPlan_ResolvePackageBase_falls_back_to_stored_upstream_base()
     {
         // Package not in the index but has a persisted upstream pkgbase.
@@ -546,10 +546,10 @@ public class PackageRefreshWorkerTests
 
         var grouped = RefreshPlan.GroupByPackageBase([state], index);
 
-        Assert.That(grouped.Keys.Single(), Is.EqualTo("orphan-base"));
+        Assert.Equal("orphan-base", grouped.Keys.Single());
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_records_exclusion_when_revision_snapshot_too_large()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -601,21 +601,21 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(docAfterFirstCycle!.HeadRevisionId, Is.EqualTo(originalHead));
-            Assert.That(excludedBases, Does.Contain("shelly"));
-            Assert.That(docAfterFirstCycle.LastSyncError, Is.Not.Null);
-            Assert.That(docAfterFirstCycle.LastSyncError, Does.Contain("exceeds"));
-            Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(1));
+            Assert.Equal(originalHead, docAfterFirstCycle!.HeadRevisionId);
+            Assert.Contains("shelly", excludedBases);
+            Assert.NotNull(docAfterFirstCycle.LastSyncError);
+            Assert.Contains("exceeds", docAfterFirstCycle.LastSyncError);
+            Assert.Single(mirror.FetchedBatches);
         });
 
         // The excluded pkgbase is removed from the candidate set before any fetch,
         // so a second cycle must not fetch it again.
         await worker.RunCycleAsync(CancellationToken.None);
 
-        Assert.That(mirror.FetchedBatches, Has.Count.EqualTo(1));
+        Assert.Single(mirror.FetchedBatches);
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_skips_pkgbases_with_document_too_large_exclusion_without_fetching()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
@@ -650,8 +650,8 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(mirror.FetchedBatches, Is.Empty);
-            Assert.That(newHead, Is.EqualTo(originalHead));
+            Assert.Empty(mirror.FetchedBatches);
+            Assert.Equal(originalHead, newHead);
         });
     }
 

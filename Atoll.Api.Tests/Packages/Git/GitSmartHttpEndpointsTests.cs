@@ -5,12 +5,12 @@ using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.DependencyInjection;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Packages.Git;
 
-[Category("RequiresGit")]
-public class GitSmartHttpEndpointsTests
+[Trait("Category", "RequiresGit")]
+public class GitSmartHttpEndpointsTests : IDisposable
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
         new Dictionary<string, string>
@@ -19,10 +19,10 @@ public class GitSmartHttpEndpointsTests
             [".SRCINFO"] = "pkgname = shelly\n"
         };
 
-    private HttpClient _client = null!;
+    private readonly HttpClient _client;
 
-    private GitTestFactory _factory = null!;
-    private PackageService _packages = null!;
+    private readonly GitTestFactory _factory;
+    private readonly PackageService _packages;
 
     private static bool GitIsAvailable()
     {
@@ -30,72 +30,69 @@ public class GitSmartHttpEndpointsTests
         return exitCode == 0;
     }
 
-    [SetUp]
-    public void SetUp()
+    public GitSmartHttpEndpointsTests()
     {
-        Assume.That(GitIsAvailable(), "git binary is required for these tests");
+        Assert.SkipUnless(GitIsAvailable(), "git binary is required for these tests");
         _factory = new GitTestFactory();
         _client = _factory.CreateClient();
         _packages = (PackageService)_factory.Services.GetRequiredService<IPackageService>();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
     }
 
-    [Test]
+    [Fact]
     public async Task InfoRefs_unknown_package_returns_404()
     {
         var response = await _client.GetAsync("/packages/missing.git/info/refs?service=git-upload-pack");
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task InfoRefs_rejects_non_upload_pack_service_with_403()
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 
         var response = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-receive-pack");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task InfoRefs_returns_advertisement_with_expected_headers()
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 
         var response = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-upload-pack");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(response.Content.Headers.ContentType?.MediaType,
-            Is.EqualTo("application/x-git-upload-pack-advertisement"));
-        Assert.That(response.Headers.CacheControl?.NoCache, Is.True,
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/x-git-upload-pack-advertisement",
+            response.Content.Headers.ContentType?.MediaType);
+        Assert.True(response.Headers.CacheControl?.NoCache,
             "Cache-Control: no-cache expected");
 
         var body = await response.Content.ReadAsByteArrayAsync();
         var text = Encoding.ASCII.GetString(body);
-        Assert.That(text, Does.StartWith("001e# service=git-upload-pack\n"),
-            "expected pkt-line service prelude");
-        Assert.That(text, Does.Contain("refs/heads/main"));
+        Assert.StartsWith("001e# service=git-upload-pack\n", text);
+        Assert.Contains("refs/heads/main", text);
     }
 
-    [Test]
+    [Fact]
     public async Task RootInfoRefs_resolves_a_split_package_base_to_a_seeded_package()
     {
         await _packages.SeedFilesAsync("shelly-bin", SampleFiles);
 
         var response = await _client.GetAsync("/shelly.git/info/refs?service=git-upload-pack");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = Encoding.ASCII.GetString(await response.Content.ReadAsByteArrayAsync());
-        Assert.That(body, Does.Contain("refs/heads/main"));
+        Assert.Contains("refs/heads/main", body);
     }
 
-    [Test]
+    [Fact]
     public async Task UploadPack_unknown_package_returns_404()
     {
         using var content = new ByteArrayContent([]);
@@ -103,10 +100,10 @@ public class GitSmartHttpEndpointsTests
 
         var response = await _client.PostAsync("/packages/missing.git/git-upload-pack", content);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task UploadPack_stateless_request_returns_result_content_type()
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
@@ -114,7 +111,7 @@ public class GitSmartHttpEndpointsTests
         var adv = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-upload-pack");
         var advBody = Encoding.ASCII.GetString(await adv.Content.ReadAsByteArrayAsync());
         var sha = ExtractHeadSha(advBody);
-        Assert.That(sha, Is.Not.Null, "could not extract advertised HEAD sha");
+        Assert.NotNull(sha);
 
         var requestBody = EncodePacketLine($"want {sha}\n") + "0000" + EncodePacketLine("done\n");
         using var content = new ByteArrayContent(Encoding.ASCII.GetBytes(requestBody));
@@ -122,12 +119,12 @@ public class GitSmartHttpEndpointsTests
 
         var response = await _client.PostAsync("/packages/shelly.git/git-upload-pack", content);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("application/x-git-upload-pack-result"));
-        Assert.That(response.Headers.CacheControl?.NoCache, Is.True);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/x-git-upload-pack-result", response.Content.Headers.ContentType?.MediaType);
+        Assert.True(response.Headers.CacheControl?.NoCache);
 
         var body = await response.Content.ReadAsByteArrayAsync();
-        Assert.That(body.Length, Is.GreaterThan(0));
+        Assert.True(body.Length > 0);
     }
 
     private static string EncodePacketLine(string line)

@@ -1,13 +1,12 @@
-using NUnit.Framework;
 using Testcontainers.MongoDb;
+using Xunit;
 
-// Kept in the root namespace (not Support) because NUnit [SetUpFixture] only applies to the
-// containing namespace and its descendants, and the Mongo tests span Search/, Packages/, Endpoints/.
+// Root namespace (not Support) because the Mongo tests span Packages/, Security/, Catalog/, and Endpoints/
+// and reach this fixture unqualified.
 // ReSharper disable once CheckNamespace
 namespace Atoll.Api.Tests;
 
-[SetUpFixture]
-public sealed class MongoFixture
+public sealed class MongoFixture : IAsyncLifetime
 {
     private static MongoDbContainer? Container { get; set; }
 
@@ -18,8 +17,7 @@ public sealed class MongoFixture
     public static string ConnectionString =>
         Container?.GetConnectionString() ?? throw new InvalidOperationException("Mongo container is unavailable.");
 
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
+    public async ValueTask InitializeAsync()
     {
         try
         {
@@ -36,8 +34,7 @@ public sealed class MongoFixture
         }
     }
 
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
+    public async ValueTask DisposeAsync()
     {
         if (Container is not null)
             await Container.DisposeAsync();

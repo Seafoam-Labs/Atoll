@@ -6,13 +6,13 @@ using System.Text.Json;
 using Atoll.Api.Services.Catalog.Refresh;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Catalog.Refresh;
 
 public class AurMetadataClientTests
 {
-    [Test]
+    [Fact]
     public async Task FetchAsync_returns_NotModified_on_304()
     {
         var handler = new ControlHandler(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
@@ -20,10 +20,10 @@ public class AurMetadataClientTests
 
         var result = await client.FetchAsync(null, null, CancellationToken.None);
 
-        Assert.That(result, Is.InstanceOf<AurMetadataResult.NotModified>());
+        Assert.IsAssignableFrom<AurMetadataResult.NotModified>(result);
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_returns_snapshot_with_packages_and_validators()
     {
         var etag = new EntityTagHeaderValue("\"v1\"");
@@ -34,17 +34,17 @@ public class AurMetadataClientTests
 
         var result = await client.FetchAsync(null, null, CancellationToken.None);
 
-        Assert.That(result, Is.InstanceOf<AurMetadataResult.Snapshot>());
+        Assert.IsAssignableFrom<AurMetadataResult.Snapshot>(result);
         var snapshot = (AurMetadataResult.Snapshot)result;
         Assert.Multiple(() =>
         {
-            Assert.That(snapshot.Packages.Select(p => p.Name), Is.EquivalentTo(["demo"]));
-            Assert.That(snapshot.ETag, Is.EqualTo(etag));
-            Assert.That(snapshot.LastModified, Is.EqualTo(lastModified));
+            Assert.Equivalent(new[] { "demo" }, snapshot.Packages.Select(p => p.Name), strict: true);
+            Assert.Equal(etag, snapshot.ETag);
+            Assert.Equal(lastModified, snapshot.LastModified);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_sends_conditional_headers_for_retained_validators()
     {
         var etag = new EntityTagHeaderValue("\"v1\"");
@@ -56,37 +56,37 @@ public class AurMetadataClientTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(handler.LastRequest!.Headers.IfNoneMatch.Select(t => t.Tag), Is.EquivalentTo([etag.Tag]));
-            Assert.That(handler.LastRequest.Headers.IfModifiedSince, Is.EqualTo(lastModified));
+            Assert.Equivalent(new[] { etag.Tag }, handler.LastRequest!.Headers.IfNoneMatch.Select(t => t.Tag), strict: true);
+            Assert.Equal(lastModified, handler.LastRequest.Headers.IfModifiedSince);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_rejects_malformed_non_array_dump()
     {
         var handler = new ControlHandler(_ => Ok("not-json", new EntityTagHeaderValue("\"v1\""), DateTimeOffset.UtcNow));
         var client = Client(handler);
 
-        await Assert.ThatAsync(() => client.FetchAsync(null, null, CancellationToken.None), Throws.InstanceOf<JsonException>());
+        await Assert.ThrowsAnyAsync<JsonException>(() => client.FetchAsync(null, null, CancellationToken.None));
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_rejects_well_formed_but_empty_dump()
     {
         var handler = new ControlHandler(_ => Ok("[]", new EntityTagHeaderValue("\"v1\""), DateTimeOffset.UtcNow));
         var client = Client(handler);
 
-        Assert.ThrowsAsync<InvalidDataException>(() => client.FetchAsync(null, null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => client.FetchAsync(null, null, CancellationToken.None));
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_honors_cancellation()
     {
         var handler = new CancellationHandler();
         var client = Client(handler);
         using var cts = new CancellationTokenSource(0);
 
-        await Assert.ThatAsync(() => client.FetchAsync(null, null, cts.Token), Throws.InstanceOf<OperationCanceledException>());
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.FetchAsync(null, null, cts.Token));
     }
 
     private static AurMetadataClient Client(HttpMessageHandler handler)

@@ -7,7 +7,7 @@ using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Sync.Direct;
 
@@ -61,7 +61,7 @@ public class DirectPackageSeederTests
         return (seeder, source, repo);
     }
 
-    [Test]
+    [Fact]
     public async Task SeedAsync_fetches_resolved_pkgbase_and_persists_files()
     {
         // Split packages have pkgname != pkgbase; the clone source must see the base.
@@ -77,28 +77,28 @@ public class DirectPackageSeederTests
         var persisted = await repo.GetRevisionAsync("libfoo", (await repo.GetHeadAsync("libfoo"))!.HeadRevisionId);
         Assert.Multiple(() =>
         {
-            Assert.That(source.FetchedBases, Is.EqualTo(["foo"]));
-            Assert.That(persisted!.Files.Keys, Is.EquivalentTo(BaseFiles.Keys));
+            Assert.Equal(new[] { "foo" }, source.FetchedBases);
+            Assert.Equivalent(BaseFiles.Keys, persisted!.Files.Keys, strict: true);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task SeedAsync_throws_conflict_without_fetching_when_package_exists()
     {
         var (seeder, source, repo) = CreateSeeder();
 
         await seeder.SeedAsync("shelly");
-        Assert.ThrowsAsync<PackageConflictException>(async () => await seeder.SeedAsync("shelly"));
+        await Assert.ThrowsAsync<PackageConflictException>(async () => await seeder.SeedAsync("shelly"));
         var packageCount = await repo.CountAsync();
 
         Assert.Multiple(() =>
         {
-            Assert.That(source.FetchedBases, Is.EqualTo(["shelly"]), "the first seed fetches once");
-            Assert.That(packageCount, Is.EqualTo(1), "the conflicting seed must not fetch or persist");
+            Assert.Equal(new[] { "shelly" }, source.FetchedBases);
+            Assert.Equal(1, packageCount);
         });
     }
 
-    [Test]
+    [Fact]
     public void ResolvePackageBase_split_package_returns_pkgbase_not_pkgname()
     {
         // Split packages (e.g. "libfoo" / "libfoo-devel" under base "foo") have
@@ -113,12 +113,12 @@ public class DirectPackageSeederTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(seeder.ResolvePackageBase("libfoo"), Is.EqualTo("foo"));
-            Assert.That(seeder.ResolvePackageBase("libfoo-devel"), Is.EqualTo("foo"));
+            Assert.Equal("foo", seeder.ResolvePackageBase("libfoo"));
+            Assert.Equal("foo", seeder.ResolvePackageBase("libfoo-devel"));
         });
     }
 
-    [Test]
+    [Fact]
     public void ResolvePackageBase_non_split_package_returns_pkgname()
     {
         var store = new PackageIndexStore();
@@ -128,10 +128,10 @@ public class DirectPackageSeederTests
 
         var (seeder, _, _) = CreateSeeder(store);
 
-        Assert.That(seeder.ResolvePackageBase("shelly"), Is.EqualTo("shelly"));
+        Assert.Equal("shelly", seeder.ResolvePackageBase("shelly"));
     }
 
-    [Test]
+    [Fact]
     public void ResolvePackageBase_unknown_package_falls_back_to_pkgname()
     {
         // Cold start or stale index: fall back to pkgname so non-split packages
@@ -139,6 +139,6 @@ public class DirectPackageSeederTests
         // the pre-fix behavior and surfaces the missing index entry in logs.
         var (seeder, _, _) = CreateSeeder(new PackageIndexStore());
 
-        Assert.That(seeder.ResolvePackageBase("anything"), Is.EqualTo("anything"));
+        Assert.Equal("anything", seeder.ResolvePackageBase("anything"));
     }
 }

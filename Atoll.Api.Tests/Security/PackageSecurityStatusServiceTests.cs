@@ -3,19 +3,18 @@ using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Security;
 
 public class PackageSecurityStatusServiceTests
 {
-    private InMemoryPackageRepository _packages = null!;
-    private InMemoryPackageSecurityRepository _security = null!;
-    private PackageSecurityStatusService _service = null!;
-    private int _policyVersion;
+    private readonly InMemoryPackageRepository _packages;
+    private readonly InMemoryPackageSecurityRepository _security;
+    private readonly PackageSecurityStatusService _service;
+    private readonly int _policyVersion;
 
-    [SetUp]
-    public void SetUp()
+    public PackageSecurityStatusServiceTests()
     {
         _packages = new InMemoryPackageRepository();
         _security = new InMemoryPackageSecurityRepository();
@@ -65,13 +64,13 @@ public class PackageSecurityStatusServiceTests
         await _security.MarkPendingAsync(package, revision, isHead, _policyVersion);
     }
 
-    [Test]
+    [Fact]
     public async Task GetHistoryAsync_unknown_package_returns_null()
     {
-        Assert.That(await _service.GetHistoryAsync("missing"), Is.Null);
+        Assert.Null(await _service.GetHistoryAsync("missing"));
     }
 
-    [Test]
+    [Fact]
     public async Task GetHistoryAsync_lists_head_first_then_newest_scan()
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2", "rev-3");
@@ -87,40 +86,39 @@ public class PackageSecurityStatusServiceTests
 
         var history = await _service.GetHistoryAsync("pkg");
 
-        Assert.That(history, Is.Not.Null);
+        Assert.NotNull(history);
         var tail = history!.Revisions.Skip(1).Select(r => r.ScannedAt!.Value).ToArray();
 
-        Assert.That(history.Revisions.Select(r => r.RevisionId),
-            Is.EquivalentTo(new[] { "rev-1", "rev-2", "rev-3" }));
+        Assert.Equivalent(new[] { "rev-1", "rev-2", "rev-3" },
+            history.Revisions.Select(r => r.RevisionId), strict: true);
         Assert.Multiple(() =>
         {
-            Assert.That(history.HeadRevisionId, Is.EqualTo("rev-1"));
-            Assert.That(history.Revisions[0].RevisionId, Is.EqualTo("rev-1"));
-            Assert.That(history.Revisions[0].IsHead, Is.True);
-            Assert.That(history.Revisions[0].Status, Is.EqualTo("Verified"));
-            Assert.That(history.Revisions[0].FindingCount, Is.Zero);
-            Assert.That(history.Revisions[1].RevisionId, Is.EqualTo("rev-3"), "newest scan follows the head");
-            Assert.That(history.Revisions[1].FindingCount, Is.EqualTo(1));
-            Assert.That(tail, Is.EqualTo(tail.OrderByDescending(d => d)),
-                "non-head revisions are ordered newest scan first");
+            Assert.Equal("rev-1", history.HeadRevisionId);
+            Assert.Equal("rev-1", history.Revisions[0].RevisionId);
+            Assert.True(history.Revisions[0].IsHead);
+            Assert.Equal("Verified", history.Revisions[0].Status);
+            Assert.Equal(0, history.Revisions[0].FindingCount);
+            Assert.Equal("rev-3", history.Revisions[1].RevisionId);
+            Assert.Equal(1, history.Revisions[1].FindingCount);
+            Assert.Equal(tail.OrderByDescending(d => d), tail);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetRevisionAsync_unknown_package_returns_null()
     {
-        Assert.That(await _service.GetRevisionAsync("missing", "rev-1"), Is.Null);
+        Assert.Null(await _service.GetRevisionAsync("missing", "rev-1"));
     }
 
-    [Test]
+    [Fact]
     public async Task GetRevisionAsync_unknown_revision_returns_null()
     {
         await SeedAsync("pkg", "rev-1", "rev-1");
 
-        Assert.That(await _service.GetRevisionAsync("pkg", "rev-99"), Is.Null);
+        Assert.Null(await _service.GetRevisionAsync("pkg", "rev-99"));
     }
 
-    [Test]
+    [Fact]
     public async Task GetRevisionAsync_reports_unscanned_revision_as_pending()
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
@@ -130,32 +128,32 @@ public class PackageSecurityStatusServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(head, Is.Not.Null);
-            Assert.That(older, Is.Not.Null);
-            Assert.That(head!.Status, Is.EqualTo("Pending"));
-            Assert.That(head.IsHead, Is.True);
-            Assert.That(head.ScannedAt, Is.Null);
-            Assert.That(head.FindingCount, Is.Zero);
-            Assert.That(older!.IsHead, Is.False);
+            Assert.NotNull(head);
+            Assert.NotNull(older);
+            Assert.Equal("Pending", head!.Status);
+            Assert.True(head.IsHead);
+            Assert.Null(head.ScannedAt);
+            Assert.Equal(0, head.FindingCount);
+            Assert.False(older!.IsHead);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task QueueRescanAsync_unknown_package_returns_null()
     {
-        Assert.That(await _service.QueueRescanAsync("missing"), Is.Null);
+        Assert.Null(await _service.QueueRescanAsync("missing"));
     }
 
-    [Test]
+    [Fact]
     public async Task QueueRescanAsync_unknown_revision_returns_null()
     {
         await SeedAsync("pkg", "rev-1", "rev-1");
 
-        Assert.That(await _service.QueueRescanAsync("pkg", "rev-99"), Is.Null);
-        Assert.That(await _security.GetHeadAsync("pkg"), Is.Null, "nothing is queued for an unknown revision");
+        Assert.Null(await _service.QueueRescanAsync("pkg", "rev-99"));
+        Assert.Null(await _security.GetHeadAsync("pkg"));
     }
 
-    [Test]
+    [Fact]
     public async Task QueueRescanAsync_defaults_to_the_head_revision()
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
@@ -165,30 +163,30 @@ public class PackageSecurityStatusServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(queued, Is.EqualTo("rev-1"));
-            Assert.That(scan, Is.Not.Null);
-            Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(scan.IsHead, Is.True);
-            Assert.That(scan.RequiredPolicyVersion, Is.EqualTo(_policyVersion));
+            Assert.Equal("rev-1", queued);
+            Assert.NotNull(scan);
+            Assert.Equal(SecurityStatus.Pending, scan!.Status);
+            Assert.True(scan.IsHead);
+            Assert.Equal(_policyVersion, scan.RequiredPolicyVersion);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task QueueRescanAsync_requeues_an_already_verified_revision_as_pending()
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
         await QueueAsync("pkg", "rev-2", false);
         await _security.CompleteScanAsync("pkg", SecurityStatus.Verified);
-        Assert.That((await _security.GetAsync("pkg", "rev-2"))!.Status, Is.EqualTo(SecurityStatus.Verified));
+        Assert.Equal(SecurityStatus.Verified, (await _security.GetAsync("pkg", "rev-2"))!.Status);
 
         var queued = await _service.QueueRescanAsync("pkg", "rev-2");
         var scan = await _security.GetAsync("pkg", "rev-2");
 
         Assert.Multiple(() =>
         {
-            Assert.That(queued, Is.EqualTo("rev-2"));
-            Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(scan.IsHead, Is.False, "a non-head revision keeps its head flag");
+            Assert.Equal("rev-2", queued);
+            Assert.Equal(SecurityStatus.Pending, scan!.Status);
+            Assert.False(scan.IsHead, "a non-head revision keeps its head flag");
         });
     }
 }

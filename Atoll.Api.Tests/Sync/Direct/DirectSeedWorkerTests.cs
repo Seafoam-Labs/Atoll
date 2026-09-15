@@ -4,7 +4,7 @@ using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Sync.Direct;
@@ -160,7 +160,7 @@ public class DirectSeedWorkerTests
             NullLogger<DirectSeedWorker>.Instance);
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_skips_when_index_is_empty()
     {
         var status = new DirectSeedStatusStore(enabled: true);
@@ -172,12 +172,12 @@ public class DirectSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Outcome, Is.EqualTo(DirectSeedCycleOutcome.IndexEmpty));
-            Assert.That(snapshot.CyclesStarted, Is.Zero);
+            Assert.Equal(DirectSeedCycleOutcome.IndexEmpty, result.Outcome);
+            Assert.Equal(0, snapshot.CyclesStarted);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_skips_when_nothing_is_missing()
     {
         var status = new DirectSeedStatusStore(enabled: true);
@@ -188,13 +188,13 @@ public class DirectSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Outcome, Is.EqualTo(DirectSeedCycleOutcome.NothingMissing));
-            Assert.That(service.SeedCalls, Is.Empty);
-            Assert.That(status.GetSnapshot().CyclesStarted, Is.Zero);
+            Assert.Equal(DirectSeedCycleOutcome.NothingMissing, result.Outcome);
+            Assert.Empty(service.SeedCalls);
+            Assert.Equal(0, status.GetSnapshot().CyclesStarted);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_seeds_missing_and_records_status()
     {
         var status = new DirectSeedStatusStore(enabled: true);
@@ -211,21 +211,21 @@ public class DirectSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Outcome, Is.EqualTo(DirectSeedCycleOutcome.Completed));
-            Assert.That(result.Seeded, Is.EqualTo(2));
-            Assert.That(service.SeedCalls, Is.EquivalentTo(["one", "two"]));
-            Assert.That(snapshot.CyclesStarted, Is.EqualTo(1));
-            Assert.That(snapshot.CyclesCompleted, Is.EqualTo(1));
-            Assert.That(snapshot.Candidates, Is.EqualTo(2));
-            Assert.That(snapshot.Seeded, Is.EqualTo(2));
-            Assert.That(snapshot.Failed, Is.Zero);
-            Assert.That(snapshot.AlreadyPresent, Is.Zero);
-            Assert.That(snapshot.LastStartedUtc, Is.Not.Null);
-            Assert.That(snapshot.LastFinishedUtc, Is.Not.Null);
+            Assert.Equal(DirectSeedCycleOutcome.Completed, result.Outcome);
+            Assert.Equal(2, result.Seeded);
+            Assert.Equivalent(new[] { "one", "two" }, service.SeedCalls, strict: true);
+            Assert.Equal(1, snapshot.CyclesStarted);
+            Assert.Equal(1, snapshot.CyclesCompleted);
+            Assert.Equal(2, snapshot.Candidates);
+            Assert.Equal(2, snapshot.Seeded);
+            Assert.Equal(0, snapshot.Failed);
+            Assert.Equal(0, snapshot.AlreadyPresent);
+            Assert.NotNull(snapshot.LastStartedUtc);
+            Assert.NotNull(snapshot.LastFinishedUtc);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_records_failures_without_stopping_the_cycle()
     {
         var status = new DirectSeedStatusStore(enabled: true);
@@ -240,16 +240,16 @@ public class DirectSeedWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Outcome, Is.EqualTo(DirectSeedCycleOutcome.Completed));
-            Assert.That(result.Seeded, Is.EqualTo(1));
-            Assert.That(service.SeedCalls, Is.EqualTo(["fine"]));
-            Assert.That(snapshot.Seeded, Is.EqualTo(1));
-            Assert.That(snapshot.Failed, Is.EqualTo(1));
-            Assert.That(snapshot.CyclesCompleted, Is.EqualTo(1));
+            Assert.Equal(DirectSeedCycleOutcome.Completed, result.Outcome);
+            Assert.Equal(1, result.Seeded);
+            Assert.Equal(new[] { "fine" }, service.SeedCalls);
+            Assert.Equal(1, snapshot.Seeded);
+            Assert.Equal(1, snapshot.Failed);
+            Assert.Equal(1, snapshot.CyclesCompleted);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task RunCycleAsync_ends_cycle_even_when_cancelled_midway()
     {
         var status = new DirectSeedStatusStore(enabled: true);
@@ -260,16 +260,16 @@ public class DirectSeedWorkerTests
         var worker = CreateWorker(
             IndexWithPackages(Meta("one"), Meta("two")), new FakePackageRepository([]), source, new FakeSeedService([]), status);
 
-        Assert.ThrowsAsync(Is.InstanceOf<OperationCanceledException>(),
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => worker.RunCycleAsync(TimeSpan.FromMilliseconds(1), cts.Token));
 
         // BeginCycle ran, EndCycle ran in finally: counters stay paired even on cancellation.
         var snapshot = status.GetSnapshot();
         Assert.Multiple(() =>
         {
-            Assert.That(snapshot.CyclesStarted, Is.EqualTo(1));
-            Assert.That(snapshot.CyclesCompleted, Is.EqualTo(1));
-            Assert.That(snapshot.Seeded, Is.EqualTo(1));
+            Assert.Equal(1, snapshot.CyclesStarted);
+            Assert.Equal(1, snapshot.CyclesCompleted);
+            Assert.Equal(1, snapshot.Seeded);
         });
     }
 }

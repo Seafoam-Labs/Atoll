@@ -1,6 +1,6 @@
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Security;
 
@@ -8,65 +8,65 @@ public abstract class PackageSecurityRepositoryContract
 {
     private protected abstract IPackageSecurityRepository CreateRepository();
 
-    [Test]
+    [Fact]
     public async Task CompleteScanAsync_stamps_policy_version_and_returns_true()
     {
         var repo = CreateRepository();
 
         await repo.MarkPendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 2);
         var claim = await repo.TryClaimPendingScanAsync("owner1", TimeSpan.FromMinutes(1), workerPolicyVersion: 2);
-        Assert.That(claim, Is.Not.Null);
+        Assert.NotNull(claim);
 
         var result = new ScanResult(SecurityStatus.Verified, []);
         var persisted = await repo.CompleteScanAsync("pkg", "rev-1", "owner1", result, policyVersion: 2);
 
         var scan = await repo.GetAsync("pkg", "rev-1");
-        Assert.That(persisted, Is.True);
-        Assert.That(scan, Is.Not.Null);
+        Assert.True(persisted);
+        Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
-            Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Verified));
-            Assert.That(scan.PolicyVersion, Is.EqualTo(2));
-            Assert.That(scan.RequiredPolicyVersion, Is.EqualTo(2), "requirement is retained after completion");
-            Assert.That(scan.ScannedAt, Is.Not.Null);
-            Assert.That(scan.LeaseOwner, Is.Null);
-            Assert.That(scan.LeaseUntil, Is.Null);
+            Assert.Equal(SecurityStatus.Verified, scan!.Status);
+            Assert.Equal(2, scan.PolicyVersion);
+            Assert.Equal(2, scan.RequiredPolicyVersion);
+            Assert.NotNull(scan.ScannedAt);
+            Assert.Null(scan.LeaseOwner);
+            Assert.Null(scan.LeaseUntil);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task MarkScanErrorAsync_stamps_policy_version_and_returns_true()
     {
         var repo = CreateRepository();
 
         await repo.MarkPendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 2);
         var claim = await repo.TryClaimPendingScanAsync("owner1", TimeSpan.FromMinutes(1), workerPolicyVersion: 2);
-        Assert.That(claim, Is.Not.Null);
+        Assert.NotNull(claim);
 
         var persisted = await repo.MarkScanErrorAsync("pkg", "rev-1", "owner1", policyVersion: 2);
 
         var scan = await repo.GetAsync("pkg", "rev-1");
-        Assert.That(persisted, Is.True);
-        Assert.That(scan, Is.Not.Null);
+        Assert.True(persisted);
+        Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
-            Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Error));
-            Assert.That(scan.PolicyVersion, Is.EqualTo(2));
-            Assert.That(scan.RequiredPolicyVersion, Is.EqualTo(2), "requirement is retained after error");
-            Assert.That(scan.ScannedAt, Is.Not.Null);
-            Assert.That(scan.LeaseOwner, Is.Null);
-            Assert.That(scan.LeaseUntil, Is.Null);
+            Assert.Equal(SecurityStatus.Error, scan!.Status);
+            Assert.Equal(2, scan.PolicyVersion);
+            Assert.Equal(2, scan.RequiredPolicyVersion);
+            Assert.NotNull(scan.ScannedAt);
+            Assert.Null(scan.LeaseOwner);
+            Assert.Null(scan.LeaseUntil);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task MarkPendingAsync_resets_policy_version_and_findings()
     {
         var repo = CreateRepository();
 
         await repo.MarkPendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 2);
         var claim = await repo.TryClaimPendingScanAsync("owner1", TimeSpan.FromMinutes(1), workerPolicyVersion: 2);
-        Assert.That(claim, Is.Not.Null);
+        Assert.NotNull(claim);
 
         var findings = new List<SecurityFinding>
         {
@@ -78,20 +78,20 @@ public abstract class PackageSecurityRepositoryContract
         await repo.MarkPendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 2);
 
         var scan = await repo.GetAsync("pkg", "rev-1");
-        Assert.That(scan, Is.Not.Null);
+        Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
-            Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(scan.PolicyVersion, Is.Null);
-            Assert.That(scan.RequiredPolicyVersion, Is.EqualTo(2), "requirement survives the reset");
-            Assert.That(scan.Findings, Is.Empty);
-            Assert.That(scan.ScannedAt, Is.Null);
-            Assert.That(scan.LeaseOwner, Is.Null);
-            Assert.That(scan.LeaseUntil, Is.Null);
+            Assert.Equal(SecurityStatus.Pending, scan!.Status);
+            Assert.Null(scan.PolicyVersion);
+            Assert.Equal(2, scan.RequiredPolicyVersion);
+            Assert.Empty(scan.Findings);
+            Assert.Null(scan.ScannedAt);
+            Assert.Null(scan.LeaseOwner);
+            Assert.Null(scan.LeaseUntil);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task MarkPendingAsync_cannot_lower_existing_requirement()
     {
         var repo = CreateRepository();
@@ -101,10 +101,10 @@ public abstract class PackageSecurityRepositoryContract
         await repo.MarkPendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 2);
 
         var scan = await repo.GetAsync("pkg", "rev-1");
-        Assert.That(scan!.RequiredPolicyVersion, Is.EqualTo(3));
+        Assert.Equal(3, scan!.RequiredPolicyVersion);
     }
 
-    [Test]
+    [Fact]
     public async Task EnsurePendingAsync_sets_requirement_on_insert_only()
     {
         var repo = CreateRepository();
@@ -113,12 +113,12 @@ public abstract class PackageSecurityRepositoryContract
         await repo.EnsurePendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 5);
 
         var scan = await repo.GetAsync("pkg", "rev-1");
-        Assert.That(scan, Is.Not.Null);
-        Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Pending));
-        Assert.That(scan.RequiredPolicyVersion, Is.EqualTo(2), "existing documents are left untouched");
+        Assert.NotNull(scan);
+        Assert.Equal(SecurityStatus.Pending, scan!.Status);
+        Assert.Equal(2, scan.RequiredPolicyVersion);
     }
 
-    [Test]
+    [Fact]
     public async Task Older_worker_cannot_claim_work_requiring_newer_policy()
     {
         var repo = CreateRepository();
@@ -126,35 +126,35 @@ public abstract class PackageSecurityRepositoryContract
         await repo.MarkPendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 3);
 
         var staleClaim = await repo.TryClaimPendingScanAsync("v2-worker", TimeSpan.FromMinutes(1), workerPolicyVersion: 2);
-        Assert.That(staleClaim, Is.Null, "a v2 worker must not claim work requiring v3");
+        Assert.Null(staleClaim);
 
         var claim = await repo.TryClaimPendingScanAsync("v3-worker", TimeSpan.FromMinutes(1), workerPolicyVersion: 3);
-        Assert.That(claim, Is.Not.Null);
+        Assert.NotNull(claim);
 
         var persisted = await repo.CompleteScanAsync(
             "pkg", "rev-1", "v3-worker", new ScanResult(SecurityStatus.Verified, []), policyVersion: 3);
-        Assert.That(persisted, Is.True);
+        Assert.True(persisted);
     }
 
-    [Test]
+    [Fact]
     public async Task Reconciliation_fences_in_flight_claim_from_older_worker()
     {
         var repo = CreateRepository();
 
         await repo.MarkPendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 2);
         var claim = await repo.TryClaimPendingScanAsync("v2-worker", TimeSpan.FromMinutes(10), workerPolicyVersion: 2);
-        Assert.That(claim, Is.Not.Null);
+        Assert.NotNull(claim);
 
         var requeued = await repo.RequeueOutdatedAsync(3);
-        Assert.That(requeued, Is.EqualTo(1));
+        Assert.Equal(1, requeued);
 
         var afterRaise = await repo.GetAsync("pkg", "rev-1");
         Assert.Multiple(() =>
         {
-            Assert.That(afterRaise!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(afterRaise.RequiredPolicyVersion, Is.EqualTo(3));
-            Assert.That(afterRaise.LeaseOwner, Is.Null, "the v2 lease is cleared so the requirement is enforced immediately");
-            Assert.That(afterRaise.LeaseUntil, Is.Null);
+            Assert.Equal(SecurityStatus.Pending, afterRaise!.Status);
+            Assert.Equal(3, afterRaise.RequiredPolicyVersion);
+            Assert.Null(afterRaise.LeaseOwner);
+            Assert.Null(afterRaise.LeaseUntil);
         });
 
         var completionRejected = await repo.CompleteScanAsync(
@@ -162,28 +162,28 @@ public abstract class PackageSecurityRepositoryContract
         var errorRejected = await repo.MarkScanErrorAsync("pkg", "rev-1", "v2-worker", policyVersion: 2);
         Assert.Multiple(() =>
         {
-            Assert.That(completionRejected, Is.False, "late v2 completion is rejected");
-            Assert.That(errorRejected, Is.False, "late v2 error is rejected");
+            Assert.False(completionRejected, "late v2 completion is rejected");
+            Assert.False(errorRejected, "late v2 error is rejected");
         });
 
         var stillPending = await repo.GetAsync("pkg", "rev-1");
-        Assert.That(stillPending!.Status, Is.EqualTo(SecurityStatus.Pending));
+        Assert.Equal(SecurityStatus.Pending, stillPending!.Status);
 
         var reclaimer = await repo.TryClaimPendingScanAsync("v3-worker", TimeSpan.FromMinutes(1), workerPolicyVersion: 3);
-        Assert.That(reclaimer, Is.Not.Null);
+        Assert.NotNull(reclaimer);
         var persisted = await repo.CompleteScanAsync(
             "pkg", "rev-1", "v3-worker", new ScanResult(SecurityStatus.Verified, []), policyVersion: 3);
-        Assert.That(persisted, Is.True);
+        Assert.True(persisted);
     }
 
-    [Test]
+    [Fact]
     public async Task Completion_and_error_are_rejected_after_lease_loss()
     {
         var repo = CreateRepository();
 
         await repo.MarkPendingAsync("pkg", "rev-1", true, requiredPolicyVersion: 2);
         var claim = await repo.TryClaimPendingScanAsync("owner1", TimeSpan.FromMinutes(1), workerPolicyVersion: 2);
-        Assert.That(claim, Is.Not.Null);
+        Assert.NotNull(claim);
 
         await repo.ReleaseScanClaimAsync("pkg", "rev-1", "owner1");
         var completion = await repo.CompleteScanAsync(
@@ -192,15 +192,15 @@ public abstract class PackageSecurityRepositoryContract
 
         Assert.Multiple(() =>
         {
-            Assert.That(completion, Is.False);
-            Assert.That(error, Is.False);
+            Assert.False(completion);
+            Assert.False(error);
         });
 
         var scan = await repo.GetAsync("pkg", "rev-1");
-        Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Pending));
+        Assert.Equal(SecurityStatus.Pending, scan!.Status);
     }
 
-    [Test]
+    [Fact]
     public async Task RequeueOutdatedAsync_requeues_older_versions_and_preserves_current_or_newer_versions()
     {
         var repo = CreateRepository();
@@ -235,43 +235,43 @@ public abstract class PackageSecurityRepositoryContract
 
         // Requeue outdated with current version 2
         var requeued = await repo.RequeueOutdatedAsync(2);
-        Assert.That(requeued, Is.EqualTo(4), "three completed outcomes plus one pending requirement are updated");
+        Assert.Equal(4, requeued);
 
         // Verify status resets
         var doc1 = await repo.GetAsync("legacy-verified", "rev-1");
-        Assert.That(doc1!.Status, Is.EqualTo(SecurityStatus.Pending));
-        Assert.That(doc1.PolicyVersion, Is.Null);
-        Assert.That(doc1.RequiredPolicyVersion, Is.EqualTo(2), "requeued work now requires the current policy");
-        Assert.That(doc1.ScannedAt, Is.Null);
+        Assert.Equal(SecurityStatus.Pending, doc1!.Status);
+        Assert.Null(doc1.PolicyVersion);
+        Assert.Equal(2, doc1.RequiredPolicyVersion);
+        Assert.Null(doc1.ScannedAt);
 
         var doc2 = await repo.GetAsync("legacy-flagged", "rev-1");
-        Assert.That(doc2!.Status, Is.EqualTo(SecurityStatus.Pending));
-        Assert.That(doc2.PolicyVersion, Is.Null);
-        Assert.That(doc2.Findings, Is.Empty);
+        Assert.Equal(SecurityStatus.Pending, doc2!.Status);
+        Assert.Null(doc2.PolicyVersion);
+        Assert.Empty(doc2.Findings);
 
         var doc3 = await repo.GetAsync("v1-error", "rev-1");
-        Assert.That(doc3!.Status, Is.EqualTo(SecurityStatus.Pending));
-        Assert.That(doc3.PolicyVersion, Is.Null);
-        Assert.That(doc3.IsHead, Is.False);
+        Assert.Equal(SecurityStatus.Pending, doc3!.Status);
+        Assert.Null(doc3.PolicyVersion);
+        Assert.False(doc3.IsHead);
 
         var doc6 = await repo.GetAsync("already-pending", "rev-1");
-        Assert.That(doc6!.Status, Is.EqualTo(SecurityStatus.Pending));
-        Assert.That(doc6.RequiredPolicyVersion, Is.EqualTo(2), "the pending requirement is raised in place");
+        Assert.Equal(SecurityStatus.Pending, doc6!.Status);
+        Assert.Equal(2, doc6.RequiredPolicyVersion);
 
         var doc4 = await repo.GetAsync("v2-verified", "rev-1");
-        Assert.That(doc4!.Status, Is.EqualTo(SecurityStatus.Verified));
-        Assert.That(doc4.PolicyVersion, Is.EqualTo(2));
+        Assert.Equal(SecurityStatus.Verified, doc4!.Status);
+        Assert.Equal(2, doc4.PolicyVersion);
 
         var doc5 = await repo.GetAsync("v3-verified", "rev-1");
-        Assert.That(doc5!.Status, Is.EqualTo(SecurityStatus.Verified));
-        Assert.That(doc5.PolicyVersion, Is.EqualTo(3));
+        Assert.Equal(SecurityStatus.Verified, doc5!.Status);
+        Assert.Equal(3, doc5.PolicyVersion);
 
         // Idempotency
         var requeuedAgain = await repo.RequeueOutdatedAsync(2);
-        Assert.That(requeuedAgain, Is.EqualTo(0));
+        Assert.Equal(0, requeuedAgain);
     }
 
-    [Test]
+    [Fact]
     public async Task RequeueOutdatedAsync_cannot_lower_newer_requirement()
     {
         var repo = CreateRepository();
@@ -284,17 +284,17 @@ public abstract class PackageSecurityRepositoryContract
         await repo.MarkPendingAsync("pending-v4", "rev-1", true, requiredPolicyVersion: 4);
 
         var requeued = await repo.RequeueOutdatedAsync(3);
-        Assert.That(requeued, Is.EqualTo(0));
+        Assert.Equal(0, requeued);
 
         var pending = await repo.GetAsync("pending-v4", "rev-1");
         var done = await repo.GetAsync("done-v4", "rev-1");
         Assert.Multiple(() =>
         {
-            Assert.That(pending!.RequiredPolicyVersion, Is.EqualTo(4));
-            Assert.That(pending.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(done!.RequiredPolicyVersion, Is.EqualTo(4));
-            Assert.That(done.Status, Is.EqualTo(SecurityStatus.Verified));
-            Assert.That(done.PolicyVersion, Is.EqualTo(4));
+            Assert.Equal(4, pending!.RequiredPolicyVersion);
+            Assert.Equal(SecurityStatus.Pending, pending.Status);
+            Assert.Equal(4, done!.RequiredPolicyVersion);
+            Assert.Equal(SecurityStatus.Verified, done.Status);
+            Assert.Equal(4, done.PolicyVersion);
         });
     }
 }

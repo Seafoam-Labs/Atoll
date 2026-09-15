@@ -1,6 +1,6 @@
 using Atoll.Api.Services.Sync.Mirror;
 using Microsoft.Extensions.Logging.Abstractions;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Sync.Mirror;
 
@@ -12,7 +12,7 @@ public class AurMirrorFetchTests
         return new FakeAurMirror(tempPath, badRefs);
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_empty_returns_empty_result()
     {
         var mirror = CreateMirror();
@@ -21,13 +21,13 @@ public class AurMirrorFetchTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Succeeded, Is.Empty);
-            Assert.That(result.Failed, Is.Empty);
-            Assert.That(mirror.AttemptedBatches, Is.Empty);
+            Assert.Empty(result.Succeeded);
+            Assert.Empty(result.Failed);
+            Assert.Empty(mirror.AttemptedBatches);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_all_refs_present_returns_all_succeeded()
     {
         var mirror = CreateMirror();
@@ -36,13 +36,13 @@ public class AurMirrorFetchTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Succeeded, Is.EquivalentTo(["alpha", "beta", "gamma"]));
-            Assert.That(result.Failed, Is.Empty);
-            Assert.That(mirror.AttemptedBatches, Has.Count.EqualTo(1));
+            Assert.Equivalent(new[] { "alpha", "beta", "gamma" }, result.Succeeded, strict: true);
+            Assert.Empty(result.Failed);
+            Assert.Single(mirror.AttemptedBatches);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_isolates_single_missing_ref_via_bisection()
     {
         var mirror = CreateMirror("charlie");
@@ -53,12 +53,12 @@ public class AurMirrorFetchTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Succeeded, Is.EquivalentTo(["alpha", "beta", "delta", "echo"]));
-            Assert.That(result.Failed, Is.EquivalentTo(["charlie"]));
+            Assert.Equivalent(new[] { "alpha", "beta", "delta", "echo" }, result.Succeeded, strict: true);
+            Assert.Equivalent(new[] { "charlie" }, result.Failed, strict: true);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_isolates_multiple_missing_refs()
     {
         var mirror = CreateMirror("beta", "delta");
@@ -69,12 +69,12 @@ public class AurMirrorFetchTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Succeeded, Is.EquivalentTo(["alpha", "gamma", "echo"]));
-            Assert.That(result.Failed, Is.EquivalentTo(["beta", "delta"]));
+            Assert.Equivalent(new[] { "alpha", "gamma", "echo" }, result.Succeeded, strict: true);
+            Assert.Equivalent(new[] { "beta", "delta" }, result.Failed, strict: true);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_single_bad_ref_reports_it_as_failed_without_infinite_loop()
     {
         var mirror = CreateMirror("only-bad");
@@ -83,12 +83,12 @@ public class AurMirrorFetchTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Succeeded, Is.Empty);
-            Assert.That(result.Failed, Is.EquivalentTo(["only-bad"]));
+            Assert.Empty(result.Succeeded);
+            Assert.Equivalent(new[] { "only-bad" }, result.Failed, strict: true);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_preserves_succeeded_refs_when_all_others_fail()
     {
         var mirror = CreateMirror("bad1", "bad2", "bad3");
@@ -99,8 +99,8 @@ public class AurMirrorFetchTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Succeeded, Is.EquivalentTo(["good1", "good2", "good3"]));
-            Assert.That(result.Failed, Is.EquivalentTo(["bad1", "bad2", "bad3"]));
+            Assert.Equivalent(new[] { "good1", "good2", "good3" }, result.Succeeded, strict: true);
+            Assert.Equivalent(new[] { "bad1", "bad2", "bad3" }, result.Failed, strict: true);
         });
     }
 

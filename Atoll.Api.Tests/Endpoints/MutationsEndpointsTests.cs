@@ -1,25 +1,23 @@
 using System.Net;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class MutationsEndpointsTests
+public class MutationsEndpointsTests : IDisposable
 {
-    private HttpClient _client = null!;
-    private SecurityTestFactory _factory = null!;
+    private readonly HttpClient _client;
+    private readonly SecurityTestFactory _factory;
 
-    [SetUp]
-    public void SetUp()
+    public MutationsEndpointsTests()
     {
         _factory = new SecurityTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
@@ -69,7 +67,7 @@ public class MutationsEndpointsTests
         await _factory.Repository.InsertSeedAsync(Doc(name), SeedRevision(name));
     }
 
-    [Test]
+    [Fact]
     public async Task Mutations_disabled_rejects_seed_with_403()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
@@ -77,10 +75,10 @@ public class MutationsEndpointsTests
 
         var response = await client.PostAsync("/v1/packages/no-such-package/seed", null);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Mutations_disabled_rejects_rescan_with_403()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
@@ -89,10 +87,10 @@ public class MutationsEndpointsTests
         // The mutation gate takes precedence over package lookup.
         var response = await client.PostAsync("/v1/packages/no-such-package/security/rescan", null);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Mutations_disabled_rejects_delete_with_403()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
@@ -102,13 +100,13 @@ public class MutationsEndpointsTests
 
         var response = await client.DeleteAsync("/v1/packages/pkg");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         // The gate runs before repo.DeleteAsync, so the package is not removed.
         var repo = await disabled.Repository.GetHeadAsync("pkg");
-        Assert.That(repo, Is.Not.Null);
+        Assert.NotNull(repo);
     }
 
-    [Test]
+    [Fact]
     public async Task Mutations_enabled_rescan_queues_head_pending()
     {
         await SeedPackageAsync();
@@ -117,14 +115,13 @@ public class MutationsEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Accepted));
-            Assert.That(response.Headers.Location?.OriginalString,
-                Is.EqualTo("/v1/packages/pkg/security?revision=rev-1"));
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            Assert.Equal("/v1/packages/pkg/security?revision=rev-1", response.Headers.Location?.OriginalString);
         });
 
         var scan = await _factory.SecurityRepository.GetHeadAsync("pkg");
-        Assert.That(scan, Is.Not.Null);
-        Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Pending));
-        Assert.That(scan.RevisionId, Is.EqualTo("rev-1"));
+        Assert.NotNull(scan);
+        Assert.Equal(SecurityStatus.Pending, scan!.Status);
+        Assert.Equal("rev-1", scan.RevisionId);
     }
 }

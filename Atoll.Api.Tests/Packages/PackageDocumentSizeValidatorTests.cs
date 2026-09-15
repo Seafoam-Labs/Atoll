@@ -1,6 +1,6 @@
 using Atoll.Api.Services.Packages;
 using MongoDB.Bson;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Packages;
@@ -9,17 +9,15 @@ public class PackageDocumentSizeValidatorTests
 {
     private const long Limit = PackageDocumentSizeValidator.MongoMaxDocumentSizeBytes;
 
-    [Test]
+    [Fact]
     public void Validate_accepts_document_with_conservative_estimate_below_limit()
     {
         var revision = Revision(("PKGBUILD", 200, "pkgname=shelly\n"));
 
-        Assert.That(
-            () => PackageDocumentSizeValidator.Validate("shelly", revision),
-            Throws.Nothing);
+        PackageDocumentSizeValidator.Validate("shelly", revision);
     }
 
-    [Test]
+    [Fact]
     public void Validate_accepts_when_estimate_exceeds_limit_but_exact_bson_fits()
     {
         // Declared sizes push the conservative estimate past 16 MiB while the actual
@@ -28,12 +26,10 @@ public class PackageDocumentSizeValidatorTests
             ("large-1.txt", 9_000_000, "x"),
             ("large-2.txt", 9_000_000, "y"));
 
-        Assert.That(
-            () => PackageDocumentSizeValidator.Validate("shelly", revision),
-            Throws.Nothing);
+        PackageDocumentSizeValidator.Validate("shelly", revision);
     }
 
-    [Test]
+    [Fact]
     public void Validate_at_exact_estimate_boundary_skips_exact_measurement()
     {
         // size + 1-byte name + 160 + 1024 == 16 MiB exactly: the estimate check is
@@ -41,12 +37,10 @@ public class PackageDocumentSizeValidatorTests
         var sizeAtBoundary = 16 * 1024 * 1024 - 1024 - 160 - 1;
         var revision = Revision(("a", sizeAtBoundary, "x"));
 
-        Assert.That(
-            () => PackageDocumentSizeValidator.Validate("shelly", revision),
-            Throws.Nothing);
+        PackageDocumentSizeValidator.Validate("shelly", revision);
     }
 
-    [Test]
+    [Fact]
     public void Validate_rejects_document_whose_exact_bson_exceeds_limit()
     {
         var revision = Revision(("huge.txt", 16 * 1024 * 1024, new string('a', 16 * 1024 * 1024)));
@@ -57,11 +51,12 @@ public class PackageDocumentSizeValidatorTests
         var exactSize = revision.ToBson().LongLength;
         Assert.Multiple(() =>
         {
-            Assert.That(ex.PackageName, Is.EqualTo("big"));
-            Assert.That(ex.SerializedSizeBytes, Is.EqualTo(exactSize));
-            Assert.That(ex.MaxDocumentSizeBytes, Is.EqualTo(Limit));
-            Assert.That(ex.Message, Is.EqualTo(
-                $"Package 'big' serializes to {exactSize} bytes, which exceeds MongoDB's {Limit}-byte document limit."));
+            Assert.Equal("big", ex.PackageName);
+            Assert.Equal(exactSize, ex.SerializedSizeBytes);
+            Assert.Equal(Limit, ex.MaxDocumentSizeBytes);
+            Assert.Equal(
+                $"Package 'big' serializes to {exactSize} bytes, which exceeds MongoDB's {Limit}-byte document limit.",
+                ex.Message);
         });
     }
 

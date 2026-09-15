@@ -5,23 +5,27 @@ using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Ui;
 
-public class PackageCatalogServiceTests
+public class PackageCatalogServiceTests : IAsyncLifetime
 {
     private PackageIndexStore _store = null!;
     private InMemoryPackageSecurityRepository _securityRepository = null!;
     private IReadOnlyList<string> _seededNames = [];
 
-    [SetUp]
-    public async Task SetUp()
+    public async ValueTask InitializeAsync()
     {
         _store = new PackageIndexStore();
         _store.Replace(await TestData.LoadSampleIndexesAsync());
         _securityRepository = new InMemoryPackageSecurityRepository();
         _seededNames = [];
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
     }
 
     private PackageCatalogService CreateService()
@@ -32,21 +36,21 @@ public class PackageCatalogServiceTests
             _securityRepository);
     }
 
-    [Test]
+    [Fact]
     public async Task EmptyQueryReturnsAllPackagesSortedByName()
     {
         var result = await CreateService().SearchAsync(
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.NameAsc);
 
-        Assert.That(result.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["portable-kit", "portable-pro", "shelly-bin"]));
-        Assert.That(result.TotalMatches, Is.EqualTo(3));
-        Assert.That(result.Page, Is.EqualTo(1));
-        Assert.That(result.TotalPages, Is.EqualTo(1));
+        Assert.Equal(["portable-kit", "portable-pro", "shelly-bin"],
+            result.Rows.Select(row => row.Package.Name));
+        Assert.Equal(3, result.TotalMatches);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(1, result.TotalPages);
     }
 
-    [Test]
+    [Fact]
     public async Task NameModeMatchesNameOrDescriptionCaseInsensitive()
     {
         var service = CreateService();
@@ -58,13 +62,13 @@ public class PackageCatalogServiceTests
             "emulator", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.NameAsc);
 
-        Assert.That(byName.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["portable-kit", "portable-pro"]));
-        Assert.That(byDescription.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["portable-pro"]));
+        Assert.Equal(["portable-kit", "portable-pro"],
+            byName.Rows.Select(row => row.Package.Name));
+        Assert.Equal(["portable-pro"],
+            byDescription.Rows.Select(row => row.Package.Name));
     }
 
-    [Test]
+    [Fact]
     public async Task WordsModeRequiresEveryTokenToMatch()
     {
         var service = CreateService();
@@ -76,13 +80,13 @@ public class PackageCatalogServiceTests
             "handheld emulator", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Words, CatalogSort.NameAsc);
 
-        Assert.That(single.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["shelly-bin"]));
-        Assert.That(combined.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["portable-pro"]));
+        Assert.Equal(["shelly-bin"],
+            single.Rows.Select(row => row.Package.Name));
+        Assert.Equal(["portable-pro"],
+            combined.Rows.Select(row => row.Package.Name));
     }
 
-    [Test]
+    [Fact]
     public async Task ProvidesModeMatchesProvidesValuesOnly()
     {
         var service = CreateService();
@@ -94,12 +98,12 @@ public class PackageCatalogServiceTests
             "kit", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Provides, CatalogSort.NameAsc);
 
-        Assert.That(hit.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["shelly-bin"]));
-        Assert.That(miss.Rows, Is.Empty);
+        Assert.Equal(["shelly-bin"],
+            hit.Rows.Select(row => row.Package.Name));
+        Assert.Empty(miss.Rows);
     }
 
-    [Test]
+    [Fact]
     public async Task SeededFilterNarrowsToSeededOrIndexOnlyRows()
     {
         _seededNames = ["shelly-bin"];
@@ -112,15 +116,15 @@ public class PackageCatalogServiceTests
             null, CatalogSeededFilter.IndexOnly, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.NameAsc);
 
-        Assert.That(seeded.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["shelly-bin"]));
-        Assert.That(seeded.Rows.Single().IsSeeded, Is.True);
-        Assert.That(indexOnly.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["portable-kit", "portable-pro"]));
-        Assert.That(indexOnly.Rows.All(row => !row.IsSeeded), Is.True);
+        Assert.Equal(["shelly-bin"],
+            seeded.Rows.Select(row => row.Package.Name));
+        Assert.True(seeded.Rows.Single().IsSeeded);
+        Assert.Equal(["portable-kit", "portable-pro"],
+            indexOnly.Rows.Select(row => row.Package.Name));
+        Assert.True(indexOnly.Rows.All(row => !row.IsSeeded));
     }
 
-    [Test]
+    [Fact]
     public async Task SecurityFilterNarrowsToSeededPackagesWithMatchingHeadStatus()
     {
         _seededNames = ["shelly-bin"];
@@ -133,10 +137,10 @@ public class PackageCatalogServiceTests
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified,
             CatalogSearchMode.Name, CatalogSort.NameAsc);
 
-        Assert.That(pending.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["shelly-bin"]));
-        Assert.That(pending.Rows.Single().Head!.Status, Is.EqualTo(SecurityStatus.Pending));
-        Assert.That(verifiedBefore.Rows, Is.Empty);
+        Assert.Equal(["shelly-bin"],
+            pending.Rows.Select(row => row.Package.Name));
+        Assert.Equal(SecurityStatus.Pending, pending.Rows.Single().Head!.Status);
+        Assert.Empty(verifiedBefore.Rows);
 
         await _securityRepository.TryClaimPendingScanAsync("owner", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
         await _securityRepository.CompleteScanAsync(
@@ -147,22 +151,22 @@ public class PackageCatalogServiceTests
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified,
             CatalogSearchMode.Name, CatalogSort.NameAsc);
 
-        Assert.That(verifiedAfter.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["shelly-bin"]));
+        Assert.Equal(["shelly-bin"],
+            verifiedAfter.Rows.Select(row => row.Package.Name));
     }
 
-    [Test]
+    [Fact]
     public async Task VotesDescendingSortOrdersByVotes()
     {
         var result = await CreateService().SearchAsync(
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.VotesDesc);
 
-        Assert.That(result.Rows.Select(row => row.Package.Name),
-            Is.EqualTo(["portable-pro", "shelly-bin", "portable-kit"]));
+        Assert.Equal(["portable-pro", "shelly-bin", "portable-kit"],
+            result.Rows.Select(row => row.Package.Name));
     }
 
-    [Test]
+    [Fact]
     public async Task NonNameSortsBreakTiesByNameForStablePaging()
     {
         // All packages share the same votes/popularity/mtime, so the name tie-break is the only
@@ -189,14 +193,14 @@ public class PackageCatalogServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(page1.Rows.Select(row => row.Package.Name),
-                Is.EqualTo(ExpectedNames(0, PackageCatalogService.PageSize)));
-            Assert.That(page2.Rows.Select(row => row.Package.Name),
-                Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize, 1)));
+            Assert.Equal(ExpectedNames(0, PackageCatalogService.PageSize),
+                page1.Rows.Select(row => row.Package.Name));
+            Assert.Equal(ExpectedNames(PackageCatalogService.PageSize, 1),
+                page2.Rows.Select(row => row.Package.Name));
         });
     }
 
-    [Test]
+    [Fact]
     public async Task ResultsArePaginatedInPageSizeChunk()
     {
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
@@ -227,23 +231,23 @@ public class PackageCatalogServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(page1.TotalMatches, Is.EqualTo(PackageCatalogService.PageSize * 2 + 1));
-            Assert.That(page1.TotalPages, Is.EqualTo(3));
-            Assert.That(page1.Page, Is.EqualTo(1));
-            Assert.That(page1.Rows.Select(row => row.Package.Name),
-                Is.EqualTo(ExpectedNames(0, PackageCatalogService.PageSize)));
-            Assert.That(page2.Rows.Select(row => row.Package.Name),
-                Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize, PackageCatalogService.PageSize)));
-            Assert.That(page3.Rows.Select(row => row.Package.Name),
-                Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize * 2, 1)));
+            Assert.Equal(PackageCatalogService.PageSize * 2 + 1, page1.TotalMatches);
+            Assert.Equal(3, page1.TotalPages);
+            Assert.Equal(1, page1.Page);
+            Assert.Equal(ExpectedNames(0, PackageCatalogService.PageSize),
+                page1.Rows.Select(row => row.Package.Name));
+            Assert.Equal(ExpectedNames(PackageCatalogService.PageSize, PackageCatalogService.PageSize),
+                page2.Rows.Select(row => row.Package.Name));
+            Assert.Equal(ExpectedNames(PackageCatalogService.PageSize * 2, 1),
+                page3.Rows.Select(row => row.Package.Name));
             // Pages past the end clamp to the last page so stale deep links land on real content.
-            Assert.That(page4.Page, Is.EqualTo(3));
-            Assert.That(page4.Rows.Select(row => row.Package.Name),
-                Is.EqualTo(ExpectedNames(PackageCatalogService.PageSize * 2, 1)));
+            Assert.Equal(3, page4.Page);
+            Assert.Equal(ExpectedNames(PackageCatalogService.PageSize * 2, 1),
+                page4.Rows.Select(row => row.Package.Name));
         });
     }
 
-    [Test]
+    [Fact]
     public async Task OutOfRangePagesAreClampedToFirstPage()
     {
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
@@ -259,11 +263,11 @@ public class PackageCatalogServiceTests
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.NameAsc, page: 0);
 
-        Assert.That(result.Page, Is.EqualTo(1));
-        Assert.That(result.Rows, Has.Count.EqualTo(1));
+        Assert.Equal(1, result.Page);
+        Assert.Single(result.Rows);
     }
 
-    [Test]
+    [Fact]
     public async Task SearchesReflectIndexReplacement()
     {
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
@@ -278,7 +282,7 @@ public class PackageCatalogServiceTests
         var before = await service.SearchAsync(
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.NameAsc);
-        Assert.That(before.Rows.Select(row => row.Package.Name), Is.EqualTo(["pkg-a"]));
+        Assert.Equal(["pkg-a"], before.Rows.Select(row => row.Package.Name));
 
         names["pkg-b"] = CreateMetadata("pkg-b");
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
@@ -286,7 +290,7 @@ public class PackageCatalogServiceTests
         var after = await service.SearchAsync(
             null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.NameAsc);
-        Assert.That(after.Rows.Select(row => row.Package.Name), Is.EqualTo(["pkg-a", "pkg-b"]));
+        Assert.Equal(["pkg-a", "pkg-b"], after.Rows.Select(row => row.Package.Name));
     }
 
     private static string[] ExpectedNames(int start, int count)

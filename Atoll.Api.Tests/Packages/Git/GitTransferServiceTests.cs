@@ -9,12 +9,12 @@ using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Packages.Git;
 
-[Category("RequiresGit")]
-public class GitTransferServiceTests
+[Trait("Category", "RequiresGit")]
+public class GitTransferServiceTests : IAsyncLifetime
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
         new Dictionary<string, string>
@@ -47,13 +47,17 @@ public class GitTransferServiceTests
         return (git, packages, cache, security, reposRoot);
     }
 
-    [SetUp]
-    public async Task SetUp()
+    public async ValueTask InitializeAsync()
     {
-        Assume.That(await GitIsAvailable(), "git binary is required for these tests");
+        Assert.SkipUnless(await GitIsAvailable(), "git binary is required for these tests");
     }
 
-    [Test]
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    [Fact]
     public async Task AdvertiseRefsAsync_unknown_package_returns_NotFound()
     {
         var (git, _, _, _, reposRoot) = CreateServices();
@@ -61,8 +65,8 @@ public class GitTransferServiceTests
         {
             using var output = new MemoryStream();
             var result = await git.AdvertiseRefsAsync("missing", output, CancellationToken.None);
-            Assert.That(result, Is.InstanceOf<GitTransferResult.NotFound>());
-            Assert.That(output.Length, Is.Zero);
+            Assert.IsAssignableFrom<GitTransferResult.NotFound>(result);
+            Assert.Equal(0, output.Length);
         }
         finally
         {
@@ -70,7 +74,7 @@ public class GitTransferServiceTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task UploadPackAsync_unknown_package_returns_NotFound()
     {
         var (git, _, _, _, reposRoot) = CreateServices();
@@ -79,7 +83,7 @@ public class GitTransferServiceTests
             using var input = new MemoryStream();
             using var output = new MemoryStream();
             var result = await git.UploadPackAsync("missing", input, output, CancellationToken.None);
-            Assert.That(result, Is.InstanceOf<GitTransferResult.NotFound>());
+            Assert.IsAssignableFrom<GitTransferResult.NotFound>(result);
         }
         finally
         {
@@ -87,7 +91,7 @@ public class GitTransferServiceTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task AdvertiseRefsAsync_writes_pkt_line_prelude_and_refs()
     {
         var (git, packages, cache, security, reposRoot) = CreateServices();
@@ -99,16 +103,15 @@ public class GitTransferServiceTests
             using var output = new MemoryStream();
             var result = await git.AdvertiseRefsAsync("shelly", output, CancellationToken.None);
 
-            Assert.That(result, Is.InstanceOf<GitTransferResult.Ok>());
+            Assert.IsAssignableFrom<GitTransferResult.Ok>(result);
 
             output.Position = 0;
             using var reader = new StreamReader(output, leaveOpen: false);
             var body = await reader.ReadToEndAsync();
 
-            Assert.That(body, Does.StartWith("001e# service=git-upload-pack\n"),
-                "expected service=git-upload-pack pkt-line prelude");
-            Assert.That(body, Does.Contain("HEAD"));
-            Assert.That(body, Does.Contain("refs/heads/main"));
+            Assert.StartsWith("001e# service=git-upload-pack\n", body);
+            Assert.Contains("HEAD", body);
+            Assert.Contains("refs/heads/main", body);
         }
         finally
         {
@@ -116,7 +119,7 @@ public class GitTransferServiceTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task UploadPackAsync_serves_a_full_clone_to_a_local_client()
     {
         var (git, packages, cache, security, reposRoot) = CreateServices();
@@ -137,8 +140,8 @@ public class GitTransferServiceTests
             foreach (var (name, content) in SampleFiles)
             {
                 var fullPath = Path.Combine(cloneDir, name);
-                Assert.That(File.Exists(fullPath), Is.True, $"missing {name}");
-                Assert.That(await File.ReadAllTextAsync(fullPath), Is.EqualTo(content));
+                Assert.True(File.Exists(fullPath), $"missing {name}");
+                Assert.Equal(content, await File.ReadAllTextAsync(fullPath));
             }
         }
         finally
@@ -148,7 +151,7 @@ public class GitTransferServiceTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task UploadPackAsync_stateless_rpc_responds_to_want_request()
     {
         var (git, packages, cache, security, reposRoot) = CreateServices();
@@ -162,15 +165,15 @@ public class GitTransferServiceTests
             adv.Position = 0;
             var advText = await new StreamReader(adv).ReadToEndAsync();
             var sha = ExtractHeadSha(advText);
-            Assert.That(sha, Is.Not.Null, "could not extract advertised HEAD sha");
+            Assert.NotNull(sha);
 
             var requestBody = EncodePacketLine($"want {sha}\n") + "0000" + EncodePacketLine("done\n");
             using var input = new MemoryStream(Encoding.ASCII.GetBytes(requestBody));
             using var output = new MemoryStream();
 
             var result = await git.UploadPackAsync("shelly", input, output, CancellationToken.None);
-            Assert.That(result, Is.InstanceOf<GitTransferResult.Ok>());
-            Assert.That(output.Length, Is.GreaterThan(0), "expected upload-pack response body");
+            Assert.IsAssignableFrom<GitTransferResult.Ok>(result);
+            Assert.True(output.Length > 0, "expected upload-pack response body");
         }
         finally
         {

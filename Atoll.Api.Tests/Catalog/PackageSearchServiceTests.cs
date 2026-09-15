@@ -1,13 +1,13 @@
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Catalog;
 
 public class PackageSearchServiceTests
 {
-    [Test]
+    [Fact]
     public async Task QueryByProvidesAndWordsMatchesExpectedPackages()
     {
         var store = new PackageIndexStore();
@@ -17,15 +17,15 @@ public class PackageSearchServiceTests
         var byProvides = query.FindByProvides(["shelly"]);
         var byWords = query.FindByWords(["handheld", "portable"]);
 
-        Assert.That(byProvides, Has.Length.EqualTo(1));
-        Assert.That(byProvides[0].Name, Is.EqualTo("shelly-bin"));
+        Assert.Single(byProvides);
+        Assert.Equal("shelly-bin", byProvides[0].Name);
 
-        Assert.That(byWords.Count, Is.EqualTo(2));
-        Assert.That(byWords[0].Name, Is.EqualTo("portable-pro"));
-        Assert.That(byWords[1].Name, Is.EqualTo("portable-kit"));
+        Assert.Equal(2, byWords.Count());
+        Assert.Equal("portable-pro", byWords[0].Name);
+        Assert.Equal("portable-kit", byWords[1].Name);
     }
 
-    [Test]
+    [Fact]
     public async Task QueryByNameIgnoresUnknownEntries()
     {
         var store = new PackageIndexStore();
@@ -34,7 +34,7 @@ public class PackageSearchServiceTests
 
         var result = query.FindByNames(["portable-kit", "not-real"]);
 
-        Assert.That(result, Has.Length.EqualTo(1));
-        Assert.That(result[0].Name, Is.EqualTo("portable-kit"));
+        Assert.Single(result);
+        Assert.Equal("portable-kit", result[0].Name);
     }
 }

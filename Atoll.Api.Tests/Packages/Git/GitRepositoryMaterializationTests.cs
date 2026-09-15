@@ -6,13 +6,13 @@ using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Packages.Git;
 
-[Category("RequiresGit")]
-public class GitRepositoryMaterializationTests
+[Trait("Category", "RequiresGit")]
+public class GitRepositoryMaterializationTests : IAsyncLifetime
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
         new Dictionary<string, string>
@@ -52,13 +52,17 @@ public class GitRepositoryMaterializationTests
         return (new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache), cache, security, reposRoot);
     }
 
-    [SetUp]
-    public async Task SetUp()
+    public async ValueTask InitializeAsync()
     {
-        Assume.That(await GitIsAvailable(), "git binary is required for these tests");
+        Assert.SkipUnless(await GitIsAvailable(), "git binary is required for these tests");
     }
 
-    [Test]
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    [Fact]
     public async Task EnsureRepositoryAsync_creates_bare_repo_with_main_branch()
     {
         var (service, cache, security, reposRoot) = CreateService();
@@ -69,13 +73,13 @@ public class GitRepositoryMaterializationTests
             await cache.EnsureRepositoryAsync("shelly");
 
             var gitDir = cache.GetRepositoryPath("shelly")!;
-            Assert.That(Directory.Exists(gitDir), Is.True);
-            Assert.That((await File.ReadAllTextAsync(Path.Combine(gitDir, "HEAD"))).Trim(),
-                Is.EqualTo("ref: refs/heads/main"));
+            Assert.True(Directory.Exists(gitDir));
+            Assert.Equal("ref: refs/heads/main",
+                (await File.ReadAllTextAsync(Path.Combine(gitDir, "HEAD"))).Trim());
 
             string[] args = ["rev-parse", "refs/heads/main"];
             var refSha = (await GitClient.ExecuteAsync(gitDir, args, null, null, CancellationToken.None)).Trim();
-            Assert.That(refSha, Has.Length.EqualTo(40));
+            Assert.Equal(40, refSha.Length);
         }
         finally
         {
@@ -83,7 +87,7 @@ public class GitRepositoryMaterializationTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task EnsureRepositoryAsync_is_idempotent_when_head_unchanged()
     {
         var (service, cache, security, reposRoot) = CreateService();
@@ -100,8 +104,7 @@ public class GitRepositoryMaterializationTests
             await cache.EnsureRepositoryAsync("shelly");
 
             var secondMarkerWrite = File.GetLastWriteTimeUtc(marker);
-            Assert.That(secondMarkerWrite, Is.EqualTo(firstMarkerWrite),
-                "marker file should not be rewritten when head revision is unchanged");
+            Assert.Equal(firstMarkerWrite, secondMarkerWrite);
         }
         finally
         {
@@ -109,7 +112,7 @@ public class GitRepositoryMaterializationTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task EnsureRepositoryAsync_produces_cloneable_repo_with_expected_files()
     {
         var (service, cache, security, reposRoot) = CreateService();
@@ -128,13 +131,13 @@ public class GitRepositoryMaterializationTests
             foreach (var (name, content) in SampleFiles)
             {
                 var fullPath = Path.Combine(cloneDir, name);
-                Assert.That(File.Exists(fullPath), Is.True, $"missing {name}");
-                Assert.That(await File.ReadAllTextAsync(fullPath), Is.EqualTo(content));
+                Assert.True(File.Exists(fullPath), $"missing {name}");
+                Assert.Equal(content, await File.ReadAllTextAsync(fullPath));
             }
 
             string[] args1 = ["rev-list", "--count", "HEAD"];
             var logCount = (await GitClient.ExecuteAsync(cloneDir, args1, null, null, CancellationToken.None)).Trim();
-            Assert.That(logCount, Is.EqualTo("1"));
+            Assert.Equal("1", logCount);
         }
         finally
         {
@@ -143,14 +146,13 @@ public class GitRepositoryMaterializationTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task EnsureRepositoryAsync_returns_silently_for_unknown_package()
     {
         var (_, cache, _, reposRoot) = CreateService();
         try
         {
-            Assert.DoesNotThrowAsync(async () =>
-                await cache.EnsureRepositoryAsync("does-not-exist"));
+            await cache.EnsureRepositoryAsync("does-not-exist");
         }
         finally
         {
@@ -158,7 +160,7 @@ public class GitRepositoryMaterializationTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task EnsureRepositoryAsync_returns_silently_when_no_path_configured()
     {
         var repo = new InMemoryPackageRepository();
@@ -173,12 +175,11 @@ public class GitRepositoryMaterializationTests
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 
-        Assert.DoesNotThrowAsync(async () =>
-            await cache.EnsureRepositoryAsync("shelly"));
-        Assert.That(cache.GetRepositoryPath("shelly"), Is.Null);
+        await cache.EnsureRepositoryAsync("shelly");
+        Assert.Null(cache.GetRepositoryPath("shelly"));
     }
 
-    [Test]
+    [Fact]
     public async Task Flagged_revision_is_excluded_from_git_history_until_rescanned()
     {
         var (service, cache, security, reposRoot) = CreateService();
@@ -195,7 +196,7 @@ public class GitRepositoryMaterializationTests
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\nsource=(\"https://example.com/install.sh\")\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
             };
-            Assert.That(await service.AppendRevisionFromUpstreamAsync("shelly", revision2), Is.True);
+            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2));
             var flaggedRevision = await security.CompleteScanAsync("shelly", SecurityStatus.Flagged,
                 new SecurityFinding("network-download", FindingSeverity.Critical, "test", "curl | sh", "PKGBUILD"));
 
@@ -203,8 +204,8 @@ public class GitRepositoryMaterializationTests
             var (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
             {
-                Assert.That(commits, Is.EqualTo(1), "the flagged head revision must not be cloneable");
-                Assert.That(pkgbuild, Does.Contain("pkgver=1.0"), "clone must fall back to the last verified revision");
+                Assert.Equal(1, commits);
+                Assert.Contains("pkgver=1.0", pkgbuild);
             });
 
             // Rescan the flagged head to Verified; the marker must change and the lazy
@@ -217,8 +218,8 @@ public class GitRepositoryMaterializationTests
             (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
             {
-                Assert.That(commits, Is.EqualTo(2), "a rescan to Verified must restore the revision to history");
-                Assert.That(pkgbuild, Does.Contain("pkgver=2.0"));
+                Assert.Equal(2, commits);
+                Assert.Contains("pkgver=2.0", pkgbuild);
             });
         }
         finally
@@ -228,7 +229,7 @@ public class GitRepositoryMaterializationTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task Flagged_ancestor_is_excluded_when_head_is_verified()
     {
         var (service, cache, security, reposRoot) = CreateService();
@@ -246,16 +247,15 @@ public class GitRepositoryMaterializationTests
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
             };
-            Assert.That(await service.AppendRevisionFromUpstreamAsync("shelly", revision2), Is.True);
+            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2));
             await security.MarkHeadVerifiedAsync("shelly");
 
             await cache.EnsureRepositoryAsync("shelly");
             var (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
             {
-                Assert.That(commits, Is.EqualTo(1),
-                    "a flagged ancestor must not be cloneable even when the head verifies");
-                Assert.That(pkgbuild, Does.Contain("pkgver=2.0"));
+                Assert.Equal(1, commits);
+                Assert.Contains("pkgver=2.0", pkgbuild);
             });
         }
         finally
@@ -265,7 +265,7 @@ public class GitRepositoryMaterializationTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task Concurrent_materialize_and_delete_never_resurrects_the_repository()
     {
         var (service, cache, security, reposRoot) = CreateService();
@@ -286,9 +286,9 @@ public class GitRepositoryMaterializationTests
                     cache.EnsureRepositoryAsync("shelly"),
                     service.DeleteAsync("shelly"));
 
-                Assert.That(Directory.Exists(repoDir), Is.False,
+                Assert.False(Directory.Exists(repoDir),
                     $"iteration {i}: the deleted repository must not be resurrected");
-                Assert.That(await service.ExistsAsync("shelly"), Is.False,
+                Assert.False(await service.ExistsAsync("shelly"),
                     $"iteration {i}: the package document must be gone");
             }
         }
@@ -326,7 +326,7 @@ public class GitRepositoryMaterializationTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task Missing_revision_content_materializes_remaining_history_without_marker()
     {
         var repo = new InMemoryPackageRepository();
@@ -388,11 +388,9 @@ public class GitRepositoryMaterializationTests
 
             Assert.Multiple(() =>
             {
-                Assert.That(count, Is.EqualTo("1"),
-                    "the revision whose content document is missing must be skipped");
-                Assert.That(pkgbuild, Is.EqualTo("pkgname=pkg\npkgver=2.0\n"),
-                    "the remaining revision becomes a parentless head commit");
-                Assert.That(File.Exists(Path.Combine(gitDir, ".atoll-head")), Is.False,
+                Assert.Equal("1", count);
+                Assert.Equal("pkgname=pkg\npkgver=2.0\n", pkgbuild);
+                Assert.False(File.Exists(Path.Combine(gitDir, ".atoll-head")),
                     "an incomplete materialization must not write the marker, so the next request retries");
             });
         }

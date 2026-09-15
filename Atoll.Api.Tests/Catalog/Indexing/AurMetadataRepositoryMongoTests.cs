@@ -1,27 +1,30 @@
 using Atoll.Api.Services.Catalog.Persistence;
 using Atoll.Api.Tests.Support;
 using MongoDB.Driver;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Catalog.Indexing;
 
-[Category("RequiresMongo")]
-public class AurMetadataRepositoryMongoTests : AurMetadataRepositoryContract
+[Trait("Category", "RequiresMongo")]
+public class AurMetadataRepositoryMongoTests : AurMetadataRepositoryContract, IAsyncLifetime
 {
-    private IMongoClient _client = null!;
-    private string _database = null!;
+    private readonly IMongoClient _client;
+    private readonly string _database;
 
-    [SetUp]
-    public void SetUp()
+    public AurMetadataRepositoryMongoTests()
     {
-        Assume.That(MongoFixture.IsAvailable, Is.True, $"Mongo unavailable: {MongoFixture.UnavailableReason}");
+        Assert.SkipUnless(MongoFixture.IsAvailable, $"Mongo unavailable: {MongoFixture.UnavailableReason}");
 
         _client = MongoRepositoryFactory.CreateClient();
         _database = MongoRepositoryFactory.NewDatabaseName();
     }
 
-    [TearDown]
-    public async Task TearDown()
+    public ValueTask InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
     {
         await MongoRepositoryFactory.DropDatabaseAsync(_client, _database);
     }

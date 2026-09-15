@@ -2,18 +2,17 @@ using System.Diagnostics;
 using System.Text;
 using Atoll.Api.Services.Sync.Mirror;
 using Microsoft.Extensions.Logging.Abstractions;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Sync.Mirror;
 
-public class AurMirrorGitIntegrationTests
+public class AurMirrorGitIntegrationTests : IDisposable
 {
-    private string _cache = null!;
-    private string _scratch = null!;
-    private string _upstream = null!;
+    private readonly string _cache;
+    private readonly string _scratch;
+    private readonly string _upstream;
 
-    [SetUp]
-    public void SetUp()
+    public AurMirrorGitIntegrationTests()
     {
         _scratch = Path.Combine(Path.GetTempPath(), $"atoll-mirror-it-{Guid.NewGuid():N}");
         _upstream = Path.Combine(_scratch, "upstream.git");
@@ -21,8 +20,7 @@ public class AurMirrorGitIntegrationTests
         Directory.CreateDirectory(_scratch);
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         if (!Directory.Exists(_scratch)) return;
         try
@@ -35,7 +33,7 @@ public class AurMirrorGitIntegrationTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task ListBranches_fetch_and_read_files_round_trip()
     {
         CreateUpstreamWithBranch(
@@ -48,25 +46,25 @@ public class AurMirrorGitIntegrationTests
         await mirror.EnsureInitializedAsync(CancellationToken.None);
 
         var branches = await mirror.ListBranchesAsync(CancellationToken.None);
-        Assert.That(branches, Does.Contain("alpha"));
+        Assert.Contains("alpha", branches);
 
         var result = await mirror.FetchAsync(["alpha"], CancellationToken.None);
         Assert.Multiple(() =>
         {
-            Assert.That(result.Succeeded, Is.EquivalentTo(["alpha"]));
-            Assert.That(result.Failed, Is.Empty);
+            Assert.Equivalent(new[] { "alpha" }, result.Succeeded, strict: true);
+            Assert.Empty(result.Failed);
         });
 
         var files = await mirror.ReadFilesAsync("alpha", CancellationToken.None);
         Assert.Multiple(() =>
         {
-            Assert.That(files.Keys, Is.EquivalentTo(["PKGBUILD", ".SRCINFO"]));
-            Assert.That(files["PKGBUILD"], Does.Contain("pkgname=alpha"));
-            Assert.That(files[".SRCINFO"], Does.Contain("pkgbase"));
+            Assert.Equivalent(new[] { "PKGBUILD", ".SRCINFO" }, files.Keys, strict: true);
+            Assert.Contains("pkgname=alpha", files["PKGBUILD"]);
+            Assert.Contains("pkgbase", files[".SRCINFO"]);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task FetchAsync_reports_missing_ref_as_failed_without_throwing()
     {
         CreateUpstreamWithBranch(
@@ -80,8 +78,8 @@ public class AurMirrorGitIntegrationTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Succeeded, Is.EquivalentTo(["real"]));
-            Assert.That(result.Failed, Is.EquivalentTo(["ghost"]));
+            Assert.Equivalent(new[] { "real" }, result.Succeeded, strict: true);
+            Assert.Equivalent(new[] { "ghost" }, result.Failed, strict: true);
         });
     }
 

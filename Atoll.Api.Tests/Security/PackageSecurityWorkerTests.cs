@@ -3,7 +3,7 @@ using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Security;
@@ -68,7 +68,7 @@ public class PackageSecurityWorkerTests
             requiredPolicyVersion ?? PkgBuildSecurityScanner.CurrentPolicyVersion);
     }
 
-    [Test]
+    [Fact]
     public async Task Clean_package_is_marked_verified()
     {
         var repo = new InMemoryPackageRepository();
@@ -80,12 +80,12 @@ public class PackageSecurityWorkerTests
         var scan = await WaitForScanAsync(securityRepo, "clean");
         await worker.StopAsync(CancellationToken.None);
 
-        Assert.That(scan.Status, Is.EqualTo(SecurityStatus.Verified));
-        Assert.That(scan.RevisionId, Is.EqualTo("rev-1"));
-        Assert.That(scan.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion));
+        Assert.Equal(SecurityStatus.Verified, scan.Status);
+        Assert.Equal("rev-1", scan.RevisionId);
+        Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion, scan.PolicyVersion);
     }
 
-    [Test]
+    [Fact]
     public async Task Malicious_package_is_marked_flagged()
     {
         var repo = new InMemoryPackageRepository();
@@ -97,12 +97,12 @@ public class PackageSecurityWorkerTests
         var scan = await WaitForScanAsync(securityRepo, "evil");
         await worker.StopAsync(CancellationToken.None);
 
-        Assert.That(scan.Status, Is.EqualTo(SecurityStatus.Flagged));
-        Assert.That(scan.Findings, Is.Not.Empty);
-        Assert.That(scan.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion));
+        Assert.Equal(SecurityStatus.Flagged, scan.Status);
+        Assert.NotEmpty(scan.Findings);
+        Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion, scan.PolicyVersion);
     }
 
-    [Test]
+    [Fact]
     public async Task Package_seeded_after_worker_start_is_picked_up_by_polling()
     {
         var repo = new InMemoryPackageRepository();
@@ -114,11 +114,11 @@ public class PackageSecurityWorkerTests
         var scan = await WaitForScanAsync(securityRepo, "late");
         await worker.StopAsync(CancellationToken.None);
 
-        Assert.That(scan.Status, Is.EqualTo(SecurityStatus.Verified));
-        Assert.That(scan.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion));
+        Assert.Equal(SecurityStatus.Verified, scan.Status);
+        Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion, scan.PolicyVersion);
     }
 
-    [Test]
+    [Fact]
     public async Task Disabled_worker_does_not_scan()
     {
         var repo = new InMemoryPackageRepository();
@@ -130,10 +130,10 @@ public class PackageSecurityWorkerTests
         await Task.Delay(200);
         await worker.StopAsync(CancellationToken.None);
 
-        Assert.That((await securityRepo.GetAsync("clean", "rev-1"))!.Status, Is.EqualTo(SecurityStatus.Pending));
+        Assert.Equal(SecurityStatus.Pending, (await securityRepo.GetAsync("clean", "rev-1"))!.Status);
     }
 
-    [Test]
+    [Fact]
     public async Task Completed_scans_are_recorded_in_status()
     {
         var repo = new InMemoryPackageRepository();
@@ -151,17 +151,17 @@ public class PackageSecurityWorkerTests
         var snapshot = status.GetSnapshot();
         Assert.Multiple(() =>
         {
-            Assert.That(snapshot.Enabled, Is.True);
-            Assert.That(snapshot.ScansCompleted, Is.EqualTo(2));
-            Assert.That(snapshot.ScansVerified, Is.EqualTo(1));
-            Assert.That(snapshot.ScansFlagged, Is.EqualTo(1));
-            Assert.That(snapshot.ScansErrored, Is.Zero);
-            Assert.That(snapshot.ScansDropped, Is.Zero);
-            Assert.That(snapshot.LastScanFinishedUtc, Is.Not.Null);
+            Assert.True(snapshot.Enabled);
+            Assert.Equal(2, snapshot.ScansCompleted);
+            Assert.Equal(1, snapshot.ScansVerified);
+            Assert.Equal(1, snapshot.ScansFlagged);
+            Assert.Equal(0, snapshot.ScansErrored);
+            Assert.Equal(0, snapshot.ScansDropped);
+            Assert.NotNull(snapshot.LastScanFinishedUtc);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Worker_startup_requeues_and_rescans_outdated_scans()
     {
         var repo = new InMemoryPackageRepository();
@@ -194,19 +194,19 @@ public class PackageSecurityWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(scan1.Status, Is.EqualTo(SecurityStatus.Verified));
-            Assert.That(scan1.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion));
+            Assert.Equal(SecurityStatus.Verified, scan1.Status);
+            Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion, scan1.PolicyVersion);
 
-            Assert.That(scan2.Status, Is.EqualTo(SecurityStatus.Flagged));
-            Assert.That(scan2.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion));
-            Assert.That(scan2.Findings, Is.Not.Empty);
+            Assert.Equal(SecurityStatus.Flagged, scan2.Status);
+            Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion, scan2.PolicyVersion);
+            Assert.NotEmpty(scan2.Findings);
 
-            Assert.That(current!.Status, Is.EqualTo(SecurityStatus.Verified));
-            Assert.That(current.PolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion), "current-policy scan is not requeued");
+            Assert.Equal(SecurityStatus.Verified, current!.Status);
+            Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion, current.PolicyVersion);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Disabled_worker_does_not_requeue_outdated_scans()
     {
         var repo = new InMemoryPackageRepository();
@@ -223,11 +223,11 @@ public class PackageSecurityWorkerTests
         await worker.StopAsync(CancellationToken.None);
 
         var scan = await securityRepo.GetAsync("pkg1", "rev-1");
-        Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Verified));
-        Assert.That(scan.PolicyVersion, Is.EqualTo(1));
+        Assert.Equal(SecurityStatus.Verified, scan!.Status);
+        Assert.Equal(1, scan.PolicyVersion);
     }
 
-    [Test]
+    [Fact]
     public async Task Worker_does_not_claim_work_requiring_a_newer_policy()
     {
         var repo = new InMemoryPackageRepository();
@@ -246,9 +246,9 @@ public class PackageSecurityWorkerTests
         var scan = await securityRepo.GetAsync("future", "rev-1");
         Assert.Multiple(() =>
         {
-            Assert.That(scan!.Status, Is.EqualTo(SecurityStatus.Pending));
-            Assert.That(scan.RequiredPolicyVersion, Is.EqualTo(PkgBuildSecurityScanner.CurrentPolicyVersion + 1));
-            Assert.That(status.GetSnapshot().ScansCompleted, Is.Zero, "no success is reported for unclaimable work");
+            Assert.Equal(SecurityStatus.Pending, scan!.Status);
+            Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion + 1, scan.RequiredPolicyVersion);
+            Assert.Equal(0, status.GetSnapshot().ScansCompleted);
         });
     }
 

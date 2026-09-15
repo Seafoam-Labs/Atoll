@@ -5,7 +5,7 @@ using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Catalog.Refresh;
 
@@ -18,7 +18,7 @@ public class UpstreamPackageReconcilerTests
             [".SRCINFO"] = "pkgname = demo\n"
         };
 
-    [Test]
+    [Fact]
     public async Task ReconcileAsync_deletes_local_packages_absent_from_upstream_and_all_derived_state()
     {
         var repository = new InMemoryPackageRepository();
@@ -52,11 +52,11 @@ public class UpstreamPackageReconcilerTests
 
             Assert.Multiple(() =>
             {
-                Assert.That(deleted, Is.EqualTo(1));
-                Assert.That(keptExists, Is.True);
-                Assert.That(removedExists, Is.False);
-                Assert.That(removedScans, Is.Empty);
-                Assert.That(Directory.Exists(removedRepo), Is.False);
+                Assert.Equal(1, deleted);
+                Assert.True(keptExists);
+                Assert.False(removedExists);
+                Assert.Empty(removedScans);
+                Assert.False(Directory.Exists(removedRepo));
             });
         }
         finally
@@ -66,7 +66,7 @@ public class UpstreamPackageReconcilerTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task ReconcileAsync_deletes_nothing_when_pruning_is_disabled()
     {
         var repository = new InMemoryPackageRepository();
@@ -91,13 +91,13 @@ public class UpstreamPackageReconcilerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(deleted, Is.Zero);
-            Assert.That(keptExists, Is.True);
-            Assert.That(removedExists, Is.True);
+            Assert.Equal(0, deleted);
+            Assert.True(keptExists);
+            Assert.True(removedExists);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task ReconcileAsync_defers_pruning_once_when_snapshot_shrinks_abruptly()
     {
         var repository = new InMemoryPackageRepository();
@@ -120,8 +120,8 @@ public class UpstreamPackageReconcilerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(firstDeleted, Is.Zero);
-            Assert.That(secondDeleted, Is.EqualTo(1));
+            Assert.Equal(0, firstDeleted);
+            Assert.Equal(1, secondDeleted);
         });
     }
 }

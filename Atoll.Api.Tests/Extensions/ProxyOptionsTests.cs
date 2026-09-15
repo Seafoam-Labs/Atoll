@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Extensions;
 
@@ -24,25 +24,24 @@ public class ProxyOptionsTests
         return provider.GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
     }
 
-    [Test]
+    [Fact]
     public void Without_proxy_configuration_framework_loopback_defaults_apply()
     {
         var forwarded = BuildForwardedHeaders(new Dictionary<string, string?>());
 
         Assert.Multiple(() =>
         {
-            Assert.That(forwarded.ForwardedHeaders,
-                Is.EqualTo(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto));
-            Assert.That(forwarded.ForwardedProtoHeaderName, Is.EqualTo("X-Forwarded-Proto"));
-            Assert.That(forwarded.ForwardLimit, Is.EqualTo(1));
-            Assert.That(forwarded.KnownIPNetworks, Has.Count.EqualTo(1));
-            Assert.That(forwarded.KnownIPNetworks[0].BaseAddress, Is.EqualTo(IPAddress.Parse("127.0.0.0")));
-            Assert.That(forwarded.KnownIPNetworks[0].PrefixLength, Is.EqualTo(8));
-            Assert.That(forwarded.KnownProxies, Is.EqualTo([IPAddress.IPv6Loopback]));
+            Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, forwarded.ForwardedHeaders);
+            Assert.Equal("X-Forwarded-Proto", forwarded.ForwardedProtoHeaderName);
+            Assert.Equal(1, forwarded.ForwardLimit);
+            Assert.Single(forwarded.KnownIPNetworks);
+            Assert.Equal(IPAddress.Parse("127.0.0.0"), forwarded.KnownIPNetworks[0].BaseAddress);
+            Assert.Equal(8, forwarded.KnownIPNetworks[0].PrefixLength);
+            Assert.Equal(new[] { IPAddress.IPv6Loopback }, forwarded.KnownProxies);
         });
     }
 
-    [Test]
+    [Fact]
     public void Configured_networks_proxies_and_headers_replace_the_defaults()
     {
         var forwarded = BuildForwardedHeaders(new Dictionary<string, string?>
@@ -55,16 +54,16 @@ public class ProxyOptionsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(
-                forwarded.KnownIPNetworks.Select(network => (network.BaseAddress.ToString(), network.PrefixLength)),
-                Is.EqualTo([("172.31.0.0", 16), ("10.0.0.0", 8)]));
-            Assert.That(forwarded.KnownProxies, Is.EqualTo([IPAddress.Parse("192.0.2.10")]));
-            Assert.That(forwarded.ForwardedProtoHeaderName, Is.EqualTo("CloudFront-Forwarded-Proto"));
-            Assert.That(forwarded.ForwardLimit, Is.EqualTo(2));
+            Assert.Equal(
+                new[] { ("172.31.0.0", 16), ("10.0.0.0", 8) },
+                forwarded.KnownIPNetworks.Select(network => (network.BaseAddress.ToString(), network.PrefixLength)));
+            Assert.Equal(new[] { IPAddress.Parse("192.0.2.10") }, forwarded.KnownProxies);
+            Assert.Equal("CloudFront-Forwarded-Proto", forwarded.ForwardedProtoHeaderName);
+            Assert.Equal(2, forwarded.ForwardLimit);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Two_hop_chain_restores_original_scheme_and_client_ip()
     {
         var services = new ServiceCollection();
@@ -96,17 +95,18 @@ public class ProxyOptionsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(context.Request.Scheme, Is.EqualTo("https"));
-            Assert.That(context.Connection.RemoteIpAddress, Is.EqualTo(IPAddress.Parse("198.51.100.24")));
+            Assert.Equal("https", context.Request.Scheme);
+            Assert.Equal(IPAddress.Parse("198.51.100.24"), context.Connection.RemoteIpAddress);
         });
     }
 
-    [TestCase("172.31.0.0/33")]
-    [TestCase("172.31.0.0")]
-    [TestCase("172.31.0.1/16")]
-    [TestCase("not-a-network/16")]
-    [TestCase("172.31.0.0/")]
-    [TestCase("/16")]
+    [Theory]
+    [InlineData("172.31.0.0/33")]
+    [InlineData("172.31.0.0")]
+    [InlineData("172.31.0.1/16")]
+    [InlineData("not-a-network/16")]
+    [InlineData("172.31.0.0/")]
+    [InlineData("/16")]
     public void Invalid_networks_fail_options_validation(string knownNetworks)
     {
         var services = new ServiceCollection();
@@ -118,11 +118,10 @@ public class ProxyOptionsTests
         services.AddAtollOptions(config);
         using var provider = services.BuildServiceProvider();
 
-        Assert.That(() => provider.GetRequiredService<IOptions<ProxyOptions>>().Value,
-            Throws.TypeOf<OptionsValidationException>());
+        Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<ProxyOptions>>().Value);
     }
 
-    [Test]
+    [Fact]
     public void Invalid_forward_limit_fails_options_validation()
     {
         var services = new ServiceCollection();
@@ -134,7 +133,6 @@ public class ProxyOptionsTests
         services.AddAtollOptions(config);
         using var provider = services.BuildServiceProvider();
 
-        Assert.That(() => provider.GetRequiredService<IOptions<ProxyOptions>>().Value,
-            Throws.TypeOf<OptionsValidationException>());
+        Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<ProxyOptions>>().Value);
     }
 }

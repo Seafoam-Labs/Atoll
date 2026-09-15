@@ -1,30 +1,31 @@
 using Atoll.Api.Components;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Ui;
 
 public class FileViewerTests
 {
-    [TestCase("PKGBUILD", "pkgbuild")]
-    [TestCase("post-install.install", "bash")]
-    [TestCase(".SRCINFO", "ini")]
-    [TestCase("Makefile", "makefile")]
-    [TestCase("src/main.py", "python")]
-    [TestCase("fixes.patch", "diff")]
-    [TestCase("org.example.desktop", "ini")]
-    [TestCase("20-atool.hook", "ini")]
-    [TestCase("99-udev.rules", "ini")]
-    [TestCase("Pipfile", "ini")]
-    [TestCase(".editorconfig", "ini")]
-    [TestCase("LICENSE", "plaintext")]
-    [TestCase(".gitignore", "plaintext")]
-    [TestCase("README.txt", "plaintext")]
-    [TestCase("nested/dir/Dockerfile", null)]
-    [TestCase("image.bin", null)]
-    [TestCase("", null)]
-    [TestCase(null, null)]
+    [Theory]
+    [InlineData("PKGBUILD", "pkgbuild")]
+    [InlineData("post-install.install", "bash")]
+    [InlineData(".SRCINFO", "ini")]
+    [InlineData("Makefile", "makefile")]
+    [InlineData("src/main.py", "python")]
+    [InlineData("fixes.patch", "diff")]
+    [InlineData("org.example.desktop", "ini")]
+    [InlineData("20-atool.hook", "ini")]
+    [InlineData("99-udev.rules", "ini")]
+    [InlineData("Pipfile", "ini")]
+    [InlineData(".editorconfig", "ini")]
+    [InlineData("LICENSE", "plaintext")]
+    [InlineData(".gitignore", "plaintext")]
+    [InlineData("README.txt", "plaintext")]
+    [InlineData("nested/dir/Dockerfile", null)]
+    [InlineData("image.bin", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
     public void MapLanguagePinsFilesCommonInAurPackages(string? path, string? expected)
     {
-        Assert.That(FileViewer.MapLanguage(path), Is.EqualTo(expected));
+        Assert.Equal(expected, FileViewer.MapLanguage(path));
     }
 }

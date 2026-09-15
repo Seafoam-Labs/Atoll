@@ -1,11 +1,11 @@
 using Atoll.Api.Services.Sync.Direct;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Sync.Direct;
 
 public class DirectSeedStatusStoreTests
 {
-    [Test]
+    [Fact]
     public void DisabledSnapshotKeepsEnabledFalseAndZeroCounters()
     {
         var store = new DirectSeedStatusStore(enabled: false);
@@ -13,19 +13,19 @@ public class DirectSeedStatusStoreTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(snapshot.Enabled, Is.False);
-            Assert.That(snapshot.CyclesStarted, Is.Zero);
-            Assert.That(snapshot.CyclesCompleted, Is.Zero);
-            Assert.That(snapshot.Candidates, Is.Zero);
-            Assert.That(snapshot.Seeded, Is.Zero);
-            Assert.That(snapshot.AlreadyPresent, Is.Zero);
-            Assert.That(snapshot.Failed, Is.Zero);
-            Assert.That(snapshot.LastStartedUtc, Is.Null);
-            Assert.That(snapshot.LastFinishedUtc, Is.Null);
+            Assert.False(snapshot.Enabled);
+            Assert.Equal(0, snapshot.CyclesStarted);
+            Assert.Equal(0, snapshot.CyclesCompleted);
+            Assert.Equal(0, snapshot.Candidates);
+            Assert.Equal(0, snapshot.Seeded);
+            Assert.Equal(0, snapshot.AlreadyPresent);
+            Assert.Equal(0, snapshot.Failed);
+            Assert.Null(snapshot.LastStartedUtc);
+            Assert.Null(snapshot.LastFinishedUtc);
         });
     }
 
-    [Test]
+    [Fact]
     public void CycleRecordingUpdatesCountersAndTimestamps()
     {
         var store = new DirectSeedStatusStore(enabled: true);
@@ -42,22 +42,22 @@ public class DirectSeedStatusStoreTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(started.Enabled, Is.True);
-            Assert.That(started.CyclesStarted, Is.EqualTo(1));
-            Assert.That(started.LastStartedUtc, Is.Not.Null);
+            Assert.True(started.Enabled);
+            Assert.Equal(1, started.CyclesStarted);
+            Assert.NotNull(started.LastStartedUtc);
 
-            Assert.That(finished.CyclesStarted, Is.EqualTo(1));
-            Assert.That(finished.CyclesCompleted, Is.EqualTo(1));
-            Assert.That(finished.Candidates, Is.EqualTo(7));
-            Assert.That(finished.Seeded, Is.EqualTo(2));
-            Assert.That(finished.AlreadyPresent, Is.EqualTo(1));
-            Assert.That(finished.Failed, Is.EqualTo(1));
-            Assert.That(finished.LastFinishedUtc, Is.Not.Null);
-            Assert.That(finished.LastFinishedUtc!.Value, Is.GreaterThanOrEqualTo(started.LastStartedUtc!.Value));
+            Assert.Equal(1, finished.CyclesStarted);
+            Assert.Equal(1, finished.CyclesCompleted);
+            Assert.Equal(7, finished.Candidates);
+            Assert.Equal(2, finished.Seeded);
+            Assert.Equal(1, finished.AlreadyPresent);
+            Assert.Equal(1, finished.Failed);
+            Assert.NotNull(finished.LastFinishedUtc);
+            Assert.True(finished.LastFinishedUtc!.Value >= started.LastStartedUtc!.Value);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task ConcurrentCounterUpdatesAreNotLost()
     {
         var store = new DirectSeedStatusStore(enabled: true);
@@ -76,9 +76,9 @@ public class DirectSeedStatusStoreTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(snapshot.Candidates, Is.EqualTo(1000));
-            Assert.That(snapshot.Seeded, Is.EqualTo(4000));
-            Assert.That(snapshot.CyclesCompleted, Is.EqualTo(1));
+            Assert.Equal(1000, snapshot.Candidates);
+            Assert.Equal(4000, snapshot.Seeded);
+            Assert.Equal(1, snapshot.CyclesCompleted);
         });
     }
 }

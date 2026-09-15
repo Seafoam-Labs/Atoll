@@ -5,7 +5,7 @@ using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Packages.Git;
@@ -16,8 +16,8 @@ namespace Atoll.Api.Tests.Packages.Git;
 ///     mirror's public namespace and cannot silently change. Inputs are fully deterministic
 ///     (fixed dates, authors, messages, and file content), so every SHA below is reproducible.
 /// </summary>
-[Category("RequiresGit")]
-public class GitCommitFixtureTests
+[Trait("Category", "RequiresGit")]
+public class GitCommitFixtureTests : IAsyncLifetime
 {
     private const string Commit1 = "05cf997338ec40468b61cd3c0bdabd138b69a39e";
     private const string Commit2 = "646ba0035f252f4668a17676698dda616f96856a";
@@ -51,13 +51,17 @@ public class GitCommitFixtureTests
         return exitCode == 0;
     }
 
-    [SetUp]
-    public async Task SetUp()
+    public async ValueTask InitializeAsync()
     {
-        Assume.That(await GitIsAvailable(), "git binary is required for these tests");
+        Assert.SkipUnless(await GitIsAvailable(), "git binary is required for these tests");
     }
 
-    [Test]
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    [Fact]
     public async Task Synthesized_history_is_pinned()
     {
         var reposRoot = Path.Combine(Path.GetTempPath(), $"atoll-fixture-{Guid.NewGuid():N}");
@@ -90,27 +94,27 @@ public class GitCommitFixtureTests
 
             Assert.Multiple(() =>
             {
-                Assert.That(commits, Has.Length.EqualTo(2));
-                Assert.That(mainRef, Is.EqualTo(Commit2));
+                Assert.Equal(2, commits.Length);
+                Assert.Equal(Commit2, mainRef);
 
                 // Newest first: the head revision's commit, then its parent.
-                Assert.That(commits[0], Is.EqualTo(Commit2));
-                Assert.That(commits[1], Is.EqualTo(Commit1));
+                Assert.Equal(Commit2, commits[0]);
+                Assert.Equal(Commit1, commits[1]);
 
                 // Author identities retain their revision author after removing characters that
                 // are invalid in a Git ident. The same sanitized value forms the local email.
-                Assert.That(logLines[0],
-                    Is.EqualTo(Commit2 + "|aur|aur@atoll.local"
-                                       + "|1767355200|atoll|atoll@local|1767355200|refresh from AUR"));
-                Assert.That(logLines[1],
-                    Is.EqualTo(Commit1 + "|weird authorx|weird authorx@atoll.local"
-                                       + "|1767268800|atoll|atoll@local|1767268800|seed from AUR"));
+                Assert.Equal(Commit2 + "|aur|aur@atoll.local"
+                                      + "|1767355200|atoll|atoll@local|1767355200|refresh from AUR",
+                    logLines[0]);
+                Assert.Equal(Commit1 + "|weird authorx|weird authorx@atoll.local"
+                                      + "|1767268800|atoll|atoll@local|1767268800|seed from AUR",
+                    logLines[1]);
 
                 // install.sh is executable by extension; notes.txt by its #! content; the rest 100644.
-                Assert.That(treeLines[0], Is.EqualTo("100644 blob 9bb14277bc9d9e1c6bed4fe509eecace187af584\tPKGBUILD"));
-                Assert.That(treeLines[1], Is.EqualTo("100644 blob 3c7fb5362a50d005e270ecb67a36a05809ba19f2\tREADME.md"));
-                Assert.That(treeLines[2], Is.EqualTo("100755 blob e6fe4f7638418d346bbad69e6226fc026b4ef592\tinstall.sh"));
-                Assert.That(treeLines[3], Is.EqualTo("100755 blob 0a7e17b41502f961195e1a29eee9150baaf209d2\tnotes.txt"));
+                Assert.Equal("100644 blob 9bb14277bc9d9e1c6bed4fe509eecace187af584\tPKGBUILD", treeLines[0]);
+                Assert.Equal("100644 blob 3c7fb5362a50d005e270ecb67a36a05809ba19f2\tREADME.md", treeLines[1]);
+                Assert.Equal("100755 blob e6fe4f7638418d346bbad69e6226fc026b4ef592\tinstall.sh", treeLines[2]);
+                Assert.Equal("100755 blob 0a7e17b41502f961195e1a29eee9150baaf209d2\tnotes.txt", treeLines[3]);
             });
         }
         finally

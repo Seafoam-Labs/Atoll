@@ -6,7 +6,7 @@ using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Packages;
@@ -48,7 +48,7 @@ public class PackageServiceTests
         }
     }
 
-    [Test]
+    [Fact]
     public async Task SeedFilesAsync_then_GetAsync_returns_files()
     {
         var repo = new InMemoryPackageRepository();
@@ -59,13 +59,13 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(files.Files.Keys, Is.EquivalentTo(SampleFiles.Keys));
-            Assert.That(files.Files["PKGBUILD"], Is.EqualTo(SampleFiles["PKGBUILD"]));
-            Assert.That(files.Files[".SRCINFO"], Is.EqualTo(SampleFiles[".SRCINFO"]));
+            Assert.Equivalent(SampleFiles.Keys, files.Files.Keys, strict: true);
+            Assert.Equal(SampleFiles["PKGBUILD"], files.Files["PKGBUILD"]);
+            Assert.Equal(SampleFiles[".SRCINFO"], files.Files[".SRCINFO"]);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task SeedFilesAsync_then_GetHistoryAsync_returns_one_revision()
     {
         var repo = new InMemoryPackageRepository();
@@ -76,14 +76,14 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(history, Has.Count.EqualTo(1));
-            Assert.That(history[0].Sha, Has.Length.EqualTo(64));
-            Assert.That(history[0].Author, Is.EqualTo("aur"));
-            Assert.That(history[0].Message, Is.EqualTo("seed from AUR"));
+            Assert.Single(history);
+            Assert.Equal(64, history[0].Sha.Length);
+            Assert.Equal("aur", history[0].Author);
+            Assert.Equal("seed from AUR", history[0].Message);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task SeedFilesAsync_then_GetAsync_by_revision_sha_returns_files()
     {
         var repo = new InMemoryPackageRepository();
@@ -97,25 +97,25 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(byRevision.Files.Keys, Is.EquivalentTo(SampleFiles.Keys));
-            Assert.That(byRevision.Files["PKGBUILD"], Is.EqualTo(SampleFiles["PKGBUILD"]));
+            Assert.Equivalent(SampleFiles.Keys, byRevision.Files.Keys, strict: true);
+            Assert.Equal(SampleFiles["PKGBUILD"], byRevision.Files["PKGBUILD"]);
         });
     }
 
-    [Test]
-    public void SeedFilesAsync_existing_package_returns_conflict()
+    [Fact]
+    public async Task SeedFilesAsync_existing_package_returns_conflict()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
 
-        Assert.DoesNotThrowAsync(async () => await service.SeedFilesAsync("shelly", SampleFiles));
+        await service.SeedFilesAsync("shelly", SampleFiles);
 
-        var ex = Assert.ThrowsAsync<PackageConflictException>(async () => await service.SeedFilesAsync("shelly", SampleFiles))!;
+        var ex = await Assert.ThrowsAsync<PackageConflictException>(async () => await service.SeedFilesAsync("shelly", SampleFiles));
 
-        Assert.That(ex.PackageName, Is.EqualTo("shelly"));
+        Assert.Equal("shelly", ex.PackageName);
     }
 
-    [Test]
+    [Fact]
     public async Task SeedFilesAsync_oversized_file_throws()
     {
         var repo = new InMemoryPackageRepository();
@@ -130,13 +130,13 @@ public class PackageServiceTests
             ["big.bin"] = new('x', 2_048)
         };
 
-        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () => await service.SeedFilesAsync("big-pkg", big))!;
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await service.SeedFilesAsync("big-pkg", big));
 
-        Assert.That(ex.Message, Does.Contain("big.bin"));
-        Assert.That(await repo.ExistsAsync("big-pkg"), Is.False);
+        Assert.Contains("big.bin", ex.Message);
+        Assert.False(await repo.ExistsAsync("big-pkg"));
     }
 
-    [Test]
+    [Fact]
     public async Task SeedFilesAsync_document_larger_than_mongo_limit_throws_typed_exception_before_insert()
     {
         var repo = new InMemoryPackageRepository();
@@ -151,18 +151,18 @@ public class PackageServiceTests
             ["large-2.txt"] = new('x', 9_000_000)
         };
 
-        var ex = Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () => await service.SeedFilesAsync("too-large", files))!;
+        var ex = await Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () => await service.SeedFilesAsync("too-large", files));
         var packageExists = await repo.ExistsAsync("too-large");
 
         Assert.Multiple(() =>
         {
-            Assert.That(ex.PackageName, Is.EqualTo("too-large"));
-            Assert.That(ex.SerializedSizeBytes, Is.GreaterThan(ex.MaxDocumentSizeBytes));
-            Assert.That(packageExists, Is.False);
+            Assert.Equal("too-large", ex.PackageName);
+            Assert.True(ex.SerializedSizeBytes > ex.MaxDocumentSizeBytes);
+            Assert.False(packageExists);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task AppendRevisionFromUpstreamAsync_oversized_snapshot_throws_before_write()
     {
         var repo = new InMemoryPackageRepository();
@@ -180,20 +180,20 @@ public class PackageServiceTests
             ["large-2.txt"] = new('x', 9_000_000)
         };
 
-        Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () =>
+        await Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () =>
             await service.AppendRevisionFromUpstreamAsync("pkg", oversizedFiles));
         var afterHistory = await service.GetHistoryAsync("pkg");
         var packageExists = await repo.ExistsAsync("pkg");
 
         Assert.Multiple(() =>
         {
-            Assert.That(afterHistory, Has.Count.EqualTo(1));
-            Assert.That(afterHistory[0].Sha, Is.EqualTo(originalHead));
-            Assert.That(packageExists, Is.True);
+            Assert.Single(afterHistory);
+            Assert.Equal(originalHead, afterHistory[0].Sha);
+            Assert.True(packageExists);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task DeleteAsync_then_GetAsync_throws_not_found()
     {
         var repo = new InMemoryPackageRepository();
@@ -202,19 +202,19 @@ public class PackageServiceTests
         await service.SeedFilesAsync("shelly", SampleFiles);
         await service.DeleteAsync("shelly");
 
-        Assert.ThrowsAsync<KeyNotFoundException>(async () => await service.GetAsync("shelly"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(async () => await service.GetAsync("shelly"));
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsync_unknown_package_throws_not_found()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
 
-        Assert.ThrowsAsync<KeyNotFoundException>(async () => await service.GetAsync("missing"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(async () => await service.GetAsync("missing"));
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsync_unknown_revision_throws_not_found()
     {
         var repo = new InMemoryPackageRepository();
@@ -222,10 +222,10 @@ public class PackageServiceTests
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 
-        Assert.ThrowsAsync<KeyNotFoundException>(async () => await service.GetAsync("shelly", "deadbeef"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(async () => await service.GetAsync("shelly", "deadbeef"));
     }
 
-    [Test]
+    [Fact]
     public async Task ListAsync_returns_seeded_package_names()
     {
         var repo = new InMemoryPackageRepository();
@@ -236,10 +236,10 @@ public class PackageServiceTests
 
         var names = await service.ListAsync();
 
-        Assert.That(names, Is.EquivalentTo(["shelly", "other"]));
+        Assert.Equivalent(new[] { "shelly", "other" }, names, strict: true);
     }
 
-    [Test]
+    [Fact]
     public async Task GetIndexPageAsync_sorts_by_votes_ascending_across_pages()
     {
         var repo = new InMemoryPackageRepository();
@@ -261,14 +261,14 @@ public class PackageServiceTests
         Assert.Multiple(() =>
         {
             // Ascending is the uniform default; packages absent from the catalog rank as zero votes.
-            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "v-missing", "v-a" }));
-            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "v-b", "v-c" }));
-            Assert.That(secondPage.TotalItems, Is.EqualTo(4));
-            Assert.That(secondPage.TotalPages, Is.EqualTo(2));
+            Assert.Equal(new[] { "v-missing", "v-a" }, firstPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "v-b", "v-c" }, secondPage.Items.Select(item => item.Name));
+            Assert.Equal(4, secondPage.TotalItems);
+            Assert.Equal(2, secondPage.TotalPages);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetIndexPageAsync_sorts_by_votes_descending_when_requested()
     {
         var repo = new InMemoryPackageRepository();
@@ -290,13 +290,13 @@ public class PackageServiceTests
         Assert.Multiple(() =>
         {
             // Equal votes tie-break on name; packages absent from the catalog rank as zero votes.
-            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "v-b", "v-c" }));
-            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "v-a", "v-missing" }));
-            Assert.That(secondPage.Items[1].NumVotes, Is.Null);
+            Assert.Equal(new[] { "v-b", "v-c" }, firstPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "v-a", "v-missing" }, secondPage.Items.Select(item => item.Name));
+            Assert.Null(secondPage.Items[1].NumVotes);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetIndexPageAsync_sorts_by_popularity_descending_when_requested()
     {
         var repo = new InMemoryPackageRepository();
@@ -317,13 +317,13 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "p-b", "p-a" }));
-            Assert.That(firstPage.Items[0].Popularity, Is.EqualTo(10.5));
-            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "p-c" }));
+            Assert.Equal(new[] { "p-b", "p-a" }, firstPage.Items.Select(item => item.Name));
+            Assert.Equal(10.5, firstPage.Items[0].Popularity);
+            Assert.Equal(new[] { "p-c" }, secondPage.Items.Select(item => item.Name));
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetIndexPageAsync_sorts_versions_by_ordinal_string_comparison_with_nulls_last()
     {
         var repo = new InMemoryPackageRepository();
@@ -346,13 +346,13 @@ public class PackageServiceTests
         {
             // Version strings compare ordinally, so "2.0.0-1" outranks "10.0.0-1"; a package
             // absent from the catalog has no version and sorts last.
-            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "ver-a", "ver-c" }));
-            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "ver-b", "ver-missing" }));
-            Assert.That(secondPage.Items[1].Version, Is.Null);
+            Assert.Equal(new[] { "ver-a", "ver-c" }, firstPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "ver-b", "ver-missing" }, secondPage.Items.Select(item => item.Name));
+            Assert.Null(secondPage.Items[1].Version);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetIndexPageAsync_sorts_by_name_descending_when_requested()
     {
         var repo = new InMemoryPackageRepository();
@@ -366,12 +366,12 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(firstPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "n-c", "n-b" }));
-            Assert.That(secondPage.Items.Select(item => item.Name), Is.EqualTo(new[] { "n-a" }));
+            Assert.Equal(new[] { "n-c", "n-b" }, firstPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "n-a" }, secondPage.Items.Select(item => item.Name));
         });
     }
 
-    [Test]
+    [Fact]
     public async Task SeedFilesAsync_same_content_produces_same_revision_sha()
     {
         var repo = new InMemoryPackageRepository();
@@ -385,10 +385,10 @@ public class PackageServiceTests
         await service2.SeedFilesAsync("shelly", SampleFiles);
         var secondHistory = await service2.GetHistoryAsync("shelly");
 
-        Assert.That(firstHistory[0].Sha, Is.EqualTo(secondHistory[0].Sha));
+        Assert.Equal(secondHistory[0].Sha, firstHistory[0].Sha);
     }
 
-    [Test]
+    [Fact]
     public async Task SeedFilesAsync_estimate_above_limit_but_exact_bson_under_limit_is_accepted()
     {
         // Two files totalling 16,776,000 content bytes: the conservative estimate
@@ -396,7 +396,7 @@ public class PackageServiceTests
         // ToBson() measurement stays under it, so the exact second pass must admit it.
         const int perFile = 8_388_000;
         var estimated = 2L * perFile + 2 * (160 + "large-1.txt".Length) + 1024;
-        Assert.That(estimated, Is.GreaterThan(16 * 1024 * 1024),
+        Assert.True(estimated > 16 * 1024 * 1024,
             "precondition: the conservative estimate must exceed the BSON limit");
 
         var repo = new InMemoryPackageRepository();
@@ -417,12 +417,12 @@ public class PackageServiceTests
         var packageExists = await repo.ExistsAsync("boundary");
         Assert.Multiple(() =>
         {
-            Assert.That(packageExists, Is.True);
-            Assert.That(persisted.Files["large-1.txt"], Has.Length.EqualTo(perFile));
+            Assert.True(packageExists);
+            Assert.Equal(perFile, persisted.Files["large-1.txt"].Length);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task DeleteAsync_failure_after_derived_cleanup_leaves_package_deletable_again()
     {
         var repo = new InMemoryPackageRepository();
@@ -442,12 +442,12 @@ public class PackageServiceTests
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
-            Assert.That(await security.CountPendingAsync(), Is.EqualTo(1));
+            Assert.Equal(1, await security.CountPendingAsync());
             var repoDir = cache.GetRepositoryPath("shelly")!;
             Directory.CreateDirectory(repoDir);
             await File.WriteAllTextAsync(Path.Combine(repoDir, "HEAD"), "marker-for-cleanup");
 
-            Assert.ThrowsAsync<InvalidOperationException>(async () => await retryService.DeleteAsync("shelly"));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await retryService.DeleteAsync("shelly"));
 
             var remainingScans = await security.ListForPackageAsync("shelly");
             var packageStillExists = await repo.ExistsAsync("shelly");
@@ -455,15 +455,15 @@ public class PackageServiceTests
             {
                 // Derived state is removed before the authoritative document, so the failed
                 // delete leaves no orphaned scan records or on-disk cache...
-                Assert.That(remainingScans, Is.Empty);
-                Assert.That(Directory.Exists(repoDir), Is.False);
+                Assert.Empty(remainingScans);
+                Assert.False(Directory.Exists(repoDir));
                 // ...while the package document survives, keeping the delete retryable.
-                Assert.That(packageStillExists, Is.True);
+                Assert.True(packageStillExists);
             });
 
             await retryService.DeleteAsync("shelly");
 
-            Assert.That(await repo.ExistsAsync("shelly"), Is.False);
+            Assert.False(await repo.ExistsAsync("shelly"));
         }
         finally
         {

@@ -1,77 +1,78 @@
 using Atoll.Api.Services.Catalog;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Catalog;
 
 public class PackageQueryTests
 {
-    [TestCase("Name", By.Name)]
-    [TestCase("Provides", By.Provides)]
-    [TestCase("Words", By.Words)]
-    [TestCase("name", By.Name)]
-    [TestCase("PROVIDES", By.Provides)]
-    [TestCase("words", By.Words)]
+    [Theory]
+    [InlineData("Name", By.Name)]
+    [InlineData("Provides", By.Provides)]
+    [InlineData("Words", By.Words)]
+    [InlineData("name", By.Name)]
+    [InlineData("PROVIDES", By.Provides)]
+    [InlineData("words", By.Words)]
     public void ValidValueParsesSuccessfully(string input, By expected)
     {
         var parsed = ByQuery.TryParse(input, out var result);
 
-        Assert.That(parsed, Is.True);
-        Assert.That(result.By, Is.EqualTo(expected));
+        Assert.True(parsed);
+        Assert.Equal(expected, result.By);
     }
 
-    [Test]
+    [Fact]
     public void InvalidValueReturnsFalse()
     {
         var parsed = ByQuery.TryParse("Invalid", out var result);
 
-        Assert.That(parsed, Is.False);
-        Assert.That(result.By, Is.EqualTo(default(By)));
+        Assert.False(parsed);
+        Assert.Equal(default(By), result.By);
     }
 
-    [Test]
+    [Fact]
     public void NullReturnsFalse()
     {
         var parsed = ByQuery.TryParse(null, out var result);
 
-        Assert.That(parsed, Is.False);
-        Assert.That(result.By, Is.EqualTo(default(By)));
+        Assert.False(parsed);
+        Assert.Equal(default(By), result.By);
     }
 
-    [Test]
+    [Fact]
     public void EmptyStringReturnsFalse()
     {
         var parsed = ByQuery.TryParse(string.Empty, out var result);
 
-        Assert.That(parsed, Is.False);
-        Assert.That(result.By, Is.EqualTo(default(By)));
+        Assert.False(parsed);
+        Assert.Equal(default(By), result.By);
     }
 
-    [Test]
+    [Fact]
     public void WhitespaceReturnsFalse()
     {
         var parsed = ByQuery.TryParse("   ", out var result);
 
-        Assert.That(parsed, Is.False);
-        Assert.That(result.By, Is.EqualTo(default(By)));
+        Assert.False(parsed);
+        Assert.Equal(default(By), result.By);
     }
 
-    [Test]
+    [Fact]
     public void NamesAreSplitByComma()
     {
         var parsed = SearchQuery.TryParse("shelly,portable,portable", out var result);
 
-        Assert.That(parsed, Is.True);
-        Assert.That(result.Query.Length, Is.EqualTo(3));
-        Assert.That(result.Query[0], Is.EqualTo("shelly"));
-        Assert.That(result.Query[1], Is.EqualTo("portable"));
-        Assert.That(result.Query[2], Is.EqualTo("portable"));
+        Assert.True(parsed);
+        Assert.Equal(3, result.Query.Length);
+        Assert.Equal("shelly", result.Query[0]);
+        Assert.Equal("portable", result.Query[1]);
+        Assert.Equal("portable", result.Query[2]);
     }
 
-    [Test]
+    [Fact]
     public void EmptySourceProducesNoParts()
     {
         _ = SearchQuery.TryParse("", out var result);
 
-        Assert.That(result.Query, Is.Empty);
+        Assert.Empty(result.Query);
     }
 }

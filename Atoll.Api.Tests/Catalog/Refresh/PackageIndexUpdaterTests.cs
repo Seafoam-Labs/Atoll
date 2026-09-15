@@ -9,7 +9,7 @@ using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Catalog.Refresh;
 
@@ -24,7 +24,7 @@ public class PackageIndexUpdaterTests
             NullLogger<UpstreamPackageReconciler>.Instance);
     }
 
-    [Test]
+    [Fact]
     public async Task RefreshCoordinatorTracksAttemptAndFailureMetrics()
     {
         var invalidPayload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
@@ -50,17 +50,17 @@ public class PackageIndexUpdaterTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(ok, Is.False);
-            Assert.That(status.Attempts, Is.EqualTo(1));
-            Assert.That(status.Successes, Is.EqualTo(0));
-            Assert.That(status.Failures, Is.EqualTo(1));
-            Assert.That(status.LastStartedUtc, Is.Not.Null);
-            Assert.That(status.LastFailedUtc, Is.Not.Null);
-            Assert.That(store.Current.ByNames, Is.Empty);
+            Assert.False(ok);
+            Assert.Equal(1, status.Attempts);
+            Assert.Equal(0, status.Successes);
+            Assert.Equal(1, status.Failures);
+            Assert.NotNull(status.LastStartedUtc);
+            Assert.NotNull(status.LastFailedUtc);
+            Assert.Empty(store.Current.ByNames);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task DownloadAndReloadAsync_uses_archive_validators_after_successful_download()
     {
         var payload = Gzip("[{\"ID\":1,\"Name\":\"demo\",\"PackageBase\":\"demo\",\"Version\":\"1.0-1\"}]");
@@ -88,17 +88,17 @@ public class PackageIndexUpdaterTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(first, Is.True);
-            Assert.That(second, Is.True);
-            Assert.That(handler.SawConditionalRequest, Is.True);
-            Assert.That(store.Current.ByNames.Keys, Is.EquivalentTo(["demo"]));
-            Assert.That(status.Attempts, Is.EqualTo(2));
-            Assert.That(status.Successes, Is.EqualTo(2));
-            Assert.That(status.Failures, Is.Zero);
+            Assert.True(first);
+            Assert.True(second);
+            Assert.True(handler.SawConditionalRequest);
+            Assert.Equivalent(new[] { "demo" }, store.Current.ByNames.Keys, strict: true);
+            Assert.Equal(2, status.Attempts);
+            Assert.Equal(2, status.Successes);
+            Assert.Equal(0, status.Failures);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task DownloadAndReloadAsync_rejects_well_formed_but_empty_dump()
     {
         var aurMetadata = new InMemoryAurMetadataRepository();
@@ -126,14 +126,14 @@ public class PackageIndexUpdaterTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(ok, Is.False);
-            Assert.That(status.Failures, Is.EqualTo(1));
-            Assert.That(store.Current.ByNames.Keys, Is.EquivalentTo(["demo"]));
-            Assert.That(retained.Select(p => p.Name), Is.EquivalentTo(["demo"]));
+            Assert.False(ok);
+            Assert.Equal(1, status.Failures);
+            Assert.Equivalent(new[] { "demo" }, store.Current.ByNames.Keys, strict: true);
+            Assert.Equivalent(new[] { "demo" }, retained.Select(p => p.Name), strict: true);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task DownloadAndReloadAsync_defers_pruning_until_a_suspicious_shrink_is_confirmed()
     {
         var handler = new ScriptedHttpMessageHandler(
@@ -160,24 +160,23 @@ public class PackageIndexUpdaterTests
             NullLogger<PackageIndexUpdater>.Instance,
             reconciler);
 
-        Assert.That(await coordinator.DownloadAndReloadAsync(CancellationToken.None), Is.True);
-        Assert.That(packages.Deleted, Is.Empty, "full snapshot deletes nothing");
+        Assert.True(await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Empty(packages.Deleted);
 
-        Assert.That(await coordinator.DownloadAndReloadAsync(CancellationToken.None), Is.True);
-        Assert.That(packages.Deleted, Is.Empty, "a sudden >10% shrink defers pruning for one cycle");
+        Assert.True(await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Empty(packages.Deleted);
 
         // The archive re-answers the retained old validators with 304; that is not the
         // confirmation download, so pruning must stay deferred.
-        Assert.That(await coordinator.DownloadAndReloadAsync(CancellationToken.None), Is.True);
-        Assert.That(packages.Deleted, Is.Empty, "a 304 while confirmation is pending prunes nothing");
-        Assert.That(handler.SeenValidators[2]!.Tag, Is.EqualTo("\"v1\""), "the old validators were retained");
+        Assert.True(await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Empty(packages.Deleted);
+        Assert.Equal("\"v1\"", handler.SeenValidators[2]!.Tag);
 
-        Assert.That(await coordinator.DownloadAndReloadAsync(CancellationToken.None), Is.True);
+        Assert.True(await coordinator.DownloadAndReloadAsync(CancellationToken.None));
         Assert.Multiple(() =>
         {
-            Assert.That(packages.Deleted, Is.EquivalentTo(["p10", "p6", "p7", "p8", "p9"]),
-                "the confirmation download prunes the packages absent upstream");
-            Assert.That(coordinator.GetStatus().Successes, Is.EqualTo(4));
+            Assert.Equivalent(new[] { "p10", "p6", "p7", "p8", "p9" }, packages.Deleted, strict: true);
+            Assert.Equal(4, coordinator.GetStatus().Successes);
         });
     }
 

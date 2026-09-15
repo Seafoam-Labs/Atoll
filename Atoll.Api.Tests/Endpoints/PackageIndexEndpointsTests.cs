@@ -2,30 +2,28 @@ using System.Net;
 using System.Text.Json;
 using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class PackageIndexEndpointsTests
+public class PackageIndexEndpointsTests : IDisposable
 {
-    private HttpClient _client = null!;
-    private SecurityTestFactory _factory = null!;
+    private readonly HttpClient _client;
+    private readonly SecurityTestFactory _factory;
 
-    [SetUp]
-    public void SetUp()
+    public PackageIndexEndpointsTests()
     {
         _factory = new SecurityTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
     }
 
-    [Test]
+    [Fact]
     public async Task Index_returns_ordered_pages_with_envelope_metadata()
     {
         foreach (var name in new[] { "c-carrot", "a-apple", "e-egg", "b-banana", "d-date", "f-fig", "g-grape" })
@@ -35,7 +33,7 @@ public class PackageIndexEndpointsTests
 
         var response = await _client.GetAsync("/v1/packages?limit=3&page=2");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
@@ -43,31 +41,31 @@ public class PackageIndexEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("page").GetInt32(), Is.EqualTo(2));
-            Assert.That(root.GetProperty("limit").GetInt32(), Is.EqualTo(3));
-            Assert.That(root.GetProperty("totalItems").GetInt64(), Is.EqualTo(7));
-            Assert.That(root.GetProperty("totalPages").GetInt32(), Is.EqualTo(3));
+            Assert.Equal(2, root.GetProperty("page").GetInt32());
+            Assert.Equal(3, root.GetProperty("limit").GetInt32());
+            Assert.Equal(7, root.GetProperty("totalItems").GetInt64());
+            Assert.Equal(3, root.GetProperty("totalPages").GetInt32());
 
             var items = root.GetProperty("items");
-            Assert.That(items.GetArrayLength(), Is.EqualTo(3));
-            Assert.That(items[0].GetProperty("name").GetString(), Is.EqualTo("d-date"));
-            Assert.That(items[1].GetProperty("name").GetString(), Is.EqualTo("e-egg"));
-            Assert.That(items[2].GetProperty("name").GetString(), Is.EqualTo("f-fig"));
+            Assert.Equal(3, items.GetArrayLength());
+            Assert.Equal("d-date", items[0].GetProperty("name").GetString());
+            Assert.Equal("e-egg", items[1].GetProperty("name").GetString());
+            Assert.Equal("f-fig", items[2].GetProperty("name").GetString());
 
-            Assert.That(items[0].GetProperty("headRevisionId").GetString(), Is.EqualTo("rev-1"));
-            Assert.That(items[0].GetProperty("revisionCount").GetInt32(), Is.EqualTo(1));
-            Assert.That(items[0].GetProperty("upstreamPackageBase").ValueKind, Is.EqualTo(JsonValueKind.Null));
-            Assert.That(items[0].TryGetProperty("createdAt", out var createdAt), Is.True);
-            Assert.That(createdAt.GetDateTimeOffset(), Is.GreaterThan(DateTimeOffset.MinValue));
-            Assert.That(items[0].GetProperty("description").ValueKind, Is.EqualTo(JsonValueKind.Null));
-            Assert.That(items[0].GetProperty("numVotes").ValueKind, Is.EqualTo(JsonValueKind.Null));
+            Assert.Equal("rev-1", items[0].GetProperty("headRevisionId").GetString());
+            Assert.Equal(1, items[0].GetProperty("revisionCount").GetInt32());
+            Assert.Equal(JsonValueKind.Null, items[0].GetProperty("upstreamPackageBase").ValueKind);
+            Assert.True(items[0].TryGetProperty("createdAt", out var createdAt));
+            Assert.True(createdAt.GetDateTimeOffset() > DateTimeOffset.MinValue);
+            Assert.Equal(JsonValueKind.Null, items[0].GetProperty("description").ValueKind);
+            Assert.Equal(JsonValueKind.Null, items[0].GetProperty("numVotes").ValueKind);
 
-            Assert.That(items[1].GetProperty("headRevisionId").GetString(), Is.EqualTo("rev-2"));
-            Assert.That(items[1].GetProperty("revisionCount").GetInt32(), Is.EqualTo(2));
+            Assert.Equal("rev-2", items[1].GetProperty("headRevisionId").GetString());
+            Assert.Equal(2, items[1].GetProperty("revisionCount").GetInt32());
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Index_applies_default_page_and_limit()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
@@ -75,7 +73,7 @@ public class PackageIndexEndpointsTests
 
         var response = await _client.GetAsync("/v1/packages");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
@@ -83,16 +81,16 @@ public class PackageIndexEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("page").GetInt32(), Is.EqualTo(1));
-            Assert.That(root.GetProperty("limit").GetInt32(), Is.EqualTo(50));
-            Assert.That(root.GetProperty("totalItems").GetInt64(), Is.EqualTo(3));
-            Assert.That(root.GetProperty("totalPages").GetInt32(), Is.EqualTo(1));
-            Assert.That(root.GetProperty("items").GetArrayLength(), Is.EqualTo(3));
-            Assert.That(root.GetProperty("items")[0].GetProperty("name").GetString(), Is.EqualTo("a-apple"));
+            Assert.Equal(1, root.GetProperty("page").GetInt32());
+            Assert.Equal(50, root.GetProperty("limit").GetInt32());
+            Assert.Equal(3, root.GetProperty("totalItems").GetInt64());
+            Assert.Equal(1, root.GetProperty("totalPages").GetInt32());
+            Assert.Equal(3, root.GetProperty("items").GetArrayLength());
+            Assert.Equal("a-apple", root.GetProperty("items")[0].GetProperty("name").GetString());
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Index_returns_400_for_out_of_range_or_malformed_parameters()
     {
         var zeroPage = await _client.GetAsync("/v1/packages?page=0");
@@ -104,16 +102,16 @@ public class PackageIndexEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(zeroPage.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-            Assert.That(zeroLimit.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-            Assert.That(overMaxLimit.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-            Assert.That(malformedPage.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-            Assert.That(malformedSort.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-            Assert.That(malformedOrder.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+            Assert.Equal(HttpStatusCode.BadRequest, zeroPage.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, zeroLimit.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, overMaxLimit.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, malformedPage.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, malformedSort.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, malformedOrder.StatusCode);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Index_applies_order_parameter_to_name_sort()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
@@ -124,8 +122,8 @@ public class PackageIndexEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(descending.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(ascending.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.Equal(HttpStatusCode.OK, descending.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, ascending.StatusCode);
         });
 
         var descendingBody = await descending.Content.ReadAsStringAsync();
@@ -140,12 +138,12 @@ public class PackageIndexEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(descendingNames, Is.EqualTo(new[] { "c-carrot", "b-banana", "a-apple" }));
-            Assert.That(ascendingNames, Is.EqualTo(new[] { "a-apple", "b-banana", "c-carrot" }));
+            Assert.Equal(new[] { "c-carrot", "b-banana", "a-apple" }, descendingNames);
+            Assert.Equal(new[] { "a-apple", "b-banana", "c-carrot" }, ascendingNames);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Index_sorts_votes_ascending_by_default()
     {
         foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin", "a-absent" })
@@ -153,7 +151,7 @@ public class PackageIndexEndpointsTests
 
         var response = await _client.GetAsync("/v1/packages?sortBy=votes&limit=4");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
@@ -161,10 +159,10 @@ public class PackageIndexEndpointsTests
             .EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToArray();
 
         // Sample index votes: portable-pro 20, shelly-bin 10, portable-kit 5; "a-absent" ranks as zero.
-        Assert.That(names, Is.EqualTo(new[] { "a-absent", "portable-kit", "shelly-bin", "portable-pro" }));
+        Assert.Equal(new[] { "a-absent", "portable-kit", "shelly-bin", "portable-pro" }, names);
     }
 
-    [Test]
+    [Fact]
     public async Task Index_sorts_by_votes_descending_across_pages()
     {
         foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin", "a-absent" })
@@ -175,8 +173,8 @@ public class PackageIndexEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(firstPage.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(secondPage.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.Equal(HttpStatusCode.OK, firstPage.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, secondPage.StatusCode);
         });
 
         var firstBody = await firstPage.Content.ReadAsStringAsync();
@@ -191,15 +189,15 @@ public class PackageIndexEndpointsTests
         {
             // Sample index votes: portable-pro 20, shelly-bin 10, portable-kit 5;
             // "a-absent" is not in the index and ranks as zero votes on the last page.
-            Assert.That(firstItems[0].GetProperty("name").GetString(), Is.EqualTo("portable-pro"));
-            Assert.That(firstItems[1].GetProperty("name").GetString(), Is.EqualTo("shelly-bin"));
-            Assert.That(secondItems[0].GetProperty("name").GetString(), Is.EqualTo("portable-kit"));
-            Assert.That(secondItems[1].GetProperty("name").GetString(), Is.EqualTo("a-absent"));
-            Assert.That(secondItems[1].GetProperty("numVotes").ValueKind, Is.EqualTo(JsonValueKind.Null));
+            Assert.Equal("portable-pro", firstItems[0].GetProperty("name").GetString());
+            Assert.Equal("shelly-bin", firstItems[1].GetProperty("name").GetString());
+            Assert.Equal("portable-kit", secondItems[0].GetProperty("name").GetString());
+            Assert.Equal("a-absent", secondItems[1].GetProperty("name").GetString());
+            Assert.Equal(JsonValueKind.Null, secondItems[1].GetProperty("numVotes").ValueKind);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Index_beyond_last_page_returns_empty_items()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
@@ -207,7 +205,7 @@ public class PackageIndexEndpointsTests
 
         var response = await _client.GetAsync("/v1/packages?page=99&limit=3");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
@@ -215,14 +213,14 @@ public class PackageIndexEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("items").GetArrayLength(), Is.Zero);
-            Assert.That(root.GetProperty("page").GetInt32(), Is.EqualTo(99));
-            Assert.That(root.GetProperty("totalItems").GetInt64(), Is.EqualTo(3));
-            Assert.That(root.GetProperty("totalPages").GetInt32(), Is.EqualTo(1));
+            Assert.Equal(0, root.GetProperty("items").GetArrayLength());
+            Assert.Equal(99, root.GetProperty("page").GetInt32());
+            Assert.Equal(3, root.GetProperty("totalItems").GetInt64());
+            Assert.Equal(1, root.GetProperty("totalPages").GetInt32());
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Index_with_int_max_page_returns_empty_items_without_overflow()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
@@ -230,15 +228,15 @@ public class PackageIndexEndpointsTests
 
         var response = await _client.GetAsync("/v1/packages?page=2147483647&limit=200");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
 
-        Assert.That(doc.RootElement.GetProperty("items").GetArrayLength(), Is.Zero);
+        Assert.Equal(0, doc.RootElement.GetProperty("items").GetArrayLength());
     }
 
-    [Test]
+    [Fact]
     public async Task Index_returns_empty_envelope_for_empty_corpus()
     {
         using var factory = new SecurityTestFactory();
@@ -246,7 +244,7 @@ public class PackageIndexEndpointsTests
 
         var response = await client.GetAsync("/v1/packages");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
@@ -254,15 +252,15 @@ public class PackageIndexEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("items").GetArrayLength(), Is.Zero);
-            Assert.That(root.GetProperty("page").GetInt32(), Is.EqualTo(1));
-            Assert.That(root.GetProperty("limit").GetInt32(), Is.EqualTo(50));
-            Assert.That(root.GetProperty("totalItems").GetInt64(), Is.Zero);
-            Assert.That(root.GetProperty("totalPages").GetInt32(), Is.Zero);
+            Assert.Equal(0, root.GetProperty("items").GetArrayLength());
+            Assert.Equal(1, root.GetProperty("page").GetInt32());
+            Assert.Equal(50, root.GetProperty("limit").GetInt32());
+            Assert.Equal(0, root.GetProperty("totalItems").GetInt64());
+            Assert.Equal(0, root.GetProperty("totalPages").GetInt32());
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Index_rows_carry_catalog_fields_when_names_are_in_the_index()
     {
         await SeedAsync("shelly-bin");
@@ -270,35 +268,35 @@ public class PackageIndexEndpointsTests
 
         var response = await _client.GetAsync("/v1/packages?limit=2");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
         var items = doc.RootElement.GetProperty("items");
 
-        Assert.That(items.GetArrayLength(), Is.EqualTo(2));
+        Assert.Equal(2, items.GetArrayLength());
 
         var apple = items[0];
         Assert.Multiple(() =>
         {
-            Assert.That(apple.GetProperty("name").GetString(), Is.EqualTo("a-apple"));
-            Assert.That(apple.GetProperty("description").ValueKind, Is.EqualTo(JsonValueKind.Null));
-            Assert.That(apple.GetProperty("version").ValueKind, Is.EqualTo(JsonValueKind.Null));
-            Assert.That(apple.GetProperty("numVotes").ValueKind, Is.EqualTo(JsonValueKind.Null));
-            Assert.That(apple.GetProperty("popularity").ValueKind, Is.EqualTo(JsonValueKind.Null));
-            Assert.That(apple.GetProperty("outOfDate").ValueKind, Is.EqualTo(JsonValueKind.Null));
+            Assert.Equal("a-apple", apple.GetProperty("name").GetString());
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("description").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("version").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("numVotes").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("popularity").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("outOfDate").ValueKind);
         });
 
         var shelly = items[1];
         Assert.Multiple(() =>
         {
-            Assert.That(shelly.GetProperty("name").GetString(), Is.EqualTo("shelly-bin"));
-            Assert.That(shelly.GetProperty("description").GetString(),
-                Is.EqualTo("Shelly: A Modern Arch Package Manager (prebuilt binary)"));
-            Assert.That(shelly.GetProperty("version").GetString(), Is.EqualTo("1.2.3-1"));
-            Assert.That(shelly.GetProperty("numVotes").GetInt32(), Is.EqualTo(10));
-            Assert.That(shelly.GetProperty("popularity").GetDouble(), Is.EqualTo(0));
-            Assert.That(shelly.GetProperty("outOfDate").GetInt64(), Is.EqualTo(1735689600));
+            Assert.Equal("shelly-bin", shelly.GetProperty("name").GetString());
+            Assert.Equal("Shelly: A Modern Arch Package Manager (prebuilt binary)",
+                shelly.GetProperty("description").GetString());
+            Assert.Equal("1.2.3-1", shelly.GetProperty("version").GetString());
+            Assert.Equal(10, shelly.GetProperty("numVotes").GetInt32());
+            Assert.Equal(0, shelly.GetProperty("popularity").GetDouble());
+            Assert.Equal(1735689600, shelly.GetProperty("outOfDate").GetInt64());
         });
     }
 

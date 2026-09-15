@@ -3,24 +3,22 @@ using System.Text.Json;
 using Atoll.Api.Tests.Support;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-[Category("RequiresMongo")]
-public class MongoApiEndpointsTests
+[Trait("Category", "RequiresMongo")]
+public class MongoApiEndpointsTests : IAsyncLifetime
 {
-    private HttpClient _client = null!;
-    private MongoApiTestFactory _factory = null!;
-    private IMongoClient _mongo = null!;
+    private readonly HttpClient _client;
+    private readonly MongoApiTestFactory _factory;
+    private readonly IMongoClient _mongo;
 
-    [SetUp]
-    public void SetUp()
+    public MongoApiEndpointsTests()
     {
-        Assume.That(
+        Assert.SkipUnless(
             MongoFixture.IsAvailable,
-            Is.True,
             $"Mongo unavailable: {MongoFixture.UnavailableReason}");
 
         _factory = new MongoApiTestFactory();
@@ -28,15 +26,19 @@ public class MongoApiEndpointsTests
         _mongo = MongoRepositoryFactory.CreateClient();
     }
 
-    [TearDown]
-    public async Task TearDown()
+    public ValueTask InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
     {
         _client.Dispose();
         await _factory.DisposeAsync();
         await MongoRepositoryFactory.DropDatabaseAsync(_mongo, _factory.Database);
     }
 
-    [Test]
+    [Fact]
     public async Task SeededPackageIsServedFromRealMongoStorage()
     {
         var repo = _factory.CreatePackageRepository();
@@ -71,18 +73,18 @@ public class MongoApiEndpointsTests
         var head = await _client.GetAsync("/v1/packages/atoll-test");
         var versions = await _client.GetAsync("/v1/packages/atoll-test/versions");
 
-        Assert.That(list.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(versions.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, head.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, versions.StatusCode);
 
         var listBody = await list.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(listBody);
         var items = doc.RootElement.GetProperty("items");
-        Assert.That(items.GetArrayLength(), Is.EqualTo(1));
-        Assert.That(items[0].GetProperty("name").GetString(), Is.EqualTo("atoll-test"));
+        Assert.Equal(1, items.GetArrayLength());
+        Assert.Equal("atoll-test", items[0].GetProperty("name").GetString());
     }
 
-    [Test]
+    [Fact]
     public async Task PackageIndexIsServedPagedFromRealMongoStorage()
     {
         var repo = _factory.CreatePackageRepository();
@@ -118,7 +120,7 @@ public class MongoApiEndpointsTests
 
         var response = await _client.GetAsync("/v1/packages?limit=2&page=2");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
@@ -126,21 +128,21 @@ public class MongoApiEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("page").GetInt32(), Is.EqualTo(2));
-            Assert.That(root.GetProperty("limit").GetInt32(), Is.EqualTo(2));
-            Assert.That(root.GetProperty("totalItems").GetInt64(), Is.EqualTo(3));
-            Assert.That(root.GetProperty("totalPages").GetInt32(), Is.EqualTo(2));
+            Assert.Equal(2, root.GetProperty("page").GetInt32());
+            Assert.Equal(2, root.GetProperty("limit").GetInt32());
+            Assert.Equal(3, root.GetProperty("totalItems").GetInt64());
+            Assert.Equal(2, root.GetProperty("totalPages").GetInt32());
 
             var items = root.GetProperty("items");
-            Assert.That(items.GetArrayLength(), Is.EqualTo(1));
-            Assert.That(items[0].GetProperty("name").GetString(), Is.EqualTo("zulu"));
-            Assert.That(items[0].GetProperty("headRevisionId").GetString(), Is.EqualTo("rev-1"));
-            Assert.That(items[0].GetProperty("revisionCount").GetInt32(), Is.EqualTo(1));
-            Assert.That(items[0].GetProperty("upstreamPackageBase").ValueKind, Is.EqualTo(JsonValueKind.Null));
+            Assert.Equal(1, items.GetArrayLength());
+            Assert.Equal("zulu", items[0].GetProperty("name").GetString());
+            Assert.Equal("rev-1", items[0].GetProperty("headRevisionId").GetString());
+            Assert.Equal(1, items[0].GetProperty("revisionCount").GetInt32());
+            Assert.Equal(JsonValueKind.Null, items[0].GetProperty("upstreamPackageBase").ValueKind);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task DeletePackagePersistsToRealMongo()
     {
         var repo = _factory.CreatePackageRepository();
@@ -183,19 +185,19 @@ public class MongoApiEndpointsTests
         });
 
         var del = await _client.DeleteAsync("/v1/packages/to-delete");
-        Assert.That(del.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
 
-        Assert.That(await repo.ExistsAsync("to-delete"), Is.False);
+        Assert.False(await repo.ExistsAsync("to-delete"));
 
         // Cascade: the deleted package's revision content documents are also gone.
         var revisionDocs = _mongo.GetDatabase(_factory.Database).GetCollection<BsonDocument>("package-revisions");
-        Assert.That(
-            await revisionDocs.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")),
-            Is.EqualTo(0));
+        Assert.Equal(
+            0,
+            await revisionDocs.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")));
 
         // Cascade: the deleted package's security scan documents are also gone.
-        Assert.That(
-            await scans.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")),
-            Is.EqualTo(0));
+        Assert.Equal(
+            0,
+            await scans.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")));
     }
 }

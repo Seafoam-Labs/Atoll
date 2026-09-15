@@ -3,37 +3,40 @@ using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Packages;
 
-[Category("RequiresMongo")]
-public class MongoPackageRepositoryTests
+[Trait("Category", "RequiresMongo")]
+public class MongoPackageRepositoryTests : IAsyncLifetime
 {
     private const string RevisionCollection = "package-revisions";
 
-    private IMongoClient _client = null!;
-    private string _database = null!;
-    private MongoPackageRepository _repo = null!;
+    private readonly IMongoClient _client;
+    private readonly string _database;
+    private readonly MongoPackageRepository _repo;
 
-    [SetUp]
-    public void SetUp()
+    public MongoPackageRepositoryTests()
     {
-        Assume.That(MongoFixture.IsAvailable, Is.True, $"Mongo unavailable: {MongoFixture.UnavailableReason}");
+        Assert.SkipUnless(MongoFixture.IsAvailable, $"Mongo unavailable: {MongoFixture.UnavailableReason}");
 
         _client = MongoRepositoryFactory.CreateClient();
         _database = MongoRepositoryFactory.NewDatabaseName();
         _repo = MongoRepositoryFactory.CreatePackageRepository(_client, _database);
     }
 
-    [TearDown]
-    public async Task TearDown()
+    public ValueTask InitializeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
     {
         await MongoRepositoryFactory.DropDatabaseAsync(_client, _database);
     }
 
-    [Test]
+    [Fact]
     public async Task InsertSeedAsync_same_id_twice_throws_PackageConflictException()
     {
         var (firstDoc, firstRevision) = NewSeed("pkg/shelly", "shelly");
@@ -43,11 +46,11 @@ public class MongoPackageRepositoryTests
 
         await _repo.InsertSeedAsync(firstDoc, firstRevision, CancellationToken.None);
 
-        Assert.ThrowsAsync<PackageConflictException>(async () =>
+        await Assert.ThrowsAsync<PackageConflictException>(async () =>
             await _repo.InsertSeedAsync(secondDoc, secondRevision, CancellationToken.None));
     }
 
-    [Test]
+    [Fact]
     public async Task InsertSeedAsync_stamps_current_schema_version_on_package_and_revision_documents()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
@@ -56,16 +59,16 @@ public class MongoPackageRepositoryTests
         var head = await _repo.GetHeadAsync("shelly", CancellationToken.None);
         var storedRevision = await _repo.GetRevisionAsync("shelly", "rev-0", CancellationToken.None);
 
-        Assert.That(head, Is.Not.Null);
-        Assert.That(storedRevision, Is.Not.Null);
+        Assert.NotNull(head);
+        Assert.NotNull(storedRevision);
         Assert.Multiple(() =>
         {
-            Assert.That(head!.SchemaVersion, Is.EqualTo(PackageSchema.CurrentVersion));
-            Assert.That(storedRevision!.SchemaVersion, Is.EqualTo(PackageSchema.CurrentVersion));
+            Assert.Equal(PackageSchema.CurrentVersion, head!.SchemaVersion);
+            Assert.Equal(PackageSchema.CurrentVersion, storedRevision!.SchemaVersion);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task AppendRevisionAsync_caps_revisions_to_maxRevisions()
     {
         const int maxRevisions = 5;
@@ -78,25 +81,25 @@ public class MongoPackageRepositoryTests
 
         var head = await _repo.GetHeadAsync("shelly", CancellationToken.None);
 
-        Assert.That(head, Is.Not.Null);
+        Assert.NotNull(head);
         Assert.Multiple(() =>
         {
-            Assert.That(head!.Revisions, Has.Count.EqualTo(maxRevisions));
+            Assert.Equal(maxRevisions, head!.Revisions.Count);
             // Newest revision is pushed at position 0.
-            Assert.That(head.Revisions[0].RevisionId, Is.EqualTo("rev-10"));
-            Assert.That(head.HeadRevisionId, Is.EqualTo("rev-10"));
+            Assert.Equal("rev-10", head.Revisions[0].RevisionId);
+            Assert.Equal("rev-10", head.HeadRevisionId);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task AppendRevisionAsync_unknown_package_throws_KeyNotFoundException()
     {
-        Assert.ThrowsAsync<KeyNotFoundException>(async () => await Append(
+        await Assert.ThrowsAsync<KeyNotFoundException>(async () => await Append(
             "missing",
             NewRevisionContent("missing", "rev-1", "commit 1")));
     }
 
-    [Test]
+    [Fact]
     public async Task GetRevisionAsync_returns_expected_revision()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
@@ -107,17 +110,17 @@ public class MongoPackageRepositoryTests
 
         var stored = await _repo.GetRevisionAsync("shelly", "rev-a", CancellationToken.None);
 
-        Assert.That(stored, Is.Not.Null);
+        Assert.NotNull(stored);
         Assert.Multiple(() =>
         {
-            Assert.That(stored!.Id, Is.EqualTo(PackageSchema.RevisionDocumentId("shelly", "rev-a")));
-            Assert.That(stored.RevisionId, Is.EqualTo("rev-a"));
-            Assert.That(stored.Message, Is.EqualTo("commit a"));
-            Assert.That(stored.Files, Does.ContainKey("PKGBUILD"));
+            Assert.Equal(PackageSchema.RevisionDocumentId("shelly", "rev-a"), stored!.Id);
+            Assert.Equal("rev-a", stored.RevisionId);
+            Assert.Equal("commit a", stored.Message);
+            Assert.Contains("PKGBUILD", stored.Files);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task GetHistoryAsync_returns_newest_first_after_multiple_appends()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
@@ -128,22 +131,22 @@ public class MongoPackageRepositoryTests
 
         var history = await _repo.GetHistoryAsync("shelly", CancellationToken.None);
 
-        Assert.That(history.Select(v => v.Sha), Is.EqualTo(["rev-3", "rev-2", "rev-1", "rev-0"]));
+        Assert.Equal(["rev-3", "rev-2", "rev-1", "rev-0"], history.Select(v => v.Sha));
     }
 
-    [Test]
+    [Fact]
     public async Task DeleteAsync_removes_package()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
-        Assert.That(await _repo.ExistsAsync("shelly", CancellationToken.None), Is.True);
+        Assert.True(await _repo.ExistsAsync("shelly", CancellationToken.None));
 
         await _repo.DeleteAsync("shelly", CancellationToken.None);
 
-        Assert.That(await _repo.ExistsAsync("shelly", CancellationToken.None), Is.False);
+        Assert.False(await _repo.ExistsAsync("shelly", CancellationToken.None));
     }
 
-    [Test]
+    [Fact]
     public async Task ListIndexPageAsync_returns_ordered_windows_with_projection_fields()
     {
         foreach (var name in new[] { "c-carrot", "a-apple", "e-egg", "b-banana", "d-date" })
@@ -161,21 +164,21 @@ public class MongoPackageRepositoryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(total, Is.EqualTo(5));
-            Assert.That(firstPage.Select(p => p.Name), Is.EqualTo(["a-apple", "b-banana"]));
-            Assert.That(secondPage.Select(p => p.Name), Is.EqualTo(["c-carrot", "d-date"]));
-            Assert.That(lastRow.Select(p => p.Name), Is.EqualTo(["e-egg"]));
+            Assert.Equal(5, total);
+            Assert.Equal(["a-apple", "b-banana"], firstPage.Select(p => p.Name));
+            Assert.Equal(["c-carrot", "d-date"], secondPage.Select(p => p.Name));
+            Assert.Equal(["e-egg"], lastRow.Select(p => p.Name));
 
             var apple = firstPage.Single(p => p.Name == "a-apple");
-            Assert.That(apple.HeadRevisionId, Is.EqualTo("rev-a2"));
-            Assert.That(apple.RevisionCount, Is.EqualTo(2));
-            Assert.That(apple.CreatedAt, Is.GreaterThan(DateTimeOffset.MinValue));
-            Assert.That(apple.UpdatedAt, Is.GreaterThan(DateTimeOffset.MinValue));
-            Assert.That(apple.UpstreamPackageBase, Is.Null);
+            Assert.Equal("rev-a2", apple.HeadRevisionId);
+            Assert.Equal(2, apple.RevisionCount);
+            Assert.True(apple.CreatedAt > DateTimeOffset.MinValue);
+            Assert.True(apple.UpdatedAt > DateTimeOffset.MinValue);
+            Assert.Null(apple.UpstreamPackageBase);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task ListIndexPageAsync_matches_in_memory_fake_paging()
     {
         var fake = new InMemoryPackageRepository();
@@ -190,12 +193,12 @@ public class MongoPackageRepositoryTests
         var fromMongo = await _repo.ListIndexPageAsync(1, 3, CancellationToken.None);
         var fromFake = await fake.ListIndexPageAsync(1, 3, CancellationToken.None);
 
-        Assert.That(
+        Assert.Equal(
             fromMongo.Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount)),
-            Is.EqualTo(fromFake.Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount))));
+            fromFake.Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount)));
     }
 
-    [Test]
+    [Fact]
     public async Task AppendRevisionAsync_evicts_revision_documents_beyond_maxRevisions()
     {
         const int maxRevisions = 5;
@@ -210,7 +213,7 @@ public class MongoPackageRepositoryTests
                 maxRevisions);
 
         var head = await _repo.GetHeadAsync("shelly", CancellationToken.None);
-        Assert.That(head, Is.Not.Null);
+        Assert.NotNull(head);
 
         var retained = new List<PackageRevisionContentDocument?>();
         for (var i = 6; i <= 10; i++)
@@ -224,17 +227,17 @@ public class MongoPackageRepositoryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(head!.Revisions, Has.Count.EqualTo(maxRevisions));
-            Assert.That(
-                head.Revisions.Select(r => r.RevisionId),
-                Is.EqualTo(["rev-10", "rev-9", "rev-8", "rev-7", "rev-6"]));
-            Assert.That(revisionDocCount, Is.EqualTo(maxRevisions));
-            Assert.That(retained, Has.All.Not.Null, "retained revisions should still have documents");
-            Assert.That(evicted, Has.All.Null, "evicted revisions should have been deleted");
+            Assert.Equal(maxRevisions, head!.Revisions.Count);
+            Assert.Equal(
+                ["rev-10", "rev-9", "rev-8", "rev-7", "rev-6"],
+                head.Revisions.Select(r => r.RevisionId));
+            Assert.Equal(maxRevisions, revisionDocCount);
+            Assert.All(retained, item => Assert.NotNull(item));
+            Assert.All(evicted, item => Assert.Null(item));
         });
     }
 
-    [Test]
+    [Fact]
     public async Task AppendRevisionAsync_never_deletes_reappearing_content_hash()
     {
         const int maxRevisions = 2;
@@ -255,14 +258,14 @@ public class MongoPackageRepositoryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(revB, Is.Not.Null, "the re-appended revision document must survive");
-            Assert.That(revC, Is.Not.Null);
-            Assert.That(revA, Is.Null);
-            Assert.That(history.Select(v => v.Sha), Is.EqualTo(["rev-b", "rev-c"]));
+            Assert.NotNull(revB);
+            Assert.NotNull(revC);
+            Assert.Null(revA);
+            Assert.Equal(["rev-b", "rev-c"], history.Select(v => v.Sha));
         });
     }
 
-    [Test]
+    [Fact]
     public async Task DeleteAsync_cascades_to_revision_documents()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
@@ -279,13 +282,13 @@ public class MongoPackageRepositoryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(rev0, Is.Null);
-            Assert.That(rev1, Is.Null);
-            Assert.That(remainingRevisionDocs, Is.Zero);
+            Assert.Null(rev0);
+            Assert.Null(rev1);
+            Assert.Equal(0, remainingRevisionDocs);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task InsertSeedAsync_conflict_leaves_no_orphan_revision_document()
     {
         var (firstDoc, firstRevision) = NewSeed("pkg/shelly", "shelly");
@@ -295,7 +298,7 @@ public class MongoPackageRepositoryTests
 
         await _repo.InsertSeedAsync(firstDoc, firstRevision, CancellationToken.None);
 
-        Assert.ThrowsAsync<PackageConflictException>(async () =>
+        await Assert.ThrowsAsync<PackageConflictException>(async () =>
             await _repo.InsertSeedAsync(secondDoc, secondRevision, CancellationToken.None));
 
         var remainingRevisionDocs = await CountRevisionDocsAsync("shelly");
@@ -304,9 +307,9 @@ public class MongoPackageRepositoryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(remainingRevisionDocs, Is.EqualTo(1));
-            Assert.That(secondRevisionDoc, Is.Null, "the conflicting seed's revision document must be deleted");
-            Assert.That(firstRevisionDoc, Is.Not.Null, "the original seed's revision document must remain");
+            Assert.Equal(1, remainingRevisionDocs);
+            Assert.Null(secondRevisionDoc);
+            Assert.NotNull(firstRevisionDoc);
         });
     }
 

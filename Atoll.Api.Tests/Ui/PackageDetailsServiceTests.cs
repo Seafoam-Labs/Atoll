@@ -4,12 +4,12 @@ using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Options;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Ui;
 
-public class PackageDetailsServiceTests
+public class PackageDetailsServiceTests : IAsyncLifetime
 {
     private PackageIndexStore _store = null!;
     private InMemoryPackageRepository _repository = null!;
@@ -18,8 +18,7 @@ public class PackageDetailsServiceTests
 
     private const string Name = "shelly-bin";
 
-    [SetUp]
-    public async Task SetUp()
+    public async ValueTask InitializeAsync()
     {
         _store = new PackageIndexStore();
         _store.Replace(await TestData.LoadSampleIndexesAsync());
@@ -32,7 +31,12 @@ public class PackageDetailsServiceTests
             new PackageSecurityAccess(_repository, _securityRepository, Options.Create(new AtollOptions())));
     }
 
-    [Test]
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    [Fact]
     public async Task GetRevisionsAsyncOrdersNewestFirstMarksHeadAndJoinsScanStatuses()
     {
         await SeedRevisionAsync("rev-1", "old head", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
@@ -40,29 +44,29 @@ public class PackageDetailsServiceTests
 
         var result = await _service.GetRevisionsAsync(Name);
 
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Rows.Select(row => row.Sha), Is.EqualTo(["rev-2", "rev-1"]));
-        Assert.That(result.TotalRevisions, Is.EqualTo(2));
-        Assert.That(result.IsTruncated, Is.False);
-        Assert.That(result.HeadRevisionId, Is.EqualTo("rev-2"));
-        Assert.That(result.Rows[0].IsHead, Is.True);
-        Assert.That(result.Rows[0].Message, Is.EqualTo("sync from upstream"));
-        Assert.That(result.Rows[0].Status, Is.EqualTo(SecurityStatus.Verified));
-        Assert.That(result.Rows[1].IsHead, Is.False);
-        Assert.That(result.Rows[1].Status, Is.EqualTo(SecurityStatus.Flagged));
+        Assert.NotNull(result);
+        Assert.Equal(["rev-2", "rev-1"], result!.Rows.Select(row => row.Sha));
+        Assert.Equal(2, result.TotalRevisions);
+        Assert.False(result.IsTruncated);
+        Assert.Equal("rev-2", result.HeadRevisionId);
+        Assert.True(result.Rows[0].IsHead);
+        Assert.Equal("sync from upstream", result.Rows[0].Message);
+        Assert.Equal(SecurityStatus.Verified, result.Rows[0].Status);
+        Assert.False(result.Rows[1].IsHead);
+        Assert.Equal(SecurityStatus.Flagged, result.Rows[1].Status);
     }
 
-    [Test]
+    [Fact]
     public async Task GetRevisionsAsyncMarksUnscannedRevisionsWithNullStatus()
     {
         await SeedRevisionAsync("rev-1", "seed");
 
         var result = await _service.GetRevisionsAsync(Name);
 
-        Assert.That(result!.Rows.Single().Status, Is.Null);
+        Assert.Null(result!.Rows.Single().Status);
     }
 
-    [Test]
+    [Fact]
     public async Task GetRevisionsAsyncTruncatesBeyondRenderCap()
     {
         await InsertDocAsync();
@@ -73,24 +77,24 @@ public class PackageDetailsServiceTests
 
         var result = await _service.GetRevisionsAsync(Name);
 
-        Assert.That(result!.TotalRevisions, Is.EqualTo(PackageDetailsService.RevisionRenderCap + 5));
-        Assert.That(result.Rows, Has.Count.EqualTo(PackageDetailsService.RevisionRenderCap));
-        Assert.That(result.IsTruncated, Is.True);
+        Assert.Equal(PackageDetailsService.RevisionRenderCap + 5, result!.TotalRevisions);
+        Assert.Equal(PackageDetailsService.RevisionRenderCap, result.Rows.Count);
+        Assert.True(result.IsTruncated);
         // Newest first: the last appended revision leads the rendered page.
-        Assert.That(result.Rows[0].Sha, Is.EqualTo($"rev-{PackageDetailsService.RevisionRenderCap + 3:000}"));
+        Assert.Equal($"rev-{PackageDetailsService.RevisionRenderCap + 3:000}", result.Rows[0].Sha);
     }
 
-    [Test]
+    [Fact]
     public async Task GetRevisionsAsyncReturnsNullForUnknownPackageAndEmptyForUnseeded()
     {
-        Assert.That(await _service.GetRevisionsAsync("no-such-package"), Is.Null);
+        Assert.Null(await _service.GetRevisionsAsync("no-such-package"));
 
         var unseeded = await _service.GetRevisionsAsync("portable-kit");
-        Assert.That(unseeded!.Rows, Is.Empty);
-        Assert.That(unseeded.TotalRevisions, Is.EqualTo(0));
+        Assert.Empty(unseeded!.Rows);
+        Assert.Equal(0, unseeded.TotalRevisions);
     }
 
-    [Test]
+    [Fact]
     public async Task GetFilesAsyncReturnsTreeEntriesSortedDirectoriesFirst()
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>
@@ -104,40 +108,40 @@ public class PackageDetailsServiceTests
 
         var view = await _service.GetFilesAsync(Name, null, null);
 
-        Assert.That(view!.Access.Allowed, Is.True);
-        Assert.That(view.Entries.Select(entry => entry.Path),
-            Is.EqualTo(["sub/deep/notes.txt", "sub/hook.sh", ".SRCINFO", "PKGBUILD", "zzz.txt"]));
-        Assert.That(view.IsHead, Is.True);
-        Assert.That(view.SelectedPath, Is.Null);
-        Assert.That(view.EntriesTruncated, Is.False);
+        Assert.True(view!.Access.Allowed);
+        Assert.Equal(["sub/deep/notes.txt", "sub/hook.sh", ".SRCINFO", "PKGBUILD", "zzz.txt"],
+            view.Entries.Select(entry => entry.Path));
+        Assert.True(view.IsHead);
+        Assert.Null(view.SelectedPath);
+        Assert.False(view.EntriesTruncated);
     }
 
-    [Test]
+    [Fact]
     public async Task GetFilesAsyncReturnsSelectedFileContent()
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: Files("line one\nline two\n"));
 
         var view = await _service.GetFilesAsync(Name, null, "PKGBUILD");
 
-        Assert.That(view!.SelectedPath, Is.EqualTo("PKGBUILD"));
-        Assert.That(view.Content, Is.EqualTo("line one\nline two\n"));
-        Assert.That(view.IsBinary, Is.False);
-        Assert.That(view.IsTruncated, Is.False);
-        Assert.That(view.FileNotFound, Is.False);
+        Assert.Equal("PKGBUILD", view!.SelectedPath);
+        Assert.Equal("line one\nline two\n", view.Content);
+        Assert.False(view.IsBinary);
+        Assert.False(view.IsTruncated);
+        Assert.False(view.FileNotFound);
     }
 
-    [Test]
+    [Fact]
     public async Task GetFilesAsyncMarksMissingPathAsFileNotFound()
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified);
 
         var view = await _service.GetFilesAsync(Name, null, "not-there.txt");
 
-        Assert.That(view!.FileNotFound, Is.True);
-        Assert.That(view.Content, Is.Null);
+        Assert.True(view!.FileNotFound);
+        Assert.Null(view.Content);
     }
 
-    [Test]
+    [Fact]
     public async Task GetFilesAsyncServesFlaggedRevisionsForUiInspection()
     {
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
@@ -145,18 +149,18 @@ public class PackageDetailsServiceTests
 
         var blocked = await _service.GetFilesAsync(Name, "rev-1", "PKGBUILD");
 
-        Assert.That(blocked!.Access.Allowed, Is.False);
-        Assert.That(blocked.Access.ReasonCode, Is.EqualTo(SecurityAccessReasonCodes.Flagged));
-        Assert.That(blocked.Entries.Select(entry => entry.Path), Is.EqualTo(["PKGBUILD"]));
-        Assert.That(blocked.Content, Is.EqualTo("pkgname=old\n"));
+        Assert.False(blocked!.Access.Allowed);
+        Assert.Equal(SecurityAccessReasonCodes.Flagged, blocked.Access.ReasonCode);
+        Assert.Equal(["PKGBUILD"], blocked.Entries.Select(entry => entry.Path));
+        Assert.Equal("pkgname=old\n", blocked.Content);
 
         var allowed = await _service.GetFilesAsync(Name, "rev-2", "PKGBUILD");
-        Assert.That(allowed!.Access.Allowed, Is.True);
-        Assert.That(allowed.Content, Is.EqualTo("pkgname=new\n"));
-        Assert.That(allowed.IsHead, Is.True);
+        Assert.True(allowed!.Access.Allowed);
+        Assert.Equal("pkgname=new\n", allowed.Content);
+        Assert.True(allowed.IsHead);
     }
 
-    [Test]
+    [Fact]
     public async Task GetFilesAsyncFallsBackToHeadForUnknownRevision()
     {
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Verified, files: Files("pkgname=old\n"));
@@ -165,17 +169,17 @@ public class PackageDetailsServiceTests
         var fellBack = await _service.GetFilesAsync(Name, "garbage", "PKGBUILD");
         var pinned = await _service.GetFilesAsync(Name, "rev-1", "PKGBUILD");
 
-        Assert.That(fellBack!.RevisionFellBack, Is.True);
-        Assert.That(fellBack.RevisionId, Is.EqualTo("rev-2"));
-        Assert.That(fellBack.Content, Is.EqualTo("pkgname=new\n"));
+        Assert.True(fellBack!.RevisionFellBack);
+        Assert.Equal("rev-2", fellBack.RevisionId);
+        Assert.Equal("pkgname=new\n", fellBack.Content);
 
-        Assert.That(pinned!.RevisionFellBack, Is.False);
-        Assert.That(pinned.RevisionId, Is.EqualTo("rev-1"));
-        Assert.That(pinned.IsHead, Is.False);
-        Assert.That(pinned.Content, Is.EqualTo("pkgname=old\n"));
+        Assert.False(pinned!.RevisionFellBack);
+        Assert.Equal("rev-1", pinned.RevisionId);
+        Assert.False(pinned.IsHead);
+        Assert.Equal("pkgname=old\n", pinned.Content);
     }
 
-    [Test]
+    [Fact]
     public async Task GetFilesAsyncDetectsBinaryFiles()
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>
@@ -185,11 +189,11 @@ public class PackageDetailsServiceTests
 
         var view = await _service.GetFilesAsync(Name, null, "blob.bin");
 
-        Assert.That(view!.IsBinary, Is.True);
-        Assert.That(view.Content, Is.Null);
+        Assert.True(view!.IsBinary);
+        Assert.Null(view.Content);
     }
 
-    [Test]
+    [Fact]
     public async Task GetFilesAsyncTruncatesLargeContent()
     {
         var large = new string('a', PackageDetailsService.ContentRenderChars + 1000);
@@ -198,22 +202,22 @@ public class PackageDetailsServiceTests
 
         var view = await _service.GetFilesAsync(Name, null, "big.txt");
 
-        Assert.That(view!.IsTruncated, Is.True);
-        Assert.That(view.Content, Has.Length.EqualTo(PackageDetailsService.ContentRenderChars));
-        Assert.That(view.ContentBytes, Is.EqualTo(large.Length));
+        Assert.True(view!.IsTruncated);
+        Assert.Equal(PackageDetailsService.ContentRenderChars, view.Content!.Length);
+        Assert.Equal(large.Length, view.ContentBytes);
     }
 
-    [Test]
+    [Fact]
     public async Task GetFilesAsyncReturnsNullForUnknownPackageAndEmptyForUnseeded()
     {
-        Assert.That(await _service.GetFilesAsync("no-such-package", null, null), Is.Null);
+        Assert.Null(await _service.GetFilesAsync("no-such-package", null, null));
 
         var unseeded = await _service.GetFilesAsync("portable-kit", null, null);
-        Assert.That(unseeded!.Entries, Is.Empty);
-        Assert.That(unseeded.Access.Allowed, Is.True);
+        Assert.Empty(unseeded!.Entries);
+        Assert.True(unseeded.Access.Allowed);
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsyncResolvesRevisionPinWithHeadFallback()
     {
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
@@ -223,24 +227,24 @@ public class PackageDetailsServiceTests
         var pinned = await _service.GetAsync(Name, "rev-1");
         var garbage = await _service.GetAsync(Name, "garbage");
 
-        Assert.That(head!.SelectedRevisionId, Is.EqualTo("rev-2"));
-        Assert.That(head.SelectedIsHead, Is.True);
-        Assert.That(head.RevisionFellBack, Is.False);
-        Assert.That(head.SelectedScan!.Status, Is.EqualTo(SecurityStatus.Verified));
+        Assert.Equal("rev-2", head!.SelectedRevisionId);
+        Assert.True(head.SelectedIsHead);
+        Assert.False(head.RevisionFellBack);
+        Assert.Equal(SecurityStatus.Verified, head.SelectedScan!.Status);
 
-        Assert.That(pinned!.SelectedRevisionId, Is.EqualTo("rev-1"));
-        Assert.That(pinned.SelectedIsHead, Is.False);
-        Assert.That(pinned.RevisionFellBack, Is.False);
-        Assert.That(pinned.SelectedScan!.Status, Is.EqualTo(SecurityStatus.Flagged));
+        Assert.Equal("rev-1", pinned!.SelectedRevisionId);
+        Assert.False(pinned.SelectedIsHead);
+        Assert.False(pinned.RevisionFellBack);
+        Assert.Equal(SecurityStatus.Flagged, pinned.SelectedScan!.Status);
 
-        Assert.That(garbage!.RevisionFellBack, Is.True);
-        Assert.That(garbage.SelectedRevisionId, Is.EqualTo("rev-2"));
+        Assert.True(garbage!.RevisionFellBack);
+        Assert.Equal("rev-2", garbage.SelectedRevisionId);
     }
 
-    [Test]
+    [Fact]
     public async Task GetAsyncReturnsNullForUnknownPackage()
     {
-        Assert.That(await _service.GetAsync("no-such-package"), Is.Null);
+        Assert.Null(await _service.GetAsync("no-such-package"));
     }
 
     private static Dictionary<string, PackageFile> Files(string pkgbuild)

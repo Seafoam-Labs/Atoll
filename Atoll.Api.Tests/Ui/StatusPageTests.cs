@@ -1,25 +1,23 @@
 using Atoll.Api.Services.Security;
 using System.Net;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Ui;
 
-public class StatusPageTests
+public class StatusPageTests : IDisposable
 {
     private SecurityTestFactory _factory = null!;
     private HttpClient _client = null!;
 
-    [SetUp]
-    public void SetUp()
+    public StatusPageTests()
     {
         _factory = new SecurityTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
@@ -64,7 +62,7 @@ public class StatusPageTests
         };
     }
 
-    [Test]
+    [Fact]
     public async Task StatusPageRendersOverviewStatsAndWorkerCards()
     {
         await _factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
@@ -74,30 +72,30 @@ public class StatusPageTests
         var response = await _client.GetAsync("/status");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/html"));
-            Assert.That(body, Does.Contain("Index packages"));
-            Assert.That(body, Does.Contain(">3</dd>"));
-            Assert.That(body, Does.Contain("Seeded packages"));
-            Assert.That(body, Does.Contain(">1</dd>"));
-            Assert.That(body, Does.Contain("Pending scans"));
-            Assert.That(body, Does.Contain("Excluded package bases"));
-            Assert.That(body, Does.Contain("huge-base"));
-            Assert.That(body, Does.Contain("Seeding - direct"));
-            Assert.That(body, Does.Contain("Cycles started"));
-            Assert.That(body, Does.Contain("Package refresh"));
-            Assert.That(body, Does.Contain("disabled"));
-            Assert.That(body, Does.Contain("Security scanner"));
-            Assert.That(body, Does.Contain("cumulative"));
-            Assert.That(body, Does.Contain("href=\"/metrics\""));
-            Assert.That(body, Does.Contain("Data assembled"));
-            Assert.That(body, Does.Contain("Never"));
+            Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+            Assert.Contains("Index packages", body);
+            Assert.Contains(">3</dd>", body);
+            Assert.Contains("Seeded packages", body);
+            Assert.Contains(">1</dd>", body);
+            Assert.Contains("Pending scans", body);
+            Assert.Contains("Excluded package bases", body);
+            Assert.Contains("huge-base", body);
+            Assert.Contains("Seeding - direct", body);
+            Assert.Contains("Cycles started", body);
+            Assert.Contains("Package refresh", body);
+            Assert.Contains("disabled", body);
+            Assert.Contains("Security scanner", body);
+            Assert.Contains("cumulative", body);
+            Assert.Contains("href=\"/metrics\"", body);
+            Assert.Contains("Data assembled", body);
+            Assert.Contains("Never", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task StatusPageShowsBypassedBannerWhenSecurityDisabled()
     {
         await _factory.DisposeAsync();
@@ -108,16 +106,16 @@ public class StatusPageTests
         var response = await _client.GetAsync("/status");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("Content checks bypassed by configuration"));
+            Assert.Contains("Content checks bypassed by configuration", body);
             // The enabled-mode explanation of the cumulative counters must not render.
-            Assert.That(body, Does.Not.Contain("cumulative counters since the process started"));
+            Assert.DoesNotContain("cumulative counters since the process started", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task StatusPageShowsNotLoadedYetWithEmptyIndex()
     {
         await _factory.DisposeAsync();
@@ -128,31 +126,31 @@ public class StatusPageTests
         var response = await _client.GetAsync("/status");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.That(body, Does.Contain("Index packages"));
-            Assert.That(body, Does.Contain(">0</dd>"));
-            Assert.That(body, Does.Contain("Not loaded yet"));
+            Assert.Contains("Index packages", body);
+            Assert.Contains(">0</dd>", body);
+            Assert.Contains("Not loaded yet", body);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task StatusPageHidesGrafanaLinkWhenUnconfigured()
     {
         var response = await _client.GetAsync("/status");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(body, Does.Not.Contain("Grafana"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("Grafana", body);
     }
 
-    [Test]
+    [Fact]
     public async Task StatusPageShowsOpenApiLink()
     {
         var response = await _client.GetAsync("/status");
         var body = await response.Content.ReadAsStringAsync();
 
-        Assert.That(body, Does.Contain("/scalar"));
+        Assert.Contains("/scalar", body);
     }
 }

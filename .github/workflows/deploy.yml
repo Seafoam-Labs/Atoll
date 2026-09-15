@@ -56,13 +56,13 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Fast tier
-        run: dotnet test -p:SkipTailwind=true --filter "Category!=RequiresGit&Category!=RequiresMongo"
+        run: dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj -p:SkipTailwind=true --filter-not-trait "Category=RequiresGit" --filter-not-trait "Category=RequiresMongo"
 
       - name: Git tier
-        run: dotnet test -p:SkipTailwind=true --filter "Category=RequiresGit"
+        run: dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj -p:SkipTailwind=true --filter-trait "Category=RequiresGit"
 
       - name: Mongo tier
-        run: dotnet test -p:SkipTailwind=true --filter "Category=RequiresMongo"
+        run: dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj -p:SkipTailwind=true --filter-trait "Category=RequiresMongo"
 
   plan:
     name: Terraform plan

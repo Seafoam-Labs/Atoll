@@ -1,35 +1,33 @@
 using System.Net;
 using System.Text.Json;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class OpenApiEndpointsTests
+public class OpenApiEndpointsTests : IDisposable
 {
-    private HttpClient _client = null!;
-    private ApiTestFactory _factory = null!;
+    private readonly HttpClient _client;
+    private readonly ApiTestFactory _factory;
 
-    [SetUp]
-    public void SetUp()
+    public OpenApiEndpointsTests()
     {
         _factory = new ApiTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
     }
 
-    [Test]
+    [Fact]
     public async Task OpenApiSchemaExposesTypedEndpointsAndComponents()
     {
         var response = await _client.GetAsync("/openapi/v1.json");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
@@ -37,83 +35,82 @@ public class OpenApiEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.TryGetProperty("openapi", out var version), Is.True);
-            Assert.That(version.GetString(), Does.StartWith("3."));
+            Assert.True(root.TryGetProperty("openapi", out var version));
+            Assert.StartsWith("3.", version.GetString());
 
             var paths = root.GetProperty("paths");
-            Assert.That(paths.TryGetProperty("/v1/search", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/v1/packages", out var packagesPath), Is.True);
-            Assert.That(paths.TryGetProperty("/v1/packages/{name}", out var packagePath), Is.True);
-            Assert.That(paths.TryGetProperty("/v1/packages/{name}/seed", out var seedPath), Is.True);
-            Assert.That(paths.TryGetProperty("/v1/packages/{name}/versions", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/v1/packages/{name}/security", out var securityPath), Is.True);
-            Assert.That(paths.TryGetProperty("/v1/packages/{name}/security/rescan", out var rescanPath), Is.True);
-            Assert.That(paths.TryGetProperty("/v1/packages/{name}/tarball", out var tarballPath), Is.True);
-            Assert.That(paths.TryGetProperty("/rpc", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/rpc/v5/info", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/rpc/v5/info/{arg}", out var rpcInfoArgPath), Is.True);
-            Assert.That(paths.TryGetProperty("/rpc/v5/search/{arg}", out _), Is.True);
-            Assert.That(paths.TryGetProperty("/rpc/v5/suggest/{arg}", out _), Is.True);
+            Assert.True(paths.TryGetProperty("/v1/search", out _));
+            Assert.True(paths.TryGetProperty("/v1/packages", out var packagesPath));
+            Assert.True(paths.TryGetProperty("/v1/packages/{name}", out var packagePath));
+            Assert.True(paths.TryGetProperty("/v1/packages/{name}/seed", out var seedPath));
+            Assert.True(paths.TryGetProperty("/v1/packages/{name}/versions", out _));
+            Assert.True(paths.TryGetProperty("/v1/packages/{name}/security", out var securityPath));
+            Assert.True(paths.TryGetProperty("/v1/packages/{name}/security/rescan", out var rescanPath));
+            Assert.True(paths.TryGetProperty("/v1/packages/{name}/tarball", out var tarballPath));
+            Assert.True(paths.TryGetProperty("/rpc", out _));
+            Assert.True(paths.TryGetProperty("/rpc/v5/info", out _));
+            Assert.True(paths.TryGetProperty("/rpc/v5/info/{arg}", out var rpcInfoArgPath));
+            Assert.True(paths.TryGetProperty("/rpc/v5/search/{arg}", out _));
+            Assert.True(paths.TryGetProperty("/rpc/v5/suggest/{arg}", out _));
 
             // Verify status codes on endpoints
             var getIndexResponses = packagesPath.GetProperty("get").GetProperty("responses");
-            Assert.That(getIndexResponses.TryGetProperty("200", out _), Is.True);
-            Assert.That(getIndexResponses.TryGetProperty("400", out _), Is.True);
-            Assert.That(JsonSchemaReference(getIndexResponses, "200"),
-                Is.EqualTo("#/components/schemas/PackageIndexResponse"));
+            Assert.True(getIndexResponses.TryGetProperty("200", out _));
+            Assert.True(getIndexResponses.TryGetProperty("400", out _));
+            Assert.Equal("#/components/schemas/PackageIndexResponse", JsonSchemaReference(getIndexResponses, "200"));
 
             var getSecurityResponses = securityPath.GetProperty("get").GetProperty("responses");
-            Assert.That(getSecurityResponses.TryGetProperty("200", out _), Is.True);
-            Assert.That(getSecurityResponses.TryGetProperty("404", out _), Is.True);
-            Assert.That(JsonSchemaReferences(getSecurityResponses, "200"), Is.EquivalentTo([
+            Assert.True(getSecurityResponses.TryGetProperty("200", out _));
+            Assert.True(getSecurityResponses.TryGetProperty("404", out _));
+            Assert.Equivalent(new[]
+            {
                 "#/components/schemas/PackageSecurityHistoryResponse",
                 "#/components/schemas/PackageSecurityRevisionResponse"
-            ]));
+            }, JsonSchemaReferences(getSecurityResponses, "200"), strict: true);
 
             var postRescanResponses = rescanPath.GetProperty("post").GetProperty("responses");
-            Assert.That(postRescanResponses.TryGetProperty("202", out _), Is.True);
-            Assert.That(postRescanResponses.TryGetProperty("403", out _), Is.True);
-            Assert.That(postRescanResponses.TryGetProperty("404", out _), Is.True);
+            Assert.True(postRescanResponses.TryGetProperty("202", out _));
+            Assert.True(postRescanResponses.TryGetProperty("403", out _));
+            Assert.True(postRescanResponses.TryGetProperty("404", out _));
 
             // The tarball is deliberately ungated (human review surface): 200/404 only, no 403.
             var getTarballResponses = tarballPath.GetProperty("get").GetProperty("responses");
-            Assert.That(getTarballResponses.TryGetProperty("200", out _), Is.True);
-            Assert.That(getTarballResponses.TryGetProperty("404", out _), Is.True);
-            Assert.That(
-                getTarballResponses.GetProperty("200").GetProperty("content").TryGetProperty("application/gzip", out _),
-                Is.True);
+            Assert.True(getTarballResponses.TryGetProperty("200", out _));
+            Assert.True(getTarballResponses.TryGetProperty("404", out _));
+            Assert.True(
+                getTarballResponses.GetProperty("200").GetProperty("content").TryGetProperty("application/gzip", out _));
 
             var getPackageResponses = packagePath.GetProperty("get").GetProperty("responses");
-            Assert.That(getPackageResponses.TryGetProperty("200", out _), Is.True);
-            Assert.That(getPackageResponses.TryGetProperty("403", out _), Is.True);
+            Assert.True(getPackageResponses.TryGetProperty("200", out _));
+            Assert.True(getPackageResponses.TryGetProperty("403", out _));
 
             var deletePackageResponses = packagePath.GetProperty("delete").GetProperty("responses");
-            Assert.That(deletePackageResponses.TryGetProperty("204", out _), Is.True);
-            Assert.That(deletePackageResponses.TryGetProperty("403", out _), Is.True);
+            Assert.True(deletePackageResponses.TryGetProperty("204", out _));
+            Assert.True(deletePackageResponses.TryGetProperty("403", out _));
 
             var seedPackageResponses = seedPath.GetProperty("post").GetProperty("responses");
-            Assert.That(seedPackageResponses.TryGetProperty("201", out _), Is.True);
-            Assert.That(seedPackageResponses.TryGetProperty("403", out _), Is.True);
+            Assert.True(seedPackageResponses.TryGetProperty("201", out _));
+            Assert.True(seedPackageResponses.TryGetProperty("403", out _));
 
             var rpcInfoResponses = rpcInfoArgPath.GetProperty("get").GetProperty("responses");
-            Assert.That(JsonSchemaReference(rpcInfoResponses, "200"),
-                Is.EqualTo("#/components/schemas/AurRpcResponse"));
+            Assert.Equal("#/components/schemas/AurRpcResponse", JsonSchemaReference(rpcInfoResponses, "200"));
 
 
             // Verify schemas in components
             var schemas = root.GetProperty("components").GetProperty("schemas");
-            Assert.That(schemas.TryGetProperty("AurPackageMetadata", out _), Is.True);
-            Assert.That(schemas.TryGetProperty("AurRpcResponse", out _), Is.True);
-            Assert.That(schemas.TryGetProperty("AurRpcPackage", out _), Is.True);
-            Assert.That(schemas.TryGetProperty("PackageFiles", out _), Is.True);
-            Assert.That(schemas.TryGetProperty("PackageVersion", out _), Is.True);
-            Assert.That(schemas.TryGetProperty("PackageIndexResponse", out _), Is.True);
-            Assert.That(schemas.TryGetProperty("PackageIndexEntry", out var indexEntrySchema), Is.True);
-            Assert.That(
-                indexEntrySchema.GetProperty("properties").EnumerateObject().Select(property => property.Name),
-                Is.SupersetOf(["name", "description", "version", "numVotes", "popularity", "outOfDate"]));
-            Assert.That(schemas.TryGetProperty("PackageSecurityHistoryResponse", out _), Is.True);
-            Assert.That(schemas.TryGetProperty("PackageSecurityRevisionResponse", out _), Is.True);
+            Assert.True(schemas.TryGetProperty("AurPackageMetadata", out _));
+            Assert.True(schemas.TryGetProperty("AurRpcResponse", out _));
+            Assert.True(schemas.TryGetProperty("AurRpcPackage", out _));
+            Assert.True(schemas.TryGetProperty("PackageFiles", out _));
+            Assert.True(schemas.TryGetProperty("PackageVersion", out _));
+            Assert.True(schemas.TryGetProperty("PackageIndexResponse", out _));
+            Assert.True(schemas.TryGetProperty("PackageIndexEntry", out var indexEntrySchema));
+            Assert.Superset(
+                new HashSet<string> { "name", "description", "version", "numVotes", "popularity", "outOfDate" },
+                new HashSet<string>(
+                    indexEntrySchema.GetProperty("properties").EnumerateObject().Select(property => property.Name)));
+            Assert.True(schemas.TryGetProperty("PackageSecurityHistoryResponse", out _));
+            Assert.True(schemas.TryGetProperty("PackageSecurityRevisionResponse", out _));
         });
     }
 

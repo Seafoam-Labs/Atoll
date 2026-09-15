@@ -4,11 +4,11 @@ using System.Net;
 using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class PackageTarballEndpointsTests
+public class PackageTarballEndpointsTests : IDisposable
 {
     private static readonly UnixFileMode RegularFileMode =
         UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
@@ -16,18 +16,16 @@ public class PackageTarballEndpointsTests
     private static readonly UnixFileMode ExecutableFileMode = RegularFileMode
         | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
 
-    private HttpClient _client = null!;
-    private SecurityTestFactory _factory = null!;
+    private readonly HttpClient _client;
+    private readonly SecurityTestFactory _factory;
 
-    [SetUp]
-    public void SetUp()
+    public PackageTarballEndpointsTests()
     {
         _factory = new SecurityTestFactory();
         _client = _factory.CreateClient();
     }
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _client.Dispose();
         _factory.Dispose();
@@ -35,29 +33,29 @@ public class PackageTarballEndpointsTests
 
     private sealed record TarEntryData(string Name, UnixFileMode Mode, TarEntryType EntryType, string Content);
 
-    [Test]
+    [Fact]
     public async Task Head_tarball_is_served_while_revision_is_pending()
     {
         await SeedAsync(SecurityStatus.Pending);
 
         var response = await _client.GetAsync("/v1/packages/pkg/tarball");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("application/gzip"));
-        Assert.That(response.Content.Headers.ContentDisposition?.FileName, Is.EqualTo("pkg-rev-1.tar.gz"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/gzip", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("pkg-rev-1.tar.gz", response.Content.Headers.ContentDisposition?.FileName);
 
         var entries = await ReadTarballAsync(response);
-        Assert.That(entries, Has.Count.EqualTo(1));
+        Assert.Single(entries);
         Assert.Multiple(() =>
         {
-            Assert.That(entries[0].Name, Is.EqualTo("pkg/PKGBUILD"));
-            Assert.That(entries[0].EntryType, Is.EqualTo(TarEntryType.RegularFile));
-            Assert.That(entries[0].Content, Is.EqualTo("pkgname=test\n"));
-            Assert.That(entries[0].Mode, Is.EqualTo(RegularFileMode));
+            Assert.Equal("pkg/PKGBUILD", entries[0].Name);
+            Assert.Equal(TarEntryType.RegularFile, entries[0].EntryType);
+            Assert.Equal("pkgname=test\n", entries[0].Content);
+            Assert.Equal(RegularFileMode, entries[0].Mode);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Flagged_head_tarball_is_served_while_content_json_is_blocked()
     {
         await SeedAsync(SecurityStatus.Flagged);
@@ -67,12 +65,12 @@ public class PackageTarballEndpointsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(tarball.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(contentJson.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+            Assert.Equal(HttpStatusCode.OK, tarball.StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, contentJson.StatusCode);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Pinned_revision_tarball_serves_the_requested_revision()
     {
         await SeedTwoRevisionsAsync(verified: SecurityStatus.Verified, flagged: SecurityStatus.Flagged);
@@ -80,36 +78,36 @@ public class PackageTarballEndpointsTests
         var flagged = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-2");
         var verified = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-1");
 
-        Assert.Multiple(async () =>
+        await Assert.MultipleAsync(async () =>
         {
-            Assert.That(flagged.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(flagged.Content.Headers.ContentDisposition?.FileName, Is.EqualTo("pkg-rev-2.tar.gz"));
-            Assert.That((await ReadTarballAsync(flagged)).Single().Content, Is.EqualTo("pkgname=test2\n"));
+            Assert.Equal(HttpStatusCode.OK, flagged.StatusCode);
+            Assert.Equal("pkg-rev-2.tar.gz", flagged.Content.Headers.ContentDisposition?.FileName);
+            Assert.Equal("pkgname=test2\n", (await ReadTarballAsync(flagged)).Single().Content);
 
-            Assert.That(verified.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That((await ReadTarballAsync(verified)).Single().Content, Is.EqualTo("pkgname=test\n"));
+            Assert.Equal(HttpStatusCode.OK, verified.StatusCode);
+            Assert.Equal("pkgname=test\n", (await ReadTarballAsync(verified)).Single().Content);
         });
     }
 
-    [Test]
+    [Fact]
     public async Task Unknown_revision_returns_404_instead_of_falling_back_to_head()
     {
         await SeedAsync(SecurityStatus.Verified);
 
         var response = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-9");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Unknown_package_returns_404()
     {
         var response = await _client.GetAsync("/v1/packages/missing/tarball");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Test]
+    [Fact]
     public async Task Shell_scripts_get_the_same_exec_bits_as_clones()
     {
         await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg", new Dictionary<string, PackageFile>
@@ -121,12 +119,12 @@ public class PackageTarballEndpointsTests
 
         var response = await _client.GetAsync("/v1/packages/pkg/tarball");
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var entries = await ReadTarballAsync(response);
         Assert.Multiple(() =>
         {
-            Assert.That(entries.Single(e => e.Name == "pkg/PKGBUILD").Mode, Is.EqualTo(RegularFileMode));
-            Assert.That(entries.Single(e => e.Name == "pkg/helper.sh").Mode, Is.EqualTo(ExecutableFileMode));
+            Assert.Equal(RegularFileMode, entries.Single(e => e.Name == "pkg/PKGBUILD").Mode);
+            Assert.Equal(ExecutableFileMode, entries.Single(e => e.Name == "pkg/helper.sh").Mode);
         });
     }
 

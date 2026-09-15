@@ -1,31 +1,31 @@
 using Atoll.Api.Services.Git;
-using NUnit.Framework;
+using Xunit;
 
 namespace Atoll.Api.Tests.Packages.Git;
 
 public class GitSmartHttpTests
 {
-    [Test]
+    [Fact]
     public void IsSupportedService_accepts_only_git_upload_pack()
     {
-        Assert.That(GitSmartHttp.IsSupportedService(GitSmartHttp.UploadPackService), Is.True);
+        Assert.True(GitSmartHttp.IsSupportedService(GitSmartHttp.UploadPackService));
     }
 
-    [Test]
+    [Fact]
     public void IsSupportedService_rejects_the_push_service()
     {
-        Assert.That(GitSmartHttp.IsSupportedService("git-receive-pack"), Is.False,
+        Assert.False(GitSmartHttp.IsSupportedService("git-receive-pack"),
             "serving receive-pack would expose an unauthenticated push target");
     }
 
-    [Test]
+    [Fact]
     public void IsSupportedService_rejects_missing_and_mismatched_casing()
     {
         Assert.Multiple(() =>
         {
-            Assert.That(GitSmartHttp.IsSupportedService(null), Is.False);
-            Assert.That(GitSmartHttp.IsSupportedService(""), Is.False);
-            Assert.That(GitSmartHttp.IsSupportedService("GIT-UPLOAD-PACK"), Is.False,
+            Assert.False(GitSmartHttp.IsSupportedService(null));
+            Assert.False(GitSmartHttp.IsSupportedService(""));
+            Assert.False(GitSmartHttp.IsSupportedService("GIT-UPLOAD-PACK"),
                 "service names are compared ordinally");
         });
     }
