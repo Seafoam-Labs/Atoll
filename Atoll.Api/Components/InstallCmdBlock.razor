@@ -132,6 +132,10 @@
         {
             // Clipboard API unavailable (non-secure context); the text stays selectable.
         }
+        catch (JSDisconnectedException)
+        {
+            // Circuit dropped mid-call; there is nobody left to report to.
+        }
     }
 
     public void Dispose()
