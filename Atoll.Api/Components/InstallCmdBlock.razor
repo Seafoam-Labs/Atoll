@@ -2,11 +2,12 @@
 @inject IJSRuntime Js
 @implements IDisposable
 
-<div class="tabs mt-0 mb-3 gap-6" role="tablist" aria-label="Installation method">
+<div class="tabs mt-0 mb-3 gap-6" role="tablist" aria-label="Installation method" @ref="_tabList">
     <button type="button"
             role="tab"
             aria-selected="@(_activeTab == InstallTab.Shelly ? "true" : "false")"
             aria-controls="install-panel-shelly"
+            tabindex="@(_activeTab == InstallTab.Shelly ? 0 : -1)"
             id="tab-shelly"
             class="tab py-1.5 @(_activeTab == InstallTab.Shelly ? "active" : "")"
             @onclick="() => SelectTab(InstallTab.Shelly)">
@@ -16,6 +17,7 @@
             role="tab"
             aria-selected="@(_activeTab == InstallTab.Git ? "true" : "false")"
             aria-controls="install-panel-git"
+            tabindex="@(_activeTab == InstallTab.Git ? 0 : -1)"
             id="tab-git"
             class="tab py-1.5 @(_activeTab == InstallTab.Git ? "active" : "")"
             @onclick="() => SelectTab(InstallTab.Git)">
@@ -26,13 +28,13 @@
 <div id="install-panel-shelly"
      role="tabpanel"
      aria-labelledby="tab-shelly"
-     class="@(_activeTab == InstallTab.Shelly ? "" : "hidden")">
+     hidden="@(_activeTab != InstallTab.Shelly)">
     <div class="flex items-stretch gap-2">
         <div class="cmd flex-1 min-w-0">@ShellyCommand</div>
         <button type="button"
                 class="btn shrink-0"
                 @onclick="() => CopyAsync(ShellyCommand)">
-            @(_copied && _activeTab == InstallTab.Shelly ? "Copied" : "Copy")
+            @(_copied ? "Copied" : "Copy")
         </button>
     </div>
     <div class="text-ink-faint text-[13px] mt-2">
@@ -45,13 +47,13 @@
 <div id="install-panel-git"
      role="tabpanel"
      aria-labelledby="tab-git"
-     class="@(_activeTab == InstallTab.Git ? "" : "hidden")">
+     hidden="@(_activeTab != InstallTab.Git)">
     <div class="flex items-stretch gap-2">
         <div class="cmd flex-1 min-w-0">@GitCommand</div>
         <button type="button"
                 class="btn shrink-0"
                 @onclick="() => CopyAsync(GitCommand)">
-            @(_copied && _activeTab == InstallTab.Git ? "Copied" : "Copy")
+            @(_copied ? "Copied" : "Copy")
         </button>
     </div>
     <div class="text-ink-faint text-[13px] mt-2">
@@ -73,11 +75,28 @@
     private InstallTab _activeTab = InstallTab.Shelly;
     private bool _copied;
     private CancellationTokenSource? _resetCts;
+    private ElementReference _tabList;
 
     private string BaseUrl => (ExternalBaseUrl).Trim().TrimEnd('/');
     private string CloneUrl => $"{BaseUrl}/packages/{Name}.git";
     private string ShellyCommand => $"shelly install aur {Name} --aur-url {BaseUrl}";
     private string GitCommand => $"git clone {CloneUrl}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            await using var module =
+                await Js.InvokeAsync<IJSObjectReference>("import", "./Components/InstallCmdBlock.razor.js");
+            await module.InvokeVoidAsync("initTabKeys", _tabList);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Tabs work without the module; only arrow-key navigation is lost.
+        }
+    }
 
     private void SelectTab(InstallTab tab)
     {
