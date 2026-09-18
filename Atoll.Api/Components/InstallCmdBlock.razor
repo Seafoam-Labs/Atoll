@@ -77,7 +77,7 @@
     private CancellationTokenSource? _resetCts;
     private ElementReference _tabList;
 
-    private string BaseUrl => (ExternalBaseUrl).Trim().TrimEnd('/');
+    private string BaseUrl => ExternalBaseUrl.Trim().TrimEnd('/');
     private string CloneUrl => $"{BaseUrl}/packages/{Name}.git";
     private string ShellyCommand => $"shelly install aur {Name} --aur-url {BaseUrl}";
     private string GitCommand => $"git clone {CloneUrl}";
@@ -103,13 +103,10 @@
         if (_activeTab == tab) return;
         _activeTab = tab;
         _copied = false;
-
-        if (_resetCts is null) return;
-        _resetCts.Cancel();
-        _resetCts.Dispose();
-        _resetCts = null;
     }
 
+    // CopyAsync owns _resetCts: it is the only mutator besides Dispose. A tab switch leaves the
+    // pending timer alone - its continuation only clears _copied, which the switch already did.
     private async Task CopyAsync(string text)
     {
         try
@@ -118,38 +115,33 @@
             _copied = true;
             StateHasChanged();
 
-            var previous = _resetCts;
-            if (previous is not null)
+            if (_resetCts is { } previous)
             {
                 await previous.CancelAsync();
                 previous.Dispose();
             }
 
-            var cts = new CancellationTokenSource();
-            _resetCts = cts;
-
+            var cts = _resetCts = new CancellationTokenSource();
             try
             {
                 await Task.Delay(1500, cts.Token);
                 _copied = false;
-                StateHasChanged();
             }
             catch (OperationCanceledException)
             {
                 // A newer copy superseded the reset.
             }
-
-            // An older canceled copy must not clear a newer timer's CTS.
-            if (ReferenceEquals(_resetCts, cts))
+            finally
             {
-                _resetCts = null;
+                // An older canceled copy must not clear a newer timer's CTS.
+                if (ReferenceEquals(_resetCts, cts)) _resetCts = null;
+                cts.Dispose();
             }
-
-            cts.Dispose();
         }
         catch (JSException)
         {
-            // Clipboard API unavailable (non-secure context); the text stays selectable.
+            // Clipboard unavailable in an insecure context, or the write was denied for a blurred
+            // document. Either way the text stays selectable, so there is nothing to report.
         }
         catch (JSDisconnectedException)
         {
@@ -162,5 +154,4 @@
         _resetCts?.Cancel();
         _resetCts?.Dispose();
     }
-
 }
