@@ -13,7 +13,10 @@ public sealed class AtollMetrics
 {
     public const string MeterName = "Atoll.Api";
 
+    public string ScopeName { get; }
+
     public AtollMetrics(
+        IHostEnvironment environment,
         IMeterFactory meterFactory,
         PackageSearchService searchService,
         PackageIndexStore indexStore,
@@ -22,7 +25,12 @@ public sealed class AtollMetrics
         RefreshStatusStore packageRefreshStatus,
         SecurityScanStatusStore securityScanStatus)
     {
-        var meter = meterFactory.Create(MeterName, "1.0.0");
+        // Metric listeners match meters by name process-wide; parallel test hosts
+        // share one process, so each gets a unique meter name. Production keeps
+        // the stable "Atoll.Api".
+        ScopeName = environment.IsEnvironment("Testing") ? $"{MeterName}.{Guid.NewGuid():N}" : MeterName;
+
+        var meter = meterFactory.Create(ScopeName, "1.0.0");
 
         var uptime = Stopwatch.StartNew();
         meter.CreateObservableGauge(

@@ -159,8 +159,12 @@ internal static class ServiceCollectionExtensions
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
                     .AddInstrumentation(sp => sp.GetRequiredService<AtollMetrics>())
-                    .AddMeter(AtollMetrics.MeterName)
                     .AddPrometheusExporter());
+
+            // Deferred so the subscription follows the per-host meter name
+            // resolved by AtollMetrics under Testing.
+            services.ConfigureOpenTelemetryMeterProvider(
+                (sp, builder) => builder.AddMeter(sp.GetRequiredService<AtollMetrics>().ScopeName));
 
             return services;
         }
