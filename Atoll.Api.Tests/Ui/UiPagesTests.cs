@@ -339,6 +339,32 @@ public class UiPagesTests : IDisposable
     }
 
     [Fact]
+    public async Task PackageDetailsTrimsTrailingSlashFromExternalBaseUrlInCloneBlock()
+    {
+        using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
+        using var client = factory.CreateClient();
+        await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
+        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true,
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await factory.SecurityRepository.CompleteScanAsync(
+            "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
+            PkgBuildSecurityScanner.CurrentPolicyVersion);
+
+        var response = await client.GetAsync("/package/shelly-bin");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("shelly install aur shelly-bin --aur-url https://atoll.example.com", body);
+            Assert.Contains("git clone https://atoll.example.com/packages/shelly-bin.git", body);
+            Assert.DoesNotContain("//packages", body);
+        });
+    }
+
+    [Fact]
     public async Task PackageDetailsRenderBlockedBannerWhenFlagged()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);
