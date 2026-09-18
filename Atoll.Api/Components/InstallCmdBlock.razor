@@ -36,7 +36,9 @@
         </button>
     </div>
     <div class="text-ink-faint text-[13px] mt-2">
-        This can be permanently set in the shelly <a href="https://www.seafoam-labs.org/shelly-alpm/docs/config/" target="_blank" rel="noopener" class="underline hover:text-ink"><code>config.json</code></a> file.
+        This can be permanently set in the shelly
+        <a href="https://www.seafoam-labs.org/shelly-alpm/docs/config/" target="_blank"
+           rel="noopener" class="underline hover:text-ink"><code>config.json</code></a> file.
     </div>
 </div>
 
@@ -82,13 +84,11 @@
         if (_activeTab == tab) return;
         _activeTab = tab;
         _copied = false;
-        var previous = _resetCts;
-        if (previous is not null)
-        {
-            previous.Cancel();
-            previous.Dispose();
-            _resetCts = null;
-        }
+
+        if (_resetCts is null) return;
+        _resetCts.Cancel();
+        _resetCts.Dispose();
+        _resetCts = null;
     }
 
     private async Task CopyAsync(string text)
@@ -105,12 +105,13 @@
                 await previous.CancelAsync();
                 previous.Dispose();
             }
-            _resetCts = new CancellationTokenSource();
-            var token = _resetCts.Token;
+
+            var cts = new CancellationTokenSource();
+            _resetCts = cts;
 
             try
             {
-                await Task.Delay(1500, token);
+                await Task.Delay(1500, cts.Token);
                 _copied = false;
                 StateHasChanged();
             }
@@ -118,6 +119,14 @@
             {
                 // A newer copy superseded the reset.
             }
+
+            // An older canceled copy must not clear a newer timer's CTS.
+            if (ReferenceEquals(_resetCts, cts))
+            {
+                _resetCts = null;
+            }
+
+            cts.Dispose();
         }
         catch (JSException)
         {
@@ -130,4 +139,5 @@
         _resetCts?.Cancel();
         _resetCts?.Dispose();
     }
+
 }
