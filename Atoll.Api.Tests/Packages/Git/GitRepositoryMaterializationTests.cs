@@ -421,6 +421,12 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
             return inner.ListIndexPageAsync(skip, take, ct);
         }
 
+        public Task<IReadOnlyList<PackageIndexEntry>> ListIndexEntriesAsync(
+            IReadOnlyCollection<string> names, CancellationToken ct = default)
+        {
+            return inner.ListIndexEntriesAsync(names, ct);
+        }
+
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
         {
             return inner.ExistsAsync(packageName, ct);

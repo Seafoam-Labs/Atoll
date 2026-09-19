@@ -32,20 +32,25 @@ public class PackageServiceTests
         return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance), indexStore);
     }
 
-    private static async Task<PackageIndexStore> CreateIndexStoreAsync(string packagesJson)
+    private static async Task<SearchIndexData> LoadIndexAsync(string packagesJson)
     {
         var path = Path.Combine(Path.GetTempPath(), $"atoll-sort-test-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(path, packagesJson);
         try
         {
-            var store = new PackageIndexStore();
-            store.Replace(await PackageIndexBuilder.LoadAsync(path, CancellationToken.None));
-            return store;
+            return await PackageIndexBuilder.LoadAsync(path, CancellationToken.None);
         }
         finally
         {
             File.Delete(path);
         }
+    }
+
+    private static async Task<PackageIndexStore> CreateIndexStoreAsync(string packagesJson)
+    {
+        var store = new PackageIndexStore();
+        store.Replace(await LoadIndexAsync(packagesJson));
+        return store;
     }
 
     [Fact]
@@ -372,6 +377,159 @@ public class PackageServiceTests
     }
 
     [Fact]
+    public async Task GetIndexPageAsync_sorts_versions_ascending_with_catalog_absent_first()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
+            """
+            [
+              { "Name": "ver-a", "Version": "2.0.0-1" },
+              { "Name": "ver-b", "Version": "10.0.0-1" },
+              { "Name": "ver-c", "Version": "2.0.0-1" }
+            ]
+            """));
+
+        foreach (var name in new[] { "ver-a", "ver-b", "ver-c", "ver-missing" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var page = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Version);
+
+        Assert.Multiple(() =>
+        {
+            // Absent from the catalog ranks as a null version, which sorts first ascending.
+            Assert.Equal(new[] { "ver-missing", "ver-b", "ver-a", "ver-c" },
+                page.Items.Select(item => item.Name));
+            Assert.Null(page.Items[0].Version);
+        });
+    }
+
+    [Fact]
+    public async Task GetIndexPageAsync_reflects_index_swap_inside_ttl_window()
+    {
+        var repo = new InMemoryPackageRepository();
+        var store = await CreateIndexStoreAsync(
+            """
+            [
+              { "Name": "s-a", "NumVotes": 1 },
+              { "Name": "s-b", "NumVotes": 9 }
+            ]
+            """);
+        var service = CreateService(repo, indexStore: store);
+
+        foreach (var name in new[] { "s-a", "s-b" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var before = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+
+        store.Replace(await LoadIndexAsync(
+            """
+            [
+              { "Name": "s-a", "NumVotes": 9 },
+              { "Name": "s-b", "NumVotes": 1 }
+            ]
+            """));
+
+        var after = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(new[] { "s-b", "s-a" }, before.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "s-a", "s-b" }, after.Items.Select(item => item.Name));
+        });
+    }
+
+    [Fact]
+    public async Task GetIndexPageAsync_tracks_seed_and_delete_mutations()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo);
+
+        await service.SeedFilesAsync("m-a", SampleFiles);
+        var initial = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+
+        await service.SeedFilesAsync("m-b", SampleFiles);
+        var afterSeed = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+
+        await service.DeleteAsync("m-a");
+        var afterDelete = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(new[] { "m-a" }, initial.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "m-a", "m-b" }, afterSeed.Items.Select(item => item.Name));
+            Assert.Equal(2, afterSeed.TotalItems);
+            Assert.Equal(new[] { "m-b" }, afterDelete.Items.Select(item => item.Name));
+            Assert.Equal(1, afterDelete.TotalItems);
+        });
+    }
+
+    [Fact]
+    public async Task GetIndexPageAsync_does_not_reuse_a_ranking_built_across_a_seed()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo);
+        await service.SeedFilesAsync("r-a", SampleFiles);
+
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        repo.AfterListAsync = () =>
+        {
+            entered.SetResult();
+            return release.Task;
+        };
+
+        var inFlight = service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        await entered.Task;
+
+        // Seed once the ranking read has snapshotted the names, then let that read return them.
+        await service.SeedFilesAsync("r-b", SampleFiles);
+        repo.AfterListAsync = null;
+        release.SetResult();
+        var stale = await inFlight;
+
+        var next = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(new[] { "r-a" }, stale.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "r-a", "r-b" }, next.Items.Select(item => item.Name));
+            Assert.Equal(2, next.TotalItems);
+        });
+    }
+
+    [Fact]
+    public async Task GetIndexPageAsync_pages_a_tied_sort_deterministically()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
+            """
+            [
+              { "Name": "t-a", "NumVotes": 5 },
+              { "Name": "t-b", "NumVotes": 5 },
+              { "Name": "t-c", "NumVotes": 5 },
+              { "Name": "t-d", "NumVotes": 5 },
+              { "Name": "t-e", "NumVotes": 5 },
+              { "Name": "t-f", "NumVotes": 5 },
+              { "Name": "t-g", "NumVotes": 5 }
+            ]
+            """));
+
+        foreach (var name in new[] { "t-d", "t-a", "t-g", "t-b", "t-f", "t-c", "t-e" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var names = new List<string>();
+        for (var page = 1; page <= 4; page++)
+        {
+            var response = await service.GetIndexPageAsync(page, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+            Assert.Equal(4, response.TotalPages);
+            names.AddRange(response.Items.Select(item => item.Name));
+        }
+
+        // Every page is a slice of the same tied-key ranking: name ascending on the tie-break.
+        Assert.Equal(new[] { "t-a", "t-b", "t-c", "t-d", "t-e", "t-f", "t-g" }, names);
+    }
+
+    [Fact]
     public async Task SeedFilesAsync_same_content_produces_same_revision_sha()
     {
         var repo = new InMemoryPackageRepository();
@@ -496,6 +654,12 @@ public class PackageServiceTests
         public Task<IReadOnlyList<PackageIndexEntry>> ListIndexPageAsync(int skip, int take, CancellationToken ct = default)
         {
             return inner.ListIndexPageAsync(skip, take, ct);
+        }
+
+        public Task<IReadOnlyList<PackageIndexEntry>> ListIndexEntriesAsync(
+            IReadOnlyCollection<string> names, CancellationToken ct = default)
+        {
+            return inner.ListIndexEntriesAsync(names, ct);
         }
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)

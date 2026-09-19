@@ -8,6 +8,10 @@ public interface IPackageRepository
 
     Task<IReadOnlyList<PackageIndexEntry>> ListIndexPageAsync(int skip, int take, CancellationToken ct = default);
 
+    /// <summary>Name-filtered index rows for one page, returned unordered.</summary>
+    Task<IReadOnlyList<PackageIndexEntry>> ListIndexEntriesAsync(
+        IReadOnlyCollection<string> names, CancellationToken ct = default);
+
     Task<bool> ExistsAsync(string packageName, CancellationToken ct = default);
 
     Task<PackageDocument?> GetHeadAsync(string packageName, CancellationToken ct = default);

@@ -22,6 +22,10 @@ public sealed class PackageService(
 
     private readonly AtollOptions _options = options.Value;
 
+    // Built here rather than injected: PackageService is a singleton and every direct construction
+    // in tests passes only the primary-constructor arguments.
+    private readonly PackageIndexRanker _ranker = new(repo, indexStore);
+
     public Task<IReadOnlyList<string>> ListAsync()
     {
         return repo.ListAsync();
@@ -39,53 +43,51 @@ public sealed class PackageService(
         PackageIndexSortOrder? order = null,
         CancellationToken ct = default)
     {
-        var total = await repo.CountAsync(ct);
-        var totalPages = total == 0 ? 0 : (int)((total + limit - 1) / limit);
-
-        // Guard against arithmetic overflow (e.g. page = int.MaxValue) and skip beyond total/int.MaxValue.
-        var skip = (long)(page - 1) * limit;
-        if (skip >= total || skip > int.MaxValue)
-        {
-            return new PackageIndexResponse([], page, limit, total, totalPages);
-        }
-
-        var catalog = indexStore?.Current.ByNames;
         var direction = order ?? PackageIndexSortOrder.Asc;
+        var catalog = indexStore?.Current.ByNames;
 
-        // Name ascending pages directly in MongoDB. Everything else ranks the whole enriched
-        // listing in memory and slices the requested window, because votes, popularity, and
-        // version live only in the in-memory catalog, not Mongo.
+        // Name ascending pages directly in MongoDB. Everything else ranks the seeded set through
+        // PackageIndexRanker, which caches sorted name views per (index generation, sort), because
+        // votes, popularity, and version live only in the in-memory catalog, not Mongo.
         if (sortBy is PackageIndexSortBy.Name && direction is PackageIndexSortOrder.Asc)
         {
+            var total = await repo.CountAsync(ct);
+            var totalPages = total == 0 ? 0 : (int)((total + limit - 1) / limit);
+
+            // Guard against arithmetic overflow (e.g. page = int.MaxValue) and skip beyond total/int.MaxValue.
+            var skip = (long)(page - 1) * limit;
+            if (skip >= total || skip > int.MaxValue)
+                return new PackageIndexResponse([], page, limit, total, totalPages);
+
             var items = await repo.ListIndexPageAsync((int)skip, limit, ct);
             return new PackageIndexResponse(EnrichWithCatalog(items, catalog), page, limit, total, totalPages);
         }
 
-        var rows = EnrichWithCatalog(await repo.ListIndexPageAsync(0, (int)Math.Min(total, int.MaxValue), ct), catalog);
-        var sorted = sortBy switch
-        {
-            PackageIndexSortBy.Name => SortByKey(rows, direction, item => item.Name, StringComparer.Ordinal),
-            PackageIndexSortBy.Votes => SortByKey(rows, direction, item => item.NumVotes ?? 0),
-            PackageIndexSortBy.Popularity => SortByKey(rows, direction, item => item.Popularity ?? 0),
-            PackageIndexSortBy.Version => SortByKey(rows, direction, item => item.Version, StringComparer.Ordinal),
-            _ => throw new ArgumentOutOfRangeException(nameof(sortBy), sortBy, null)
-        };
+        var sorted = await _ranker.GetSortedNamesAsync(sortBy, direction, ct);
+        var rankedTotal = sorted.Length;
+        var rankedPages = rankedTotal == 0 ? 0 : (int)(((long)rankedTotal + limit - 1) / limit);
 
-        if (sortBy is not PackageIndexSortBy.Name)
-            sorted = sorted.ThenBy(item => item.Name, StringComparer.Ordinal);
+        // Same overflow guard; totals describe the ranked snapshot the page is sliced from.
+        var rankedSkip = (long)(page - 1) * limit;
+        if (rankedSkip >= rankedTotal || rankedSkip > int.MaxValue)
+            return new PackageIndexResponse([], page, limit, rankedTotal, rankedPages);
 
-        return new PackageIndexResponse(sorted.Skip((int)skip).Take(limit).ToArray(), page, limit, total, totalPages);
-    }
+        var start = (int)rankedSkip;
+        var count = Math.Min(limit, rankedTotal - start);
+        var pageNames = new string[count];
+        Array.Copy(sorted, start, pageNames, 0, count);
 
-    private static IOrderedEnumerable<PackageIndexEntry> SortByKey<TKey>(
-        IEnumerable<PackageIndexEntry> rows,
-        PackageIndexSortOrder order,
-        Func<PackageIndexEntry, TKey> key,
-        IComparer<TKey>? comparer = null)
-    {
-        return order is PackageIndexSortOrder.Desc
-            ? rows.OrderByDescending(key, comparer)
-            : rows.OrderBy(key, comparer);
+        var entries = await repo.ListIndexEntriesAsync(pageNames, ct);
+
+        // The repository returns rows unordered; reorder to the ranked page order. A name deleted
+        // between the generation build and this fetch drops out, shortening the page.
+        var byName = entries.ToDictionary(entry => entry.Name, StringComparer.Ordinal);
+        var ordered = new List<PackageIndexEntry>(count);
+        foreach (var name in pageNames)
+            if (byName.TryGetValue(name, out var entry))
+                ordered.Add(entry);
+
+        return new PackageIndexResponse(EnrichWithCatalog(ordered, catalog), page, limit, rankedTotal, rankedPages);
     }
 
     private static PackageIndexEntry[] EnrichWithCatalog(
@@ -141,6 +143,7 @@ public sealed class PackageService(
         // authoritative delete. The scope keeps both steps atomic with respect to materialization.
         await using var deletion = await gitCache.BeginDeleteAsync(packageName, ct);
         await repo.DeleteAsync(packageName, ct);
+        _ranker.Invalidate();
     }
 
     public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
@@ -161,6 +164,7 @@ public sealed class PackageService(
 
         await repo.InsertSeedAsync(doc, snapshot.Content);
         await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true, scanner.PolicyVersion);
+        _ranker.Invalidate();
     }
 
     public async Task<bool> AppendRevisionFromUpstreamAsync(

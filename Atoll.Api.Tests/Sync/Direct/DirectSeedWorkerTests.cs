@@ -87,6 +87,10 @@ public class DirectSeedWorkerTests
         public Task<IReadOnlyList<PackageIndexEntry>> ListIndexPageAsync(int skip, int take, CancellationToken ct = default)
             => throw new NotSupportedException();
 
+        public Task<IReadOnlyList<PackageIndexEntry>> ListIndexEntriesAsync(
+            IReadOnlyCollection<string> names, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => Task.FromResult(existing.Contains(packageName));
 

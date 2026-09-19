@@ -11,13 +11,21 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
     private readonly Lock _gate = new();
     private readonly Dictionary<string, PackageRevisionContentDocument> _revisions = new(StringComparer.Ordinal);
 
-    public Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
+    /// <summary>Test seam awaited after <see cref="ListAsync"/> snapshots the names, to hold one open.</summary>
+    internal Func<Task>? AfterListAsync { get; set; }
+
+    public async Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
     {
+        IReadOnlyList<string> result;
         lock (_gate)
         {
-            IReadOnlyList<string> result = [.. _docs.Keys];
-            return Task.FromResult(result);
+            result = [.. _docs.Keys];
         }
+
+        if (AfterListAsync is { } hook)
+            await hook();
+
+        return result;
     }
 
     public Task<long> CountAsync(CancellationToken ct = default)
@@ -43,6 +51,28 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                         d.Revisions.Count, d.UpstreamPackageBase))
                     .Skip(skip)
                     .Take(take)
+            ];
+
+            return Task.FromResult(result);
+        }
+    }
+
+    public Task<IReadOnlyList<PackageIndexEntry>> ListIndexEntriesAsync(
+        IReadOnlyCollection<string> names, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            IReadOnlyList<PackageIndexEntry> result =
+            [
+                .. names
+                    .Where(_docs.ContainsKey)
+                    .Select(name =>
+                    {
+                        var d = _docs[name];
+                        return new PackageIndexEntry(
+                            d.PackageName, d.CreatedAt, d.UpdatedAt, d.HeadRevisionId,
+                            d.Revisions.Count, d.UpstreamPackageBase);
+                    })
             ];
 
             return Task.FromResult(result);

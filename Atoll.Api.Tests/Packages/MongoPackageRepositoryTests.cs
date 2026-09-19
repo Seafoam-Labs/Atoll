@@ -199,6 +199,49 @@ public class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ListIndexEntriesAsync_is_order_independent_and_drops_unknown_names()
+    {
+        var fake = new InMemoryPackageRepository();
+
+        foreach (var name in new[] { "c-carrot", "a-apple", "e-egg" })
+        {
+            var (doc, revision) = NewSeed("pkg/" + name, name);
+            await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
+            await fake.InsertSeedAsync(doc, revision, CancellationToken.None);
+        }
+
+        await Append("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")));
+        await fake.AppendRevisionAsync(
+            "a-apple",
+            NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")),
+            10);
+
+        var names = new[] { "e-egg", "missing", "a-apple", "c-carrot" };
+        var fromMongo = await _repo.ListIndexEntriesAsync(names, CancellationToken.None);
+        var fromFake = await fake.ListIndexEntriesAsync(names, CancellationToken.None);
+        var empty = await _repo.ListIndexEntriesAsync([], CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(
+                fromMongo.OrderBy(p => p.Name, StringComparer.Ordinal)
+                    .Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount, p.UpstreamPackageBase)),
+                fromFake.OrderBy(p => p.Name, StringComparer.Ordinal)
+                    .Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount, p.UpstreamPackageBase)));
+            Assert.Equal(3, fromMongo.Count);
+
+            var apple = fromMongo.Single(p => p.Name == "a-apple");
+            Assert.Equal("rev-a2", apple.HeadRevisionId);
+            Assert.Equal(2, apple.RevisionCount);
+            Assert.True(apple.CreatedAt > DateTimeOffset.MinValue);
+            Assert.True(apple.UpdatedAt > DateTimeOffset.MinValue);
+            Assert.Null(apple.UpstreamPackageBase);
+
+            Assert.Empty(empty);
+        });
+    }
+
+    [Fact]
     public async Task AppendRevisionAsync_evicts_revision_documents_beyond_maxRevisions()
     {
         const int maxRevisions = 5;

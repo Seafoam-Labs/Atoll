@@ -51,6 +51,21 @@ public sealed class MongoPackageRepository : IPackageRepository
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<PackageIndexEntry>> ListIndexEntriesAsync(
+        IReadOnlyCollection<string> names,
+        CancellationToken ct = default)
+    {
+        if (names.Count == 0)
+            return [];
+
+        return await _packages
+            .Find(Builders<PackageDocument>.Filter.In(p => p.PackageName, names))
+            .Project(p => new PackageIndexEntry(
+                p.PackageName, p.CreatedAt, p.UpdatedAt, p.HeadRevisionId,
+                p.Revisions.Count, p.UpstreamPackageBase))
+            .ToListAsync(ct);
+    }
+
     public async Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
     {
         var count = await _packages.CountDocumentsAsync(

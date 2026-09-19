@@ -98,9 +98,9 @@ export const options = {
       gracefulRampDown: "10s",
     },
     catalog_sorted: {
-      // Any non-default sort materializes the complete catalog before paging.
-      // Arrival-rate scheduling keeps this known-expensive public request from
-      // being accidentally amplified into a denial-of-service test.
+      // Non-default sorts serve from a cached per-sort name view plus one
+      // name-filtered Mongo query per page. Arrival-rate scheduling keeps this
+      // formerly unbounded public request measured in isolation.
       executor: "constant-arrival-rate",
       exec: "catalogSorted",
       rate: sortedSchedule.rate,
@@ -133,7 +133,7 @@ export const options = {
     "http_req_duration{scenario:search}": ["p(95)<300"],
     "http_req_duration{scenario:rpc}": ["p(95)<300"],
     "http_req_duration{scenario:catalog}": ["p(95)<600"],
-    "http_req_duration{scenario:catalog_sorted}": ["p(95)<3000"],
+    "http_req_duration{scenario:catalog_sorted}": ["p(95)<600"],
     "http_req_duration{scenario:ui}": ["p(95)<1000"],
     "http_req_duration{scenario:git_fetch}": ["p(95)<2000"],
     "checks{scenario:search}": ["rate>0.99"],

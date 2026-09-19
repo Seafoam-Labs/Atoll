@@ -37,17 +37,19 @@ keeping them separate stops a slow path from hiding in the aggregate.
 | `search` | ramping-vus, 25 VUs | `GET /v1/search?query=&by=name/words/provides` (in-memory index); each mode queries its own pool — `PACKAGES` for exact names, `TERMS` for words, `PROVIDES` for provided tokens | p95 < 300 ms |
 | `rpc` | ramping-vus, 25 VUs | yay-style `POST /rpc` form `v=5&type=multiinfo` with a batched 1–200 `arg[]` list, plus 10% `GET /rpc/v5/suggest` | p95 < 300 ms |
 | `catalog` | ramping-vus, 12 VUs | `GET /v1/packages?page=` (Mongo), plus sampled `/versions` and detail reads | p95 < 600 ms |
-| `catalog_sorted` | constant-arrival-rate, 1 request/s | `GET /v1/packages?sortBy=votes/popularity/version` | p95 < 3 s |
+| `catalog_sorted` | constant-arrival-rate, 1 request/s | `GET /v1/packages?sortBy=votes/popularity/version` | p95 < 600 ms |
 | `ui` | ramping-vus, 5 VUs | `GET /` and `GET /package/{name}` (server-rendered Blazor) | p95 < 1 s |
 | `git_fetch` | constant-arrival-rate, 2 fetches/s | Full Git Smart HTTP fetch: `info/refs` advertisement → one-shot `want`/`done` → `git-upload-pack` | p95 < 2 s |
 
 The two rate-driven scenarios are capped instead of VU-driven because each is
 expensive per request: Git fetching shells out to `git upload-pack` server-side,
-and non-default sorting reads and enriches the whole seeded catalog before
-returning one page — the suite's clearest capacity and denial-of-service
-boundary. Overall failures must stay below 1% with at least 99% passing checks
-per scenario; the default profile runs about 95 seconds, with the rate-driven
-scenarios bounded to match.
+and non-default sorting used to materialize and enrich the whole seeded catalog
+before returning one page. Sorted pages are now bounded by cached per-sort name
+views (one name-filtered Mongo query per page), so `SORT_RATE` can be raised;
+the arrival cap keeps each expensive path measured in isolation. Overall
+failures must stay below 1% with at least 99% passing checks per scenario; the
+default profile runs about 95 seconds, with the rate-driven scenarios bounded to
+match.
 
 ### In-process cost probes
 
@@ -66,6 +68,10 @@ dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj --filter-class Atol
 A `ui` p95 increase with flat in-process numbers points at the rendering/HTTP
 leg; both rising points at the search path. Assertions are scale/behaviour
 sanity checks, not timing gates, so the probe stays in the normal test run.
+
+`Atoll.Api.Tests/Packages/PackageIndexRankerPerfTests.cs` is the same kind of
+probe for the code behind `catalog_sorted`, reporting a cold sorted request, the
+cold view build per sort, and the warm page over a synthetic 85k-name seeded set.
 
 ## Corpora
 
@@ -108,7 +114,7 @@ the detail read returns a package's whole file contents, not metadata.
 | `VUS` | `25` | Peak VUs per VU-driven scenario |
 | `UI_VUS` | `5` | Peak VUs requesting server-rendered HTML |
 | `GIT_RATE` | `2` | Git fetches per second |
-| `SORT_RATE` | `1` | Full-catalog sorts per second; increase slowly |
+| `SORT_RATE` | `1` | Sorted package pages per second; increase slowly |
 | `WARMUP` / `HOLD` / `COOLDOWN` | `20s` / `1m` / `15s` | Ramp-up, steady-state, ramp-down stage durations |
 | `GIT_DURATION` | `95s` | Duration of the rate-driven scenarios; keep aligned with the three stages |
 | `VERIFY_SECURITY` | `false` | Require every selected package's head scan to be `Verified` before load |
@@ -131,10 +137,10 @@ k6 run loadtest.js
 VUS=40 UI_VUS=8 GIT_RATE=3 SORT_RATE=1 HOLD=2m GIT_DURATION=155s k6 run loadtest.js
 ```
 
-Measure `catalog_sorted` on its own before allowing higher rates, since one
-public request scales with the number of seeded packages. This suite detects
-that limit; bounding or redesigning the endpoint is the production-readiness
-decision to make from the measurement.
+The sorted endpoint is bounded: cached per-sort name views over the seeded set,
+with one name-filtered Mongo query per page. Measure `catalog_sorted` on its own
+while raising `SORT_RATE`, and record a fresh baseline: the earlier results
+predate the bound.
 
 ### Excluded from the workload
 
