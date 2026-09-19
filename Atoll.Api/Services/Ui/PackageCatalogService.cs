@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
+using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Catalog;
@@ -151,7 +151,7 @@ public sealed class PackageCatalogService(
                 rows.Add(new CatalogRow(
                     package,
                     snapshot.SeededNames.Contains(package.Name),
-                    snapshot.HeadStatuses.GetValueOrDefault(package.Name)));
+                    snapshot.HeadStatuses.TryGetValue(package.Name, out var head) ? head : null));
             }
         }
 
@@ -177,7 +177,8 @@ public sealed class PackageCatalogService(
         if (securityFilter is CatalogSecurityFilter.Any) return true;
 
         return isSeeded
-               && snapshot.HeadStatuses.GetValueOrDefault(package.Name)?.Status == ToSecurityStatus(securityFilter);
+               && snapshot.HeadStatuses.TryGetValue(package.Name, out var head)
+               && head.Status == ToSecurityStatus(securityFilter);
     }
 
     private static int TotalPages(int total) => Math.Max(1, (total + PageSize - 1) / PageSize);
@@ -278,13 +279,15 @@ public sealed class PackageCatalogService(
             var seeded = await packageService.ListAsync();
             var heads = await securityRepository.ListHeadStatusesAsync(ct);
 
-            var headStatuses = ImmutableDictionary.CreateBuilder<string, HeadScanStatus>(StringComparer.Ordinal);
+            // A head promotion leaves two isHead documents for one package until it demotes the
+            // previous head, so the last one read wins rather than a duplicate key throwing.
+            var headStatuses = new Dictionary<string, HeadScanStatus>(heads.Count, StringComparer.Ordinal);
             foreach (var head in heads)
                 headStatuses[head.PackageName] = head;
 
             var next = new SeededSnapshot(
-                seeded.ToImmutableHashSet(StringComparer.Ordinal),
-                headStatuses.ToImmutable(),
+                seeded.ToFrozenSet(StringComparer.Ordinal),
+                headStatuses.ToFrozenDictionary(StringComparer.Ordinal),
                 DateTimeOffset.UtcNow);
 
             Volatile.Write(ref _snapshot, next);
@@ -297,13 +300,13 @@ public sealed class PackageCatalogService(
     }
 
     private sealed record SeededSnapshot(
-        ImmutableHashSet<string> SeededNames,
-        ImmutableDictionary<string, HeadScanStatus> HeadStatuses,
+        FrozenSet<string> SeededNames,
+        FrozenDictionary<string, HeadScanStatus> HeadStatuses,
         DateTimeOffset FetchedAt)
     {
         public static SeededSnapshot Empty { get; } = new(
-            ImmutableHashSet<string>.Empty.WithComparer(StringComparer.Ordinal),
-            ImmutableDictionary<string, HeadScanStatus>.Empty.WithComparers(StringComparer.Ordinal),
+            FrozenSet<string>.Empty,
+            FrozenDictionary<string, HeadScanStatus>.Empty,
             DateTimeOffset.MinValue);
 
         public bool IsFresh =>

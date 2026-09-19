@@ -263,7 +263,8 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | Normalized `package-revisions` storage | Avoids 16 MiB document growth as revisions accumulate; keeps `packages` documents lean. | Content reads take an extra indexed query; two-document writes on append without distributed transactions. | Active |
 | Subprocess execution for `git upload-pack` | Reuses complete and standard Git smart HTTP protocol implementation. | Requires `git` binary in container; small process-spawn overhead per Git fetch. | Active |
 | Atomic snapshot swap in `PackageIndexStore` | Lock-free, zero-contention reads; consistent view per query. | Full index rebuild on refresh; temporary 2× peak memory during rebuild. | Active |
-| Cached sorted views in `PackageCatalogService` | Fast UI pagination over 100k+ packages. Each `(generation, sort)` is pre-sorted once into an array reference. | First request per sort pays O(N log N). Substring queries still scan linearly (~15–25 ms). | Active |
+| Cached sorted views in `PackageCatalogService` | Fast UI pagination over 100k+ packages. Each `(generation, sort)` is pre-sorted once into an array reference. | First request per sort pays O(N log N). Substring queries still scan linearly (~10-25 ms). | Active |
+| Frozen seeded/head snapshot in `PackageCatalogService` | Row filters probe a `FrozenSet`/`FrozenDictionary` instead of immutable hash collections; the seeded-filter scenario drops ~2.3x at 85k packages and the rebuild is ~2.7x faster. | ~5.5 MB more transient garbage per rebuild (at most one per 30 s TTL). Duplicate `isHead` documents during a head promotion force the last-wins indexed build, since the key-selector overload throws. | Active |
 | Cached sorted name views in `PackageIndexRanker` | Bounds the sorted REST feed: the seeded set is ranked once per `(index generation, sort)` into a cached name array, so a page costs O(limit) instead of sorting ~118k enriched rows per request. | Staleness contract on a public surface (explicit invalidation plus a 30 s TTL backstop); seeded names absent from the catalog rank by default keys. | Active |
 | Response compression (Brotli + Gzip) | Reduces dynamic SSR and API payload sizes ~5× without external infrastructure. | Minor CPU overhead (mitigated by `Fastest` level). Disabled over HTTPS by default to prevent BREACH attacks. | Active |
 | Open endpoints / Trusted network model | Keeps the API and Git clone surface simple and standard for self-hosted instances. | Anyone on the network can mutate data unless `Atoll:Mutations:Enabled=false` is set. | Active |
@@ -308,9 +309,10 @@ store and feeds only the marker string, so that rebuild leaves the served SHAs u
   errored, and unscanned historical revisions while security is enabled.
 - Evaluate content-addressed deduplication or GridFS/chunked storage for revision snapshots larger than MongoDB's 16 MiB
   document limit.
-- `PackageCatalogService` substring queries and seeded/security filters still scan the full sorted view on every call
-  (~15–25 ms at ~85k packages, even for a single-hit query) - a real substring/prefix index would be needed to remove
-  this floor. Empty-query default views bypass the scan via the per-sort cached sorted views (2026-08-23; replaced the
+- `PackageCatalogService` substring queries and seeded/security filters still walk the full sorted view on every call
+  (~10-25 ms at ~85k packages, even for a single-hit query) - a real substring/prefix index would be needed to remove
+  this floor. The per-row seeded/head probe is a frozen-collection lookup, so the walk itself is what remains.
+  Empty-query default views bypass the walk via the per-sort cached sorted views (2026-08-23; replaced the
   earlier top-K heap).
 
 ## References

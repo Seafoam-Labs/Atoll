@@ -63,7 +63,8 @@ Release (`dotnet test -c Release`):
   hashing plus hash-trie traversal through interface dispatch). The Debug/Release
   tie is expected for that mix, and marks the number as algorithm-bound: the
   obvious lever, if this path ever matters at live scale, would be a frozen
-  collection for the snapshot — not applied here.
+  collection for the snapshot (applied 2026-09-19: this scenario now lands at
+  ~10 ms, the other five unchanged).
 - Both query scenarios are full-index scans by construction (`BuildPredicate`
   delegates run per package and total-match counting never short-circuits), so
   their cost scales with index size and predicate cost, not with match count.

@@ -156,6 +156,24 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TwoHeadDocumentsForOnePackageStillServeTheCatalog()
+    {
+        _seededNames = ["shelly-bin"];
+        // Appending a revision marks the new head pending before demoting the previous one, so both
+        // documents read as head for a window.
+        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-1", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-2", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+
+        var result = await CreateService().SearchAsync(
+            null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Pending,
+            CatalogSearchMode.Name, CatalogSort.NameAsc);
+
+        Assert.Equal(["shelly-bin"],
+            result.Rows.Select(row => row.Package.Name));
+        Assert.Equal(SecurityStatus.Pending, result.Rows.Single().Head!.Status);
+    }
+
+    [Fact]
     public async Task VotesDescendingSortOrdersByVotes()
     {
         var result = await CreateService().SearchAsync(
