@@ -40,7 +40,10 @@ public sealed class GlobalExceptionHandler(
         };
 
         var traceId = Activity.Current?.Id ?? httpContext.TraceIdentifier;
-        logger.LogError(exception, "Unhandled exception occurred. TraceId: {TraceId}", traceId);
+        if (exception is PackageConflictException conflict)
+            logger.LogDebug("Package {PackageName} already exists. TraceId: {TraceId}", conflict.PackageName, traceId);
+        else
+            logger.LogError(exception, "Unhandled exception occurred. TraceId: {TraceId}", traceId);
 
         httpContext.Response.StatusCode = statusCode;
 
