@@ -100,8 +100,9 @@ PACKAGES="$(KEEP=duckstation-gpl,xpipe-ptb ./sample-packages.sh 80)" \
 so the name-keyed scenarios (rpc, detail, versions, ui, git) exercise a rotating
 working set rather than the same cache-hot documents, and `KEEP=` pins curated
 size-tail reps. A rotated run pays two expected costs: bare-repo materialization
-inside `git_fetch` on each name's first fetch, and much higher `data_received` —
-the detail read returns a package's whole file contents, not metadata.
+inside `git_fetch` on each name's first fetch, including the one-time `git repack`
+that packs its object store, and much higher `data_received` — the detail read
+returns a package's whole file contents, not metadata.
 
 ## Tunables (environment variables)
 

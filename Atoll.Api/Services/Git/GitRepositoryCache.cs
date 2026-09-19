@@ -19,7 +19,7 @@ public sealed class GitRepositoryCache(
     IOptions<AtollOptions> options,
     ILogger<GitRepositoryCache> logger) : IGitRepositoryCache
 {
-    private const string MaterializationVersion = "git-v2";
+    private const string MaterializationVersion = "git-v3";
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
     private readonly AtollOptions _options = options.Value;
 
@@ -121,11 +121,32 @@ public sealed class GitRepositoryCache(
             await GitClient.ExecuteAsync(path, arguments1, null, null, ct);
 
             if (complete)
+            {
                 await File.WriteAllTextAsync(marker, headMarker, ct);
+                await TryRepackAsync(path, packageName, ct);
+            }
         }
         finally
         {
             lockObj.Release();
+        }
+    }
+
+    /// <summary>
+    ///     Packs the object store so <c>upload-pack</c> reuses the packfile instead of recompressing every
+    ///     loose object per negotiation. Best-effort: the marker is already written, so a failed repack costs
+    ///     fetch latency and must never fail a Git request.
+    /// </summary>
+    private async Task TryRepackAsync(string path, string packageName, CancellationToken ct)
+    {
+        try
+        {
+            string[] arguments = ["repack", "-a", "-d", "--write-bitmap-index", "-n", "-q"];
+            await GitClient.ExecuteAsync(path, arguments, null, null, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "Repacking the Git repository for {PackageName} failed; serving loose objects.", packageName);
         }
     }
 

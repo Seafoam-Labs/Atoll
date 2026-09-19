@@ -161,6 +161,73 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EnsureRepositoryAsync_packs_the_object_store()
+    {
+        var (service, cache, security, reposRoot) = CreateService();
+        try
+        {
+            await service.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly");
+
+            var gitDir = cache.GetRepositoryPath("shelly")!;
+            var packDir = Path.Combine(gitDir, "objects", "pack");
+
+            Assert.Multiple(() =>
+            {
+                Assert.Single(Directory.GetFiles(packDir, "*.pack"));
+                Assert.Single(Directory.GetFiles(packDir, "*.bitmap"));
+                Assert.Empty(LooseObjectDirectories(gitDir));
+            });
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Re_materialization_keeps_a_single_packfile()
+    {
+        var (service, cache, security, reposRoot) = CreateService();
+        try
+        {
+            await service.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly");
+
+            // A revision append changes the marker, so the next request re-materializes the
+            // whole chain over an already-packed object store.
+            var revision2 = new Dictionary<string, string>
+            {
+                ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
+                [".SRCINFO"] = "pkgname = shelly\n"
+            };
+            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2));
+            await security.MarkHeadVerifiedAsync("shelly");
+
+            await cache.EnsureRepositoryAsync("shelly");
+
+            var gitDir = cache.GetRepositoryPath("shelly")!;
+            var packDir = Path.Combine(gitDir, "objects", "pack");
+            var commits = (await GitClient.ExecuteAsync(gitDir, ["rev-list", "--count", "main"], null, null,
+                CancellationToken.None)).Trim();
+
+            Assert.Multiple(() =>
+            {
+                Assert.Equal("2", commits);
+                Assert.Single(Directory.GetFiles(packDir, "*.pack"));
+                Assert.Single(Directory.GetFiles(packDir, "*.bitmap"));
+                Assert.Empty(LooseObjectDirectories(gitDir));
+            });
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+        }
+    }
+
+    [Fact]
     public async Task EnsureRepositoryAsync_returns_silently_when_no_path_configured()
     {
         var repo = new InMemoryPackageRepository();
@@ -296,6 +363,21 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         {
             TryCleanup(reposRoot);
         }
+    }
+
+    /// <summary>
+    ///     Loose objects live in two-hex-character fanout directories under <c>objects/</c>; a packed
+    ///     object store has none.
+    /// </summary>
+    private static string[] LooseObjectDirectories(string gitDir)
+    {
+        return Directory.GetDirectories(Path.Combine(gitDir, "objects"))
+            .Where(dir =>
+            {
+                var name = Path.GetFileName(dir);
+                return name.Length == 2 && name.All(char.IsAsciiHexDigit);
+            })
+            .ToArray();
     }
 
     private static async Task<(int Commits, string Pkgbuild)> CloneAndInspectAsync(

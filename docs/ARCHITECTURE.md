@@ -117,8 +117,9 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   requests from the in-memory catalog. Responses expose Atoll's standard `/{pkgbase}.git` aliases as `URLPath`.
 - **Git Smart HTTP:** `GitTransferService` asks `IGitRepositoryCache` for a current bare repository, then pipes
   stdin/stdout to `git upload-pack`. Materialization reads package revisions and scan status without mutating package
-  data. Standard root-level `/{pkgbase}.git` aliases coexist with Atoll's `/packages/{name}.git` routes; split-package
-  bases resolve to the first seeded member in deterministic name order.
+  data, and ends by packing the object store (best-effort) so fetches reuse the packfile instead of recompressing
+  loose objects on every negotiation. Standard root-level `/{pkgbase}.git` aliases coexist with Atoll's
+  `/packages/{name}.git` routes; split-package bases resolve to the first seeded member in deterministic name order.
 
 ## State & Storage
 
@@ -271,7 +272,8 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 
 **Git identity compatibility:** commit identity depends on ordered revisions, trees and executable modes, sanitized
 revision authors, timestamps, messages, and parent order. The `git-v2` marker introduced corrected author identities;
-older local caches rebuild lazily and receive new synthesized SHAs once.
+older local caches rebuild lazily and receive new synthesized SHAs once. The `git-v3` marker adds a packed object
+store and feeds only the marker string, so that rebuild leaves the served SHAs untouched.
 
 ## Operations
 
