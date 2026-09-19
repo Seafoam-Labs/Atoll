@@ -127,6 +127,25 @@ public class GitSmartHttpEndpointsTests : IDisposable
         Assert.True(body.Length > 0);
     }
 
+    [Fact]
+    public async Task UploadPack_unknown_want_returns_protocol_err_packet()
+    {
+        await _packages.SeedFilesAsync("shelly", SampleFiles);
+
+        const string bogus = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        var requestBody = EncodePacketLine($"want {bogus}\n") + "0000" + EncodePacketLine("done\n");
+        using var content = new ByteArrayContent(Encoding.ASCII.GetBytes(requestBody));
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/x-git-upload-pack-request");
+
+        var response = await _client.PostAsync("/packages/shelly.git/git-upload-pack", content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/x-git-upload-pack-result", response.Content.Headers.ContentType?.MediaType);
+
+        var body = Encoding.ASCII.GetString(await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal(EncodePacketLine($"ERR upload-pack: not our ref {bogus}"), body);
+    }
+
     private static string EncodePacketLine(string line)
     {
         var bytes = Encoding.ASCII.GetBytes(line);

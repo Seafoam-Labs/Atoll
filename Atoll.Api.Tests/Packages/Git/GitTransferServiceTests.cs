@@ -181,6 +181,56 @@ public class GitTransferServiceTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task UploadPackAsync_unknown_want_returns_protocol_err_packet()
+    {
+        var (git, packages, cache, security, reposRoot) = CreateServices();
+        try
+        {
+            await packages.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
+
+            const string bogus = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+            var requestBody = EncodePacketLine($"want {bogus}\n") + "0000" + EncodePacketLine("done\n");
+            using var input = new MemoryStream(Encoding.ASCII.GetBytes(requestBody));
+            using var output = new MemoryStream();
+
+            var result = await git.UploadPackAsync("shelly", input, output, CancellationToken.None);
+
+            Assert.IsAssignableFrom<GitTransferResult.Ok>(result);
+            Assert.Equal(
+                EncodePacketLine($"ERR upload-pack: not our ref {bogus}"),
+                Encoding.ASCII.GetString(output.ToArray()));
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+        }
+    }
+
+    [Fact]
+    public async Task UploadPackAsync_flush_only_body_is_answered_with_empty_ok()
+    {
+        var (git, packages, cache, security, reposRoot) = CreateServices();
+        try
+        {
+            await packages.SeedFilesAsync("shelly", SampleFiles);
+            await security.MarkHeadVerifiedAsync("shelly");
+
+            using var input = new MemoryStream(Encoding.ASCII.GetBytes("0000"));
+            using var output = new MemoryStream();
+
+            var result = await git.UploadPackAsync("shelly", input, output, CancellationToken.None);
+
+            Assert.IsAssignableFrom<GitTransferResult.Ok>(result);
+            Assert.Equal(0, output.Length);
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+        }
+    }
+
     private static string? ExtractHeadSha(string advertisement)
     {
         const string needle = " refs/heads/main";

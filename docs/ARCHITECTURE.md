@@ -116,7 +116,10 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - **AUR RPC v5:** `AurRpcService` serves legacy GET or form-encoded POST requests at `/rpc` and path-style `/rpc/v5/…`
   requests from the in-memory catalog. Responses expose Atoll's standard `/{pkgbase}.git` aliases as `URLPath`.
 - **Git Smart HTTP:** `GitTransferService` asks `IGitRepositoryCache` for a current bare repository, then pipes
-  stdin/stdout to `git upload-pack`. Materialization reads package revisions and scan status without mutating package
+  stdin/stdout to `git upload-pack`. Request bodies are buffered and their `want` lines checked against the
+  repository's advertised refs first, so an unknown `want` is answered with upload-pack's own single-packet `ERR`
+  rejection (HTTP 200, protocol media type) instead of a truncated stream and a mid-response exception.
+  Materialization reads package revisions and scan status without mutating package
   data, and ends by packing the object store (best-effort) so fetches reuse the packfile instead of recompressing
   loose objects on every negotiation. Standard root-level `/{pkgbase}.git` aliases coexist with Atoll's
   `/packages/{name}.git` routes; split-package bases resolve to the first seeded member in deterministic name order.

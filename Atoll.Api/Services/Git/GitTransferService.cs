@@ -51,13 +51,37 @@ public sealed class GitTransferService(
         if (gitDir is null)
             return new GitTransferResult.NotFound();
 
+        // Buffered so wants can be validated before upload-pack runs: its own rejection for an
+        // unknown ref arrives after the response has started, which surfaces as a mid-stream
+        // exception instead of a protocol error.
+        using var body = new MemoryStream();
+        await input.CopyToAsync(body, ct);
+
+        var wants = ReadWants(body.GetBuffer().AsSpan(0, (int)body.Length));
+        if (wants is { Count: > 0 })
+        {
+            var advertised = await GetAdvertisedObjectIdsAsync(gitDir, ct);
+            if (advertised is not null)
+            {
+                var unknown = wants.FirstOrDefault(want => !advertised.Contains(want));
+                if (unknown is not null)
+                {
+                    await WritePacketLineAsync(output, $"ERR upload-pack: not our ref {unknown.ToLowerInvariant()}", ct);
+                    await output.FlushAsync(ct);
+                    return new GitTransferResult.Ok();
+                }
+            }
+        }
+
+        body.Position = 0;
+
         string[] arguments = ["upload-pack", "--stateless-rpc", gitDir];
         var error = new StringBuilder();
 
         var cmd = Cli.Wrap("git")
             .WithArguments(arguments)
             .WithValidation(CommandResultValidation.ZeroExitCode)
-            .WithStandardInputPipe(PipeSource.FromStream(input))
+            .WithStandardInputPipe(PipeSource.FromStream(body))
             .WithStandardErrorPipe(PipeTarget.ToStringBuilder(error))
             .WithStandardOutputPipe(PipeTarget.ToStream(output));
 
@@ -90,6 +114,89 @@ public sealed class GitTransferService(
         }
 
         return null;
+    }
+
+    /// <summary>
+    ///     Wants from a v0 upload-pack request body. The first flush ends the want list; lines after
+    ///     it (<c>have</c>, <c>done</c>) are not wants. Returns <c>null</c> when the pkt-line framing
+    ///     cannot be walked, which skips validation and forwards the body unchanged.
+    /// </summary>
+    private static List<string>? ReadWants(ReadOnlySpan<byte> body)
+    {
+        var wants = new List<string>();
+        var offset = 0;
+
+        while (offset < body.Length)
+        {
+            if (offset + 4 > body.Length || !TryParseHexLength(body.Slice(offset, 4), out var length))
+                return null;
+
+            if (length == 0)
+                return wants;
+
+            if (length < 4 || offset + length > body.Length)
+                return null;
+
+            var line = body.Slice(offset + 4, length - 4);
+            offset += length;
+
+            if (!line.StartsWith("want "u8))
+                continue;
+
+            var rest = line[5..];
+            var end = rest.IndexOf((byte)' ');
+            if (end < 0)
+                end = rest.IndexOf((byte)'\n');
+            if (end < 0)
+                end = rest.Length;
+
+            wants.Add(Encoding.ASCII.GetString(rest[..end]));
+        }
+
+        return null;
+    }
+
+    private static bool TryParseHexLength(ReadOnlySpan<byte> prefix, out int length)
+    {
+        length = 0;
+        foreach (var b in prefix)
+        {
+            var digit = b switch
+            {
+                >= (byte)'0' and <= (byte)'9' => b - (byte)'0',
+                >= (byte)'a' and <= (byte)'f' => b - (byte)'a' + 10,
+                >= (byte)'A' and <= (byte)'F' => b - (byte)'A' + 10,
+                _ => -1
+            };
+
+            if (digit < 0)
+                return false;
+
+            length = (length << 4) | digit;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Object ids in the repository's advertisement, or <c>null</c> when the query failed in a
+    ///     way that leaves the advertised set unknown. Peeled tag targets are their own
+    ///     <c>^{}</c> lines, so the first token of every line covers them.
+    /// </summary>
+    private static async Task<HashSet<string>?> GetAdvertisedObjectIdsAsync(string gitDir, CancellationToken ct)
+    {
+        var (exitCode, output) = await GitClient.TryExecuteAsync(["-C", gitDir, "show-ref", "--head", "-d"], ct);
+        if (exitCode > 1)
+            return null;
+
+        var advertised = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length >= 40 && line[..40].All(Uri.IsHexDigit))
+                advertised.Add(line[..40]);
+        }
+
+        return advertised;
     }
 
     private static async Task WritePacketLineAsync(Stream output, string line, CancellationToken ct)
