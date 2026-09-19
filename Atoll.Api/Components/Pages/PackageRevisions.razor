@@ -2,8 +2,6 @@
 @inject PackageDetailsService Details
 @inject IOptions<UiOptions> Ui
 
-<PageTitle>Revisions - @Name - @Ui.Value.BrandName</PageTitle>
-
 @if (!_loaded)
 {
     <p class="text-ink-faint">Loading…</p>
@@ -14,6 +12,10 @@ else if (_details is null || _revisions is null)
 }
 else
 {
+    var description = UiFormatting.PackageMetaDescription(Ui.Value.BrandName, _details.Metadata.Description);
+
+    <PageMeta Title="@($"Revisions - {Name}")" Description="@description" CanonicalPath="@($"/package/{Name}/revisions")"/>
+
     <PackageHeader Details="@_details"/>
 
     <PackageTabs Name="@Name" RevisionCount="@(_details.Head?.Revisions.Count ?? 0)" Current="revisions"/>

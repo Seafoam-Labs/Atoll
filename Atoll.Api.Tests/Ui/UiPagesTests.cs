@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.RegularExpressions;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
 using Xunit;
@@ -584,5 +585,77 @@ public class UiPagesTests : IDisposable
 
         Assert.Equal(HttpStatusCode.NotFound, revisions.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, files.StatusCode);
+    }
+
+    private async Task<string> GetBodyAsync(string path)
+    {
+        var response = await _client.GetAsync(path);
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    [Theory]
+    [InlineData("/", "Packages - Atoll")]
+    [InlineData("/status", "Status - Atoll")]
+    [InlineData("/package/shelly-bin", "shelly-bin - Atoll")]
+    [InlineData("/package/shelly-bin/files", "Files - shelly-bin - Atoll")]
+    [InlineData("/package/shelly-bin/revisions", "Revisions - shelly-bin - Atoll")]
+    [InlineData("/not-found", "Not found - Atoll")]
+    [InlineData("/some/unknown/route", "Not found - Atoll")]
+    [InlineData("/package/no-such-package", "Not found - Atoll")]
+    public async Task EveryRouteServesExactlyOneTitle(string path, string expectedTitle)
+    {
+        var body = await GetBodyAsync(path);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Single(Regex.Matches(body, "<title>"));
+            Assert.Contains(expectedTitle, body);
+        });
+    }
+
+    [Theory]
+    [InlineData("/", "self-hosted Arch User Repository (AUR) mirror")]
+    [InlineData("/status", "Live status of the Atoll AUR mirror")]
+    [InlineData("/package/shelly-bin", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
+    [InlineData("/package/shelly-bin/files", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
+    [InlineData("/package/shelly-bin/revisions", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
+    [InlineData("/not-found", "Nothing lives at this address")]
+    public async Task EveryRouteServesAMetaDescription(string path, string expectedDescription)
+    {
+        var body = await GetBodyAsync(path);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("name=\"description\"", body);
+            Assert.Contains(expectedDescription, body);
+        });
+    }
+
+    [Fact]
+    public async Task PackagePagesServeOpenGraphAndCanonicalFromExternalBaseUrl()
+    {
+        using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
+        using var client = factory.CreateClient();
+
+        var routes = new[]
+        {
+            "/package/shelly-bin",
+            "/package/shelly-bin/files",
+            "/package/shelly-bin/revisions"
+        };
+        foreach (var path in routes)
+        {
+            var response = await client.GetAsync(path);
+            var body = await response.Content.ReadAsStringAsync();
+
+            var canonical = $"https://atoll.example.com{path}";
+            Assert.Multiple(() =>
+            {
+                Assert.Contains("property=\"og:title\"", body);
+                Assert.Contains("property=\"og:description\"", body);
+                Assert.Contains($"property=\"og:url\" content=\"{canonical}\"", body);
+                Assert.Contains($"rel=\"canonical\" href=\"{canonical}\"", body);
+            });
+        }
     }
 }

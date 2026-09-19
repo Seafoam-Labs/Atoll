@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="@Assets["app.min.css"]"/>
     <link rel="stylesheet" href="@Assets["Atoll.Api.styles.css"]"/>
     <ImportMap/>
+    @* Must stay static: an interactive outlet removes the served <title>/<meta> on boot, and
+       statically rendered pages cannot re-fill it (SectionContent does not cross render trees). *@
     <HeadOutlet/>
 </head>
 <body>

@@ -6,6 +6,11 @@
 
 <PageTitle>Status - @Ui.Value.BrandName</PageTitle>
 
+<HeadContent>
+    <meta name="description"
+          content="@($"Live status of the {Ui.Value.BrandName} AUR mirror: search index, seed and refresh workers, security scanning and storage.")"/>
+</HeadContent>
+
 <h1>Status</h1>
 
 @if (_model is null)

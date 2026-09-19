@@ -1,7 +1,13 @@
 @page "/not-found"
 @layout MainLayout
+@inject IOptions<UiOptions> Ui
 
-<PageTitle>Not found</PageTitle>
+<PageTitle>Not found - @Ui.Value.BrandName</PageTitle>
+
+<HeadContent>
+    <meta name="description"
+          content="@($"Nothing lives at this address on the {Ui.Value.BrandName} AUR mirror.")"/>
+</HeadContent>
 
 <h1>Page not found</h1>
 <div class="card">

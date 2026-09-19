@@ -1,0 +1,30 @@
+@inject IOptions<UiOptions> Ui
+
+<PageTitle>@FullTitle</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Description"/>
+    @if (CanonicalPath is not null)
+    {
+        <meta property="og:title" content="@FullTitle"/>
+        <meta property="og:description" content="@Description"/>
+        <meta property="og:url" content="@CanonicalUrl"/>
+        <link rel="canonical" href="@CanonicalUrl"/>
+    }
+</HeadContent>
+
+@code {
+    /// <summary>Page name without the brand suffix; applied here so the tab title and og:title cannot drift.</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>One-sentence page summary, served as meta description and og:description.</summary>
+    [Parameter, EditorRequired] public string Description { get; set; } = "";
+
+    // A route path, never the current URL: view state lives in query parameters
+    // (?rev=, ?path=) that must not be published as canonical.
+    [Parameter] public string? CanonicalPath { get; set; }
+
+    private string FullTitle => $"{Title} - {Ui.Value.BrandName}";
+
+    private string CanonicalUrl =>
+        $"{Ui.Value.ExternalBaseUrl.Trim().TrimEnd('/')}{CanonicalPath}";
+}

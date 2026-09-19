@@ -132,4 +132,15 @@ public static class UiFormatting
     {
         return timestamp?.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "Never";
     }
+
+    public static string SiteMetaDescription(string brand)
+    {
+        return $"{brand} is a self-hosted Arch User Repository (AUR) mirror: search packages, " +
+               "browse stored files and revision history, and clone any package over Git.";
+    }
+
+    public static string PackageMetaDescription(string brand, string? description)
+    {
+        return string.IsNullOrWhiteSpace(description) ? SiteMetaDescription(brand) : description.Trim();
+    }
 }
