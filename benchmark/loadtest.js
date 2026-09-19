@@ -1,7 +1,8 @@
 // k6 load test for Atoll's public read paths: in-memory search, AUR-compatible
 // RPC, Mongo-backed catalog reads, server-rendered UI pages, and Git Smart HTTP
-// fetches. Catalog sorting is isolated because non-default sorts currently
-// load the full seeded catalog before returning one page.
+// fetches. The two paths that are expensive per request (non-default catalog
+// sorts and Git fetches) run on arrival-rate schedules so each stays measurable
+// on its own instead of hiding in the VU-driven aggregate.
 //
 // Local (see docker-compose.yaml next to this file):
 //   docker compose up --build -d
@@ -28,7 +29,7 @@ let TARGET = __ENV.TARGET || "http://localhost:8080";
 while (TARGET.endsWith("/")) TARGET = TARGET.slice(0, -1);
 const VUS = Number(__ENV.VUS || 25);
 const GIT_RATE = Number(__ENV.GIT_RATE || 2);
-const SORT_RATE = Number(__ENV.SORT_RATE || 1);
+const SORT_RATE = Number(__ENV.SORT_RATE || 10);
 const UI_VUS = Number(__ENV.UI_VUS || 5);
 const VERIFY_SECURITY = __ENV.VERIFY_SECURITY === "true";
 const WARMUP = __ENV.WARMUP || "20s";
@@ -106,8 +107,11 @@ export const options = {
       rate: sortedSchedule.rate,
       timeUnit: sortedSchedule.timeUnit,
       duration: GIT_DURATION,
-      preAllocatedVUs: 2,
-      maxVUs: 6,
+      // Sized for the default rate: 10 arrivals/s at the measured full-profile
+      // p95 (~0.5 s) needs ~5 VUs in flight, so pre-allocate past that instead
+      // of letting the generator allocate mid-run and drop arrivals.
+      preAllocatedVUs: 6,
+      maxVUs: 12,
       gracefulStop: "10s",
     },
     ui: {

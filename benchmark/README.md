@@ -37,7 +37,7 @@ keeping them separate stops a slow path from hiding in the aggregate.
 | `search` | ramping-vus, 25 VUs | `GET /v1/search?query=&by=name/words/provides` (in-memory index); each mode queries its own pool — `PACKAGES` for exact names, `TERMS` for words, `PROVIDES` for provided tokens | p95 < 300 ms |
 | `rpc` | ramping-vus, 25 VUs | yay-style `POST /rpc` form `v=5&type=multiinfo` with a batched 1–200 `arg[]` list, plus 10% `GET /rpc/v5/suggest` | p95 < 300 ms |
 | `catalog` | ramping-vus, 12 VUs | `GET /v1/packages?page=` (Mongo), plus sampled `/versions` and detail reads | p95 < 600 ms |
-| `catalog_sorted` | constant-arrival-rate, 1 request/s | `GET /v1/packages?sortBy=votes/popularity/version` | p95 < 600 ms |
+| `catalog_sorted` | constant-arrival-rate, 10 requests/s | `GET /v1/packages?sortBy=votes/popularity/version` | p95 < 600 ms |
 | `ui` | ramping-vus, 5 VUs | `GET /` and `GET /package/{name}` (server-rendered Blazor) | p95 < 1 s |
 | `git_fetch` | constant-arrival-rate, 2 fetches/s | Full Git Smart HTTP fetch: `info/refs` advertisement → one-shot `want`/`done` → `git-upload-pack` | p95 < 2 s |
 
@@ -45,8 +45,10 @@ The two rate-driven scenarios are capped instead of VU-driven because each is
 expensive per request: Git fetching shells out to `git upload-pack` server-side,
 and non-default sorting used to materialize and enrich the whole seeded catalog
 before returning one page. Sorted pages are now bounded by cached per-sort name
-views (one name-filtered Mongo query per page), so `SORT_RATE` can be raised;
-the arrival cap keeps each expensive path measured in isolation. Overall
+views (one name-filtered Mongo query per page), which is what lets the default
+sit at 10 requests/s. `GIT_RATE` stays at 2: under the full profile its p95
+grows with the rate rather than staying flat, so raising it deepens the miss
+instead of measuring more capacity (see the 2026-09-19 re-baseline). Overall
 failures must stay below 1% with at least 99% passing checks per scenario; the
 default profile runs about 95 seconds, with the rate-driven scenarios bounded to
 match.
@@ -115,7 +117,7 @@ returns a package's whole file contents, not metadata.
 | `VUS` | `25` | Peak VUs per VU-driven scenario |
 | `UI_VUS` | `5` | Peak VUs requesting server-rendered HTML |
 | `GIT_RATE` | `2` | Git fetches per second |
-| `SORT_RATE` | `1` | Sorted package pages per second; increase slowly |
+| `SORT_RATE` | `10` | Sorted package pages per second |
 | `WARMUP` / `HOLD` / `COOLDOWN` | `20s` / `1m` / `15s` | Ramp-up, steady-state, ramp-down stage durations |
 | `GIT_DURATION` | `95s` | Duration of the rate-driven scenarios; keep aligned with the three stages |
 | `VERIFY_SECURITY` | `false` | Require every selected package's head scan to be `Verified` before load |
@@ -135,13 +137,18 @@ VUS=5 UI_VUS=2 GIT_RATE=1 SORT_RATE=0.1 HOLD=30s GIT_DURATION=65s k6 run loadtes
 k6 run loadtest.js
 
 # Controlled capacity step: increase one dimension, then compare p95 and errors.
-VUS=40 UI_VUS=8 GIT_RATE=3 SORT_RATE=1 HOLD=2m GIT_DURATION=155s k6 run loadtest.js
+VUS=40 UI_VUS=8 GIT_RATE=3 SORT_RATE=20 HOLD=2m GIT_DURATION=155s k6 run loadtest.js
 ```
 
 The sorted endpoint is bounded: cached per-sort name views over the seeded set,
 with one name-filtered Mongo query per page. Measure `catalog_sorted` on its own
-while raising `SORT_RATE`, and record a fresh baseline: the earlier results
-predate the bound.
+while raising `SORT_RATE`, against
+[`results/2026-09-19-docker-local-2g-rebaseline.md`](results/2026-09-19-docker-local-2g-rebaseline.md);
+the 2026-09-08 runs predate the bound and are not comparable for this scenario.
+
+A `SORT_RATE` below about 1/s is a contract check, not a latency check: with the
+30 s view TTL every arrival then pays a cold rebuild, so `catalog_sorted`
+crosses its threshold by construction (the smoke profile above does this).
 
 ### Excluded from the workload
 
