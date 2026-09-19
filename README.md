@@ -21,6 +21,7 @@ history, exposes searchable package metadata, and serves package content over Gi
 ### Requirements
 
 - .NET SDK 10
+- 2 GB RAM minimum for the full AUR catalog (the startup metadata parse peaks around 1.6 GiB)
 - Docker (optional, for the bundled stack)
 
 ### Run locally

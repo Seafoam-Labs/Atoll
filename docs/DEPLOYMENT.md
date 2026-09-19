@@ -90,6 +90,15 @@ changes.
    (tags are immutable), then `terraform apply -var image_tag=<sha>`. Updating the task definition
    makes ECS roll the service to the new image.
 
+## Instance sizing
+
+Memory is the binding constraint, and 2 GB is the floor. The startup index refresh holds the full
+AUR metadata dump (about 120k packages) in memory while the API is already serving requests: the
+measured working set is around 1.2 GiB for the parse alone and around 1.6 GiB peak under load, and
+at 1 GB the startup parse and the catalog sort OOM. The Terraform `memory` default (2048 MiB) and
+the benchmark stack's 2G API limit are this floor, not tuning headroom; RAM above it does not buy
+request capacity.
+
 ## Storage: Amazon DocumentDB
 
 The production store is a DocumentDB cluster (`terraform/docdb.tf`):

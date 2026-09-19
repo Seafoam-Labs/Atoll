@@ -12,7 +12,7 @@ at anything shared.
 ```sh
 cd benchmark
 docker compose up --build -d   # same image as the root compose, deliberately isolated (see below)
-docker stats --no-stream       # API and MongoDB are each capped at 1 CPU / 1 GB
+docker stats --no-stream       # API: 1 CPU / 2 GB (full-catalog floor); MongoDB: 1 CPU / 1 GB
 k6 run loadtest.js             # setup() waits for /health, seeds the corpus, then loads
 ```
 

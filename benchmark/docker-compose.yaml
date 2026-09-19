@@ -44,6 +44,8 @@ services:
       resources:
         limits:
           cpus: '1.0'
+          # 2G is the full-catalog floor (docs/DEPLOYMENT.md), not a tuning knob:
+          # below it the startup AUR dump parse OOMs.
           memory: 2G
         reservations:
           cpus: '0.5'

@@ -19,7 +19,7 @@ variable "cpu" {
 }
 
 variable "memory" {
-  description = "Fargate instance memory to provision (in MiB)"
+  description = "Fargate instance memory to provision (in MiB); 2048 is the startup minimum for the full AUR catalog"
   default     = "2048"
 }
 

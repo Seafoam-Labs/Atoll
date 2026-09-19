@@ -3,6 +3,7 @@
     build:
       context: .
       dockerfile: Atoll.Api/Dockerfile
+    # The API needs at least 2 GB RAM; the startup AUR metadata parse peaks around 1.6 GiB.
     ports:
       - "8080:8080"
     environment:
