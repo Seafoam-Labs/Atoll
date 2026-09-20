@@ -49,10 +49,10 @@ public class DirectPackageSeederCloneCleanupTests : IAsyncLifetime
         var pattern = "atoll-cleanup probe *";
         var before = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => await seeder.SeedAsync(probe));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await seeder.SeedAsync(probe, TestContext.Current.CancellationToken));
 
         var after = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet();
-        var packagePersisted = await repo.ExistsAsync(probe);
+        var packagePersisted = await repo.ExistsAsync(probe, TestContext.Current.CancellationToken);
         Assert.Multiple(() =>
         {
             Assert.Empty(after.Except(before));

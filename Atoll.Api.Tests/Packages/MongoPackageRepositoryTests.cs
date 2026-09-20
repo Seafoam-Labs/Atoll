@@ -211,10 +211,7 @@ public class MongoPackageRepositoryTests : IAsyncLifetime
         }
 
         await Append("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")));
-        await fake.AppendRevisionAsync(
-            "a-apple",
-            NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")),
-            10);
+        await fake.AppendRevisionAsync("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")), 10, TestContext.Current.CancellationToken);
 
         var names = new[] { "e-egg", "missing", "a-apple", "c-carrot" };
         var fromMongo = await _repo.ListIndexEntriesAsync(names, CancellationToken.None);

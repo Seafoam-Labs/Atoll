@@ -47,7 +47,7 @@ public class GitSmartHttpEndpointsTests : IDisposable
     [Fact]
     public async Task InfoRefs_unknown_package_returns_404()
     {
-        var response = await _client.GetAsync("/packages/missing.git/info/refs?service=git-upload-pack");
+        var response = await _client.GetAsync("/packages/missing.git/info/refs?service=git-upload-pack", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -56,7 +56,7 @@ public class GitSmartHttpEndpointsTests : IDisposable
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 
-        var response = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-receive-pack");
+        var response = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-receive-pack", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -66,7 +66,7 @@ public class GitSmartHttpEndpointsTests : IDisposable
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 
-        var response = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-upload-pack");
+        var response = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-upload-pack", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/x-git-upload-pack-advertisement",
@@ -74,7 +74,7 @@ public class GitSmartHttpEndpointsTests : IDisposable
         Assert.True(response.Headers.CacheControl?.NoCache,
             "Cache-Control: no-cache expected");
 
-        var body = await response.Content.ReadAsByteArrayAsync();
+        var body = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
         var text = Encoding.ASCII.GetString(body);
         Assert.StartsWith("001e# service=git-upload-pack\n", text);
         Assert.Contains("refs/heads/main", text);
@@ -85,10 +85,10 @@ public class GitSmartHttpEndpointsTests : IDisposable
     {
         await _packages.SeedFilesAsync("shelly-bin", SampleFiles);
 
-        var response = await _client.GetAsync("/shelly.git/info/refs?service=git-upload-pack");
+        var response = await _client.GetAsync("/shelly.git/info/refs?service=git-upload-pack", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = Encoding.ASCII.GetString(await response.Content.ReadAsByteArrayAsync());
+        var body = Encoding.ASCII.GetString(await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
         Assert.Contains("refs/heads/main", body);
     }
 
@@ -98,7 +98,7 @@ public class GitSmartHttpEndpointsTests : IDisposable
         using var content = new ByteArrayContent([]);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/x-git-upload-pack-request");
 
-        var response = await _client.PostAsync("/packages/missing.git/git-upload-pack", content);
+        var response = await _client.PostAsync("/packages/missing.git/git-upload-pack", content, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -108,8 +108,8 @@ public class GitSmartHttpEndpointsTests : IDisposable
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 
-        var adv = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-upload-pack");
-        var advBody = Encoding.ASCII.GetString(await adv.Content.ReadAsByteArrayAsync());
+        var adv = await _client.GetAsync("/packages/shelly.git/info/refs?service=git-upload-pack", TestContext.Current.CancellationToken);
+        var advBody = Encoding.ASCII.GetString(await adv.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
         var sha = ExtractHeadSha(advBody);
         Assert.NotNull(sha);
 
@@ -117,13 +117,13 @@ public class GitSmartHttpEndpointsTests : IDisposable
         using var content = new ByteArrayContent(Encoding.ASCII.GetBytes(requestBody));
         content.Headers.ContentType = new MediaTypeHeaderValue("application/x-git-upload-pack-request");
 
-        var response = await _client.PostAsync("/packages/shelly.git/git-upload-pack", content);
+        var response = await _client.PostAsync("/packages/shelly.git/git-upload-pack", content, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/x-git-upload-pack-result", response.Content.Headers.ContentType?.MediaType);
         Assert.True(response.Headers.CacheControl?.NoCache);
 
-        var body = await response.Content.ReadAsByteArrayAsync();
+        var body = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
         Assert.True(body.Length > 0);
     }
 
@@ -137,12 +137,12 @@ public class GitSmartHttpEndpointsTests : IDisposable
         using var content = new ByteArrayContent(Encoding.ASCII.GetBytes(requestBody));
         content.Headers.ContentType = new MediaTypeHeaderValue("application/x-git-upload-pack-request");
 
-        var response = await _client.PostAsync("/packages/shelly.git/git-upload-pack", content);
+        var response = await _client.PostAsync("/packages/shelly.git/git-upload-pack", content, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/x-git-upload-pack-result", response.Content.Headers.ContentType?.MediaType);
 
-        var body = Encoding.ASCII.GetString(await response.Content.ReadAsByteArrayAsync());
+        var body = Encoding.ASCII.GetString(await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
         Assert.Equal(EncodePacketLine($"ERR upload-pack: not our ref {bogus}"), body);
     }
 

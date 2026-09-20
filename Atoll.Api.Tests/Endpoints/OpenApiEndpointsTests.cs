@@ -25,11 +25,11 @@ public class OpenApiEndpointsTests : IDisposable
     [Fact]
     public async Task OpenApiSchemaExposesTypedEndpointsAndComponents()
     {
-        var response = await _client.GetAsync("/openapi/v1.json");
+        var response = await _client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 

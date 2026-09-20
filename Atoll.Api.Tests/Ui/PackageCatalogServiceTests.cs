@@ -39,9 +39,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     [Fact]
     public async Task EmptyQueryReturnsAllPackagesSortedByName()
     {
-        var result = await CreateService().SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        var result = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["portable-kit", "portable-pro", "shelly-bin"],
             result.Rows.Select(row => row.Package.Name));
@@ -55,12 +53,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     {
         var service = CreateService();
 
-        var byName = await service.SearchAsync(
-            "PORTABLE", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
-        var byDescription = await service.SearchAsync(
-            "emulator", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        var byName = await service.SearchAsync("PORTABLE", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
+        var byDescription = await service.SearchAsync("emulator", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["portable-kit", "portable-pro"],
             byName.Rows.Select(row => row.Package.Name));
@@ -73,12 +67,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     {
         var service = CreateService();
 
-        var single = await service.SearchAsync(
-            "helper", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Words, CatalogSort.NameAsc);
-        var combined = await service.SearchAsync(
-            "handheld emulator", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Words, CatalogSort.NameAsc);
+        var single = await service.SearchAsync("helper", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Words, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
+        var combined = await service.SearchAsync("handheld emulator", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Words, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
             single.Rows.Select(row => row.Package.Name));
@@ -91,12 +81,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     {
         var service = CreateService();
 
-        var hit = await service.SearchAsync(
-            "shelly", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Provides, CatalogSort.NameAsc);
-        var miss = await service.SearchAsync(
-            "kit", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Provides, CatalogSort.NameAsc);
+        var hit = await service.SearchAsync("shelly", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Provides, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
+        var miss = await service.SearchAsync("kit", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Provides, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
             hit.Rows.Select(row => row.Package.Name));
@@ -109,12 +95,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         _seededNames = ["shelly-bin"];
         var service = CreateService();
 
-        var seeded = await service.SearchAsync(
-            null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
-        var indexOnly = await service.SearchAsync(
-            null, CatalogSeededFilter.IndexOnly, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        var seeded = await service.SearchAsync(null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
+        var indexOnly = await service.SearchAsync(null, CatalogSeededFilter.IndexOnly, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
             seeded.Rows.Select(row => row.Package.Name));
@@ -128,28 +110,20 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     public async Task SecurityFilterNarrowsToSeededPackagesWithMatchingHeadStatus()
     {
         _seededNames = ["shelly-bin"];
-        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-1", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-1", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion, ct: TestContext.Current.CancellationToken);
 
-        var pending = await CreateService().SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Pending,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
-        var verifiedBefore = await CreateService().SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        var pending = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Pending, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
+        var verifiedBefore = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
             pending.Rows.Select(row => row.Package.Name));
         Assert.Equal(SecurityStatus.Pending, pending.Rows.Single().Head!.Status);
         Assert.Empty(verifiedBefore.Rows);
 
-        await _securityRepository.TryClaimPendingScanAsync("owner", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _securityRepository.CompleteScanAsync(
-            "shelly-bin", "rev-1", "owner", new ScanResult(SecurityStatus.Verified, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _securityRepository.TryClaimPendingScanAsync("owner", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await _securityRepository.CompleteScanAsync("shelly-bin", "rev-1", "owner", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
 
-        var verifiedAfter = await CreateService().SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        var verifiedAfter = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
             verifiedAfter.Rows.Select(row => row.Package.Name));
@@ -161,12 +135,10 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         _seededNames = ["shelly-bin"];
         // Appending a revision marks the new head pending before demoting the previous one, so both
         // documents read as head for a window.
-        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-1", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-2", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-1", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion, ct: TestContext.Current.CancellationToken);
+        await _securityRepository.MarkPendingAsync("shelly-bin", "rev-2", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion, ct: TestContext.Current.CancellationToken);
 
-        var result = await CreateService().SearchAsync(
-            null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Pending,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        var result = await CreateService().SearchAsync(null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Pending, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
             result.Rows.Select(row => row.Package.Name));
@@ -176,9 +148,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     [Fact]
     public async Task VotesDescendingSortOrdersByVotes()
     {
-        var result = await CreateService().SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.VotesDesc);
+        var result = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["portable-pro", "shelly-bin", "portable-kit"],
             result.Rows.Select(row => row.Package.Name));
@@ -202,12 +172,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         var service = new PackageCatalogService(
             store, new SeededNamesPackageService([]), _securityRepository);
 
-        var page1 = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 1);
-        var page2 = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 2);
+        var page1 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 1, ct: TestContext.Current.CancellationToken);
+        var page2 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 2, ct: TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -234,18 +200,10 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         var service = new PackageCatalogService(
             store, new SeededNamesPackageService([]), _securityRepository);
 
-        var page1 = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 1);
-        var page2 = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 2);
-        var page3 = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 3);
-        var page4 = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 4);
+        var page1 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 1, ct: TestContext.Current.CancellationToken);
+        var page2 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 2, ct: TestContext.Current.CancellationToken);
+        var page3 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 3, ct: TestContext.Current.CancellationToken);
+        var page4 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 4, ct: TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -277,9 +235,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         var service = new PackageCatalogService(
             store, new SeededNamesPackageService([]), _securityRepository);
 
-        var result = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc, page: 0);
+        var result = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 0, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.Page);
         Assert.Single(result.Rows);
@@ -297,17 +253,13 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         var service = new PackageCatalogService(
             store, new SeededNamesPackageService([]), _securityRepository);
 
-        var before = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        var before = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
         Assert.Equal(["pkg-a"], before.Rows.Select(row => row.Package.Name));
 
         names["pkg-b"] = CreateMetadata("pkg-b");
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
-        var after = await service.SearchAsync(
-            null, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
-            CatalogSearchMode.Name, CatalogSort.NameAsc);
+        var after = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
         Assert.Equal(["pkg-a", "pkg-b"], after.Rows.Select(row => row.Package.Name));
     }
 

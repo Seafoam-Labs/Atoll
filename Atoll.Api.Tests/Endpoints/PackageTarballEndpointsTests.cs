@@ -38,7 +38,7 @@ public class PackageTarballEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Pending);
 
-        var response = await _client.GetAsync("/v1/packages/pkg/tarball");
+        var response = await _client.GetAsync("/v1/packages/pkg/tarball", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/gzip", response.Content.Headers.ContentType?.MediaType);
@@ -60,8 +60,8 @@ public class PackageTarballEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var tarball = await _client.GetAsync("/v1/packages/pkg/tarball");
-        var contentJson = await _client.GetAsync("/v1/packages/pkg");
+        var tarball = await _client.GetAsync("/v1/packages/pkg/tarball", TestContext.Current.CancellationToken);
+        var contentJson = await _client.GetAsync("/v1/packages/pkg", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -75,8 +75,8 @@ public class PackageTarballEndpointsTests : IDisposable
     {
         await SeedTwoRevisionsAsync(verified: SecurityStatus.Verified, flagged: SecurityStatus.Flagged);
 
-        var flagged = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-2");
-        var verified = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-1");
+        var flagged = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-2", TestContext.Current.CancellationToken);
+        var verified = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-1", TestContext.Current.CancellationToken);
 
         await Assert.MultipleAsync(async () =>
         {
@@ -94,7 +94,7 @@ public class PackageTarballEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Verified);
 
-        var response = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-9");
+        var response = await _client.GetAsync("/v1/packages/pkg/tarball?rev=rev-9", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -102,7 +102,7 @@ public class PackageTarballEndpointsTests : IDisposable
     [Fact]
     public async Task Unknown_package_returns_404()
     {
-        var response = await _client.GetAsync("/v1/packages/missing/tarball");
+        var response = await _client.GetAsync("/v1/packages/missing/tarball", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -114,10 +114,10 @@ public class PackageTarballEndpointsTests : IDisposable
         {
             ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 13, Hash = "h" },
             ["helper.sh"] = new() { Content = "#!/bin/sh\necho hi\n", Size = 18, Hash = "h2" }
-        }));
-        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        }), TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
 
-        var response = await _client.GetAsync("/v1/packages/pkg/tarball");
+        var response = await _client.GetAsync("/v1/packages/pkg/tarball", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var entries = await ReadTarballAsync(response);

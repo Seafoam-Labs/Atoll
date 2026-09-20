@@ -25,8 +25,8 @@ public class AurRpcEndpointsTests : IDisposable
     [Fact]
     public async Task LegacyInfo_returns_aurweb_v5_contract_and_custom_clone_path()
     {
-        var response = await _client.GetAsync("/rpc?v=5&type=info&arg[]=shelly-bin&arg[]=missing");
-        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await _client.GetAsync("/rpc?v=5&type=info&arg[]=shelly-bin&arg[]=missing", TestContext.Current.CancellationToken);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var root = body.RootElement;
         var package = root.GetProperty("results")[0];
 
@@ -58,8 +58,8 @@ public class AurRpcEndpointsTests : IDisposable
             new KeyValuePair<string, string>("arg[]", "missing")
         ]);
 
-        var response = await _client.PostAsync("/rpc", content);
-        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var response = await _client.PostAsync("/rpc", content, TestContext.Current.CancellationToken);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>

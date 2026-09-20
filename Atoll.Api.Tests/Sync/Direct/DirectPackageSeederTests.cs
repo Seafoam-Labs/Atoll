@@ -72,9 +72,9 @@ public class DirectPackageSeederTests
         ]));
         var (seeder, source, repo) = CreateSeeder(store);
 
-        await seeder.SeedAsync("libfoo");
+        await seeder.SeedAsync("libfoo", TestContext.Current.CancellationToken);
 
-        var persisted = await repo.GetRevisionAsync("libfoo", (await repo.GetHeadAsync("libfoo"))!.HeadRevisionId);
+        var persisted = await repo.GetRevisionAsync("libfoo", (await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken))!.HeadRevisionId, TestContext.Current.CancellationToken);
         Assert.Multiple(() =>
         {
             Assert.Equal(new[] { "foo" }, source.FetchedBases);
@@ -87,9 +87,9 @@ public class DirectPackageSeederTests
     {
         var (seeder, source, repo) = CreateSeeder();
 
-        await seeder.SeedAsync("shelly");
-        await Assert.ThrowsAsync<PackageConflictException>(async () => await seeder.SeedAsync("shelly"));
-        var packageCount = await repo.CountAsync();
+        await seeder.SeedAsync("shelly", TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<PackageConflictException>(async () => await seeder.SeedAsync("shelly", TestContext.Current.CancellationToken));
+        var packageCount = await repo.CountAsync(TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {

@@ -6,8 +6,6 @@
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
         <OutputType>Exe</OutputType>
-        <!-- Tests pass CancellationToken.None deliberately; adopting TestContext.Current.CancellationToken is a separate change. -->
-        <NoWarn>$(NoWarn);xUnit1051</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

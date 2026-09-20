@@ -42,7 +42,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
         await SeedRevisionAsync("rev-1", "old head", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "sync from upstream", SecurityStatus.Verified, files: Files("pkgname=new\n"));
 
-        var result = await _service.GetRevisionsAsync(Name);
+        var result = await _service.GetRevisionsAsync(Name, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal(["rev-2", "rev-1"], result!.Rows.Select(row => row.Sha));
@@ -61,7 +61,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
     {
         await SeedRevisionAsync("rev-1", "seed");
 
-        var result = await _service.GetRevisionsAsync(Name);
+        var result = await _service.GetRevisionsAsync(Name, TestContext.Current.CancellationToken);
 
         Assert.Null(result!.Rows.Single().Status);
     }
@@ -75,7 +75,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
         for (var i = 0; i < PackageDetailsService.RevisionRenderCap + 4; i++)
             await AppendAsync($"rev-{i:000}", start.AddMinutes(i));
 
-        var result = await _service.GetRevisionsAsync(Name);
+        var result = await _service.GetRevisionsAsync(Name, TestContext.Current.CancellationToken);
 
         Assert.Equal(PackageDetailsService.RevisionRenderCap + 5, result!.TotalRevisions);
         Assert.Equal(PackageDetailsService.RevisionRenderCap, result.Rows.Count);
@@ -87,9 +87,9 @@ public class PackageDetailsServiceTests : IAsyncLifetime
     [Fact]
     public async Task GetRevisionsAsyncReturnsNullForUnknownPackageAndEmptyForUnseeded()
     {
-        Assert.Null(await _service.GetRevisionsAsync("no-such-package"));
+        Assert.Null(await _service.GetRevisionsAsync("no-such-package", TestContext.Current.CancellationToken));
 
-        var unseeded = await _service.GetRevisionsAsync("portable-kit");
+        var unseeded = await _service.GetRevisionsAsync("portable-kit", TestContext.Current.CancellationToken);
         Assert.Empty(unseeded!.Rows);
         Assert.Equal(0, unseeded.TotalRevisions);
     }
@@ -106,7 +106,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
             ["zzz.txt"] = File("z\n")
         });
 
-        var view = await _service.GetFilesAsync(Name, null, null);
+        var view = await _service.GetFilesAsync(Name, null, null, TestContext.Current.CancellationToken);
 
         Assert.True(view!.Access.Allowed);
         Assert.Equal(["sub/deep/notes.txt", "sub/hook.sh", ".SRCINFO", "PKGBUILD", "zzz.txt"],
@@ -121,7 +121,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: Files("line one\nline two\n"));
 
-        var view = await _service.GetFilesAsync(Name, null, "PKGBUILD");
+        var view = await _service.GetFilesAsync(Name, null, "PKGBUILD", TestContext.Current.CancellationToken);
 
         Assert.Equal("PKGBUILD", view!.SelectedPath);
         Assert.Equal("line one\nline two\n", view.Content);
@@ -135,7 +135,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified);
 
-        var view = await _service.GetFilesAsync(Name, null, "not-there.txt");
+        var view = await _service.GetFilesAsync(Name, null, "not-there.txt", TestContext.Current.CancellationToken);
 
         Assert.True(view!.FileNotFound);
         Assert.Null(view.Content);
@@ -147,14 +147,14 @@ public class PackageDetailsServiceTests : IAsyncLifetime
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "new", SecurityStatus.Verified, files: Files("pkgname=new\n"));
 
-        var blocked = await _service.GetFilesAsync(Name, "rev-1", "PKGBUILD");
+        var blocked = await _service.GetFilesAsync(Name, "rev-1", "PKGBUILD", TestContext.Current.CancellationToken);
 
         Assert.False(blocked!.Access.Allowed);
         Assert.Equal(SecurityAccessReasonCodes.Flagged, blocked.Access.ReasonCode);
         Assert.Equal(["PKGBUILD"], blocked.Entries.Select(entry => entry.Path));
         Assert.Equal("pkgname=old\n", blocked.Content);
 
-        var allowed = await _service.GetFilesAsync(Name, "rev-2", "PKGBUILD");
+        var allowed = await _service.GetFilesAsync(Name, "rev-2", "PKGBUILD", TestContext.Current.CancellationToken);
         Assert.True(allowed!.Access.Allowed);
         Assert.Equal("pkgname=new\n", allowed.Content);
         Assert.True(allowed.IsHead);
@@ -166,8 +166,8 @@ public class PackageDetailsServiceTests : IAsyncLifetime
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Verified, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "new", SecurityStatus.Verified, files: Files("pkgname=new\n"));
 
-        var fellBack = await _service.GetFilesAsync(Name, "garbage", "PKGBUILD");
-        var pinned = await _service.GetFilesAsync(Name, "rev-1", "PKGBUILD");
+        var fellBack = await _service.GetFilesAsync(Name, "garbage", "PKGBUILD", TestContext.Current.CancellationToken);
+        var pinned = await _service.GetFilesAsync(Name, "rev-1", "PKGBUILD", TestContext.Current.CancellationToken);
 
         Assert.True(fellBack!.RevisionFellBack);
         Assert.Equal("rev-2", fellBack.RevisionId);
@@ -187,7 +187,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
             ["blob.bin"] = new() { Content = "abc\0def", Size = 7, Hash = "h" }
         });
 
-        var view = await _service.GetFilesAsync(Name, null, "blob.bin");
+        var view = await _service.GetFilesAsync(Name, null, "blob.bin", TestContext.Current.CancellationToken);
 
         Assert.True(view!.IsBinary);
         Assert.Null(view.Content);
@@ -200,7 +200,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified,
             files: new Dictionary<string, PackageFile> { ["big.txt"] = new() { Content = large, Size = large.Length, Hash = "h" } });
 
-        var view = await _service.GetFilesAsync(Name, null, "big.txt");
+        var view = await _service.GetFilesAsync(Name, null, "big.txt", TestContext.Current.CancellationToken);
 
         Assert.True(view!.IsTruncated);
         Assert.Equal(PackageDetailsService.ContentRenderChars, view.Content!.Length);
@@ -210,9 +210,9 @@ public class PackageDetailsServiceTests : IAsyncLifetime
     [Fact]
     public async Task GetFilesAsyncReturnsNullForUnknownPackageAndEmptyForUnseeded()
     {
-        Assert.Null(await _service.GetFilesAsync("no-such-package", null, null));
+        Assert.Null(await _service.GetFilesAsync("no-such-package", null, null, TestContext.Current.CancellationToken));
 
-        var unseeded = await _service.GetFilesAsync("portable-kit", null, null);
+        var unseeded = await _service.GetFilesAsync("portable-kit", null, null, TestContext.Current.CancellationToken);
         Assert.Empty(unseeded!.Entries);
         Assert.True(unseeded.Access.Allowed);
     }
@@ -223,9 +223,9 @@ public class PackageDetailsServiceTests : IAsyncLifetime
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "new", SecurityStatus.Verified, files: Files("pkgname=new\n"));
 
-        var head = await _service.GetAsync(Name);
-        var pinned = await _service.GetAsync(Name, "rev-1");
-        var garbage = await _service.GetAsync(Name, "garbage");
+        var head = await _service.GetAsync(Name, ct: TestContext.Current.CancellationToken);
+        var pinned = await _service.GetAsync(Name, "rev-1", TestContext.Current.CancellationToken);
+        var garbage = await _service.GetAsync(Name, "garbage", TestContext.Current.CancellationToken);
 
         Assert.Equal("rev-2", head!.SelectedRevisionId);
         Assert.True(head.SelectedIsHead);
@@ -244,7 +244,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
     [Fact]
     public async Task GetAsyncReturnsNullForUnknownPackage()
     {
-        Assert.Null(await _service.GetAsync("no-such-package"));
+        Assert.Null(await _service.GetAsync("no-such-package", ct: TestContext.Current.CancellationToken));
     }
 
     private static Dictionary<string, PackageFile> Files(string pkgbuild)

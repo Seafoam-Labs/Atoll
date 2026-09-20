@@ -136,8 +136,8 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task RootPageRendersCatalogWithPackages()
     {
-        var response = await _client.GetAsync("/");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
@@ -155,7 +155,7 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task RootPageSearchFormCannotNavigateNatively()
     {
-        var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
+        var body = await (await _client.GetAsync("/", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         // @onsubmit:preventDefault is a marker only the circuit honors, so until the WebSocket
         // connects Enter submits the form for real and the browser cannot be stopped from
@@ -179,7 +179,7 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task RootPageRendersPaginationFooter()
     {
-        var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
+        var body = await (await _client.GetAsync("/", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Contains("Page 1 of 1", body);
         Assert.Contains("showing 1-3 of 3", body);
@@ -196,7 +196,7 @@ public class UiPagesTests : IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");
         request.Headers.AcceptEncoding.ParseAdd("gzip");
 
-        using var response = await _client.SendAsync(request);
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("gzip", response.Content.Headers.ContentEncoding);
@@ -208,7 +208,7 @@ public class UiPagesTests : IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");
         request.Headers.AcceptEncoding.ParseAdd("br");
 
-        using var response = await _client.SendAsync(request);
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("br", response.Content.Headers.ContentEncoding);
@@ -220,7 +220,7 @@ public class UiPagesTests : IDisposable
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
         await SeedAsync("portable-pro", SecurityStatus.Flagged);
 
-        var body = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
+        var body = await (await _client.GetAsync("/", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -236,8 +236,8 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task PackageDetailsRenderMetadataForKnownUnseededPackage()
     {
-        var response = await _client.GetAsync("/package/portable-kit");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/portable-kit", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -255,8 +255,8 @@ public class UiPagesTests : IDisposable
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
 
-        var response = await client.GetAsync("/package/portable-kit");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/package/portable-kit", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.DoesNotContain("Seed from AUR", body);
@@ -270,17 +270,13 @@ public class UiPagesTests : IDisposable
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
 
-        await disabled.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-        await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true,
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await disabled.SecurityRepository.CompleteScanAsync(
-            "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await disabled.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
+        await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await disabled.SecurityRepository.CompleteScanAsync("shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
 
-        var response = await client.GetAsync("/package/shelly-bin");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("badge-seeded", body);
@@ -299,8 +295,8 @@ public class UiPagesTests : IDisposable
         };
         await SeedAsync("shelly-bin", SecurityStatus.Verified, findings);
 
-        var response = await _client.GetAsync("/package/shelly-bin");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -319,17 +315,13 @@ public class UiPagesTests : IDisposable
     {
         using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
         using var client = factory.CreateClient();
-        await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true,
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await factory.SecurityRepository.CompleteScanAsync(
-            "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
+        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await factory.SecurityRepository.CompleteScanAsync("shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
 
-        var response = await client.GetAsync("/package/shelly-bin");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -344,17 +336,13 @@ public class UiPagesTests : IDisposable
     {
         using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
         using var client = factory.CreateClient();
-        await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true,
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await factory.SecurityRepository.CompleteScanAsync(
-            "shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
+        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await factory.SecurityRepository.CompleteScanAsync("shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
 
-        var response = await client.GetAsync("/package/shelly-bin");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -370,8 +358,8 @@ public class UiPagesTests : IDisposable
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/package/shelly-bin");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -386,7 +374,7 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task UnknownPackageReturnsNotFound()
     {
-        var response = await _client.GetAsync("/package/no-such-package");
+        var response = await _client.GetAsync("/package/no-such-package", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -394,7 +382,7 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task UnknownRouteReturnsNotFound()
     {
-        var response = await _client.GetAsync("/some/unknown/route");
+        var response = await _client.GetAsync("/some/unknown/route", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -402,8 +390,8 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task PackageDetailsRenderTabLinks()
     {
-        var response = await _client.GetAsync("/package/portable-kit");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/portable-kit", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -419,8 +407,8 @@ public class UiPagesTests : IDisposable
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Flagged, SecurityStatus.Verified);
 
-        var response = await _client.GetAsync("/package/shelly-bin/revisions");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin/revisions", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -439,8 +427,8 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task RevisionsTabShowsUnseededStateForIndexOnlyPackage()
     {
-        var response = await _client.GetAsync("/package/portable-kit/revisions");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/portable-kit/revisions", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("not seeded", body);
@@ -451,8 +439,8 @@ public class UiPagesTests : IDisposable
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/package/shelly-bin/files");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin/files", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -469,8 +457,8 @@ public class UiPagesTests : IDisposable
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
 
-        var response = await _client.GetAsync("/package/shelly-bin/files");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin/files", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -490,8 +478,8 @@ public class UiPagesTests : IDisposable
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
 
-        var head = await _client.GetAsync("/package/shelly-bin/files?path=PKGBUILD");
-        var headBody = await head.Content.ReadAsStringAsync();
+        var head = await _client.GetAsync("/package/shelly-bin/files?path=PKGBUILD", TestContext.Current.CancellationToken);
+        var headBody = await head.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, head.StatusCode);
         Assert.Multiple(() =>
@@ -502,8 +490,8 @@ public class UiPagesTests : IDisposable
             Assert.Contains("PKGBUILD", headBody);
         });
 
-        var pinned = await _client.GetAsync("/package/shelly-bin/files?rev=rev-1&path=PKGBUILD");
-        var pinnedBody = await pinned.Content.ReadAsStringAsync();
+        var pinned = await _client.GetAsync("/package/shelly-bin/files?rev=rev-1&path=PKGBUILD", TestContext.Current.CancellationToken);
+        var pinnedBody = await pinned.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, pinned.StatusCode);
         Assert.Contains("pkgname=old", pinnedBody);
@@ -514,8 +502,8 @@ public class UiPagesTests : IDisposable
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
 
-        var response = await _client.GetAsync("/package/shelly-bin/files?rev=garbage");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin/files?rev=garbage", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -530,8 +518,8 @@ public class UiPagesTests : IDisposable
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
 
-        var response = await _client.GetAsync("/package/shelly-bin/files?path=nope.txt");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin/files?path=nope.txt", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("File not found", body);
@@ -546,8 +534,8 @@ public class UiPagesTests : IDisposable
         };
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Flagged, SecurityStatus.Verified, findings);
 
-        var response = await _client.GetAsync("/package/shelly-bin?rev=rev-1");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin?rev=rev-1", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -566,8 +554,8 @@ public class UiPagesTests : IDisposable
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
 
-        var response = await _client.GetAsync("/package/shelly-bin?rev=garbage");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/package/shelly-bin?rev=garbage", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -580,8 +568,8 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task UnknownPackageOnPhase2TabsReturnsNotFound()
     {
-        var revisions = await _client.GetAsync("/package/no-such-package/revisions");
-        var files = await _client.GetAsync("/package/no-such-package/files");
+        var revisions = await _client.GetAsync("/package/no-such-package/revisions", TestContext.Current.CancellationToken);
+        var files = await _client.GetAsync("/package/no-such-package/files", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, revisions.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, files.StatusCode);
@@ -645,8 +633,8 @@ public class UiPagesTests : IDisposable
         };
         foreach (var path in routes)
         {
-            var response = await client.GetAsync(path);
-            var body = await response.Content.ReadAsStringAsync();
+            var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
+            var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
             var canonical = $"https://atoll.example.com{path}";
             Assert.Multiple(() =>

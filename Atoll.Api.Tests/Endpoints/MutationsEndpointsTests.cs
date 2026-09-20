@@ -73,7 +73,7 @@ public class MutationsEndpointsTests : IDisposable
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
 
-        var response = await client.PostAsync("/v1/packages/no-such-package/seed", null);
+        var response = await client.PostAsync("/v1/packages/no-such-package/seed", null, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -85,7 +85,7 @@ public class MutationsEndpointsTests : IDisposable
         using var client = disabled.CreateClient();
 
         // The mutation gate takes precedence over package lookup.
-        var response = await client.PostAsync("/v1/packages/no-such-package/security/rescan", null);
+        var response = await client.PostAsync("/v1/packages/no-such-package/security/rescan", null, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -96,13 +96,13 @@ public class MutationsEndpointsTests : IDisposable
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
 
-        await disabled.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
+        await disabled.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"), TestContext.Current.CancellationToken);
 
-        var response = await client.DeleteAsync("/v1/packages/pkg");
+        var response = await client.DeleteAsync("/v1/packages/pkg", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         // The gate runs before repo.DeleteAsync, so the package is not removed.
-        var repo = await disabled.Repository.GetHeadAsync("pkg");
+        var repo = await disabled.Repository.GetHeadAsync("pkg", TestContext.Current.CancellationToken);
         Assert.NotNull(repo);
     }
 
@@ -111,7 +111,7 @@ public class MutationsEndpointsTests : IDisposable
     {
         await SeedPackageAsync();
 
-        var response = await _client.PostAsync("/v1/packages/pkg/security/rescan", null);
+        var response = await _client.PostAsync("/v1/packages/pkg/security/rescan", null, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -119,7 +119,7 @@ public class MutationsEndpointsTests : IDisposable
             Assert.Equal("/v1/packages/pkg/security?revision=rev-1", response.Headers.Location?.OriginalString);
         });
 
-        var scan = await _factory.SecurityRepository.GetHeadAsync("pkg");
+        var scan = await _factory.SecurityRepository.GetHeadAsync("pkg", TestContext.Current.CancellationToken);
         Assert.NotNull(scan);
         Assert.Equal(SecurityStatus.Pending, scan!.Status);
         Assert.Equal("rev-1", scan.RevisionId);

@@ -65,12 +65,12 @@ public class StatusPageTests : IDisposable
     [Fact]
     public async Task StatusPageRendersOverviewStatsAndWorkerCards()
     {
-        await _factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"));
-        await _factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SeedExclusions.RecordDocumentTooLargeAsync("huge-base", ["huge-base"], 20_000_000);
+        await _factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await _factory.SeedExclusions.RecordDocumentTooLargeAsync("huge-base", ["huge-base"], 20_000_000, TestContext.Current.CancellationToken);
 
-        var response = await _client.GetAsync("/status");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/status", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -103,8 +103,8 @@ public class StatusPageTests : IDisposable
         _factory = new SecurityTestFactory { SecurityEnabled = false };
         _client = _factory.CreateClient();
 
-        var response = await _client.GetAsync("/status");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/status", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -123,8 +123,8 @@ public class StatusPageTests : IDisposable
         _factory = new SecurityTestFactory { LoadSampleIndex = false };
         _client = _factory.CreateClient();
 
-        var response = await _client.GetAsync("/status");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/status", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
@@ -138,8 +138,8 @@ public class StatusPageTests : IDisposable
     [Fact]
     public async Task StatusPageHidesGrafanaLinkWhenUnconfigured()
     {
-        var response = await _client.GetAsync("/status");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/status", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.DoesNotContain("Grafana", body);
@@ -148,8 +148,8 @@ public class StatusPageTests : IDisposable
     [Fact]
     public async Task StatusPageShowsOpenApiLink()
     {
-        var response = await _client.GetAsync("/status");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/status", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Contains("/scalar", body);
     }

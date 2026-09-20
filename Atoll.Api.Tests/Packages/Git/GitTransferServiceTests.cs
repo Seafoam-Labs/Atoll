@@ -107,7 +107,7 @@ public class GitTransferServiceTests : IAsyncLifetime
 
             output.Position = 0;
             using var reader = new StreamReader(output, leaveOpen: false);
-            var body = await reader.ReadToEndAsync();
+            var body = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
 
             Assert.StartsWith("001e# service=git-upload-pack\n", body);
             Assert.Contains("HEAD", body);
@@ -132,7 +132,7 @@ public class GitTransferServiceTests : IAsyncLifetime
             using var advOutput = new MemoryStream();
             await git.AdvertiseRefsAsync("shelly", advOutput, CancellationToken.None);
 
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
             var gitDir = cache.GetRepositoryPath("shelly")!;
             string[] args = ["clone", "--quiet", gitDir, cloneDir];
             await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, null, null, CancellationToken.None);
@@ -141,7 +141,7 @@ public class GitTransferServiceTests : IAsyncLifetime
             {
                 var fullPath = Path.Combine(cloneDir, name);
                 Assert.True(File.Exists(fullPath), $"missing {name}");
-                Assert.Equal(content, await File.ReadAllTextAsync(fullPath));
+                Assert.Equal(content, await File.ReadAllTextAsync(fullPath, TestContext.Current.CancellationToken));
             }
         }
         finally
@@ -163,7 +163,7 @@ public class GitTransferServiceTests : IAsyncLifetime
             using var adv = new MemoryStream();
             await git.AdvertiseRefsAsync("shelly", adv, CancellationToken.None);
             adv.Position = 0;
-            var advText = await new StreamReader(adv).ReadToEndAsync();
+            var advText = await new StreamReader(adv).ReadToEndAsync(TestContext.Current.CancellationToken);
             var sha = ExtractHeadSha(advText);
             Assert.NotNull(sha);
 

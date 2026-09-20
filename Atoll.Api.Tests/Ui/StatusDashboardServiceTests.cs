@@ -70,9 +70,9 @@ public class StatusDashboardServiceTests
     {
         var store = IndexWithPackages(Meta("one"), Meta("two"), Meta("three"));
         var security = new InMemoryPackageSecurityRepository();
-        await security.MarkPendingAsync("one", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await security.MarkPendingAsync("one", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
         var exclusions = new InMemorySeedExclusionRepository();
-        await exclusions.RecordDocumentTooLargeAsync("big-base", ["big-base"], 20_000_000);
+        await exclusions.RecordDocumentTooLargeAsync("big-base", ["big-base"], 20_000_000, TestContext.Current.CancellationToken);
 
         var service = CreateService(
             store,
@@ -80,7 +80,7 @@ public class StatusDashboardServiceTests
             security: security,
             exclusions: exclusions);
 
-        var model = await service.GetAsync();
+        var model = await service.GetAsync(TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -106,7 +106,7 @@ public class StatusDashboardServiceTests
             seedMode: SeedMode.Off,
             refreshEnabled: true);
 
-        var model = await service.GetAsync();
+        var model = await service.GetAsync(TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -123,11 +123,11 @@ public class StatusDashboardServiceTests
     public async Task GetAsync_returns_null_timestamps_untouched_and_orders_exclusions()
     {
         var exclusions = new InMemorySeedExclusionRepository();
-        await exclusions.RecordDocumentTooLargeAsync("zeta", ["zeta"], 1);
-        await exclusions.RecordDocumentTooLargeAsync("alpha", ["alpha"], 1);
+        await exclusions.RecordDocumentTooLargeAsync("zeta", ["zeta"], 1, TestContext.Current.CancellationToken);
+        await exclusions.RecordDocumentTooLargeAsync("alpha", ["alpha"], 1, TestContext.Current.CancellationToken);
 
         var service = CreateService(IndexWithPackages(), exclusions: exclusions);
-        var model = await service.GetAsync();
+        var model = await service.GetAsync(TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -144,10 +144,10 @@ public class StatusDashboardServiceTests
     {
         var exclusions = new InMemorySeedExclusionRepository();
         for (var i = 0; i < StatusDashboardService.ExclusionRenderCap + 5; i++)
-            await exclusions.RecordDocumentTooLargeAsync($"base-{i:D3}", [$"base-{i:D3}"], 1);
+            await exclusions.RecordDocumentTooLargeAsync($"base-{i:D3}", [$"base-{i:D3}"], 1, TestContext.Current.CancellationToken);
 
         var service = CreateService(IndexWithPackages(), exclusions: exclusions);
-        var model = await service.GetAsync();
+        var model = await service.GetAsync(TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -162,7 +162,7 @@ public class StatusDashboardServiceTests
     {
         var service = CreateService(IndexWithPackages(Meta("one")), packageService: new CountingPackageService(7));
 
-        var model = await service.GetAsync();
+        var model = await service.GetAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(7, model.SeededPackages);
     }
@@ -173,8 +173,8 @@ public class StatusDashboardServiceTests
         var counting = new CountingPackageService(3);
         var service = CreateService(IndexWithPackages(Meta("one")), packageService: counting);
 
-        var first = await service.GetAsync();
-        var second = await service.GetAsync();
+        var first = await service.GetAsync(TestContext.Current.CancellationToken);
+        var second = await service.GetAsync(TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -199,7 +199,7 @@ public class StatusDashboardServiceTests
     {
         var service = CreateService(IndexWithPackages(), packageService: new ThrowingPackageService());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetAsync(TestContext.Current.CancellationToken));
     }
 
     private sealed class CountingPackageService(int seededCount) : IPackageService

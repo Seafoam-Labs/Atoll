@@ -25,8 +25,8 @@ public class MinimalApiEndpointsTests : IDisposable
     [Fact]
     public async Task HealthGetAndHeadReturnOk()
     {
-        var get = await _client.GetAsync("/health");
-        var head = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/health"));
+        var get = await _client.GetAsync("/health", TestContext.Current.CancellationToken);
+        var head = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/health"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, get.StatusCode);
         Assert.Equal(HttpStatusCode.OK, head.StatusCode);
@@ -35,17 +35,17 @@ public class MinimalApiEndpointsTests : IDisposable
     [Fact]
     public async Task PackagesSupportsNameProvidesAndWordsQueries()
     {
-        var byName = await _client.GetAsync("/v1/search?query=portable-kit,not-real");
-        var byProv = await _client.GetAsync("/v1/search?query=shelly&by=provides");
-        var byDesc = await _client.GetAsync("/v1/search?query=handheld,portable&by=words");
+        var byName = await _client.GetAsync("/v1/search?query=portable-kit,not-real", TestContext.Current.CancellationToken);
+        var byProv = await _client.GetAsync("/v1/search?query=shelly&by=provides", TestContext.Current.CancellationToken);
+        var byDesc = await _client.GetAsync("/v1/search?query=handheld,portable&by=words", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, byName.StatusCode);
         Assert.Equal(HttpStatusCode.OK, byProv.StatusCode);
         Assert.Equal(HttpStatusCode.OK, byDesc.StatusCode);
 
-        var byNameBody = await byName.Content.ReadAsStringAsync();
-        var byProvBody = await byProv.Content.ReadAsStringAsync();
-        var byDescBody = await byDesc.Content.ReadAsStringAsync();
+        var byNameBody = await byName.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var byProvBody = await byProv.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var byDescBody = await byDesc.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         using var byNameDoc = JsonDocument.Parse(byNameBody);
         using var byProvidesDoc = JsonDocument.Parse(byProvBody);
@@ -65,8 +65,8 @@ public class MinimalApiEndpointsTests : IDisposable
     [Fact]
     public async Task InvalidPackagesByAndUnknownRouteReturnTextHtml404()
     {
-        var invalidBy = await _client.GetAsync("/v1/search?query=shelly&by=unknown");
-        var unknown = await _client.GetAsync("/does-not-exist");
+        var invalidBy = await _client.GetAsync("/v1/search?query=shelly&by=unknown", TestContext.Current.CancellationToken);
+        var unknown = await _client.GetAsync("/does-not-exist", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, invalidBy.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
@@ -75,10 +75,10 @@ public class MinimalApiEndpointsTests : IDisposable
     [Fact]
     public async Task MetricsReturnsPrometheusText()
     {
-        _ = await _client.GetAsync("/v1/search?query=portable-kit");
+        _ = await _client.GetAsync("/v1/search?query=portable-kit", TestContext.Current.CancellationToken);
 
-        var response = await _client.GetAsync("/metrics");
-        var body = await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync("/metrics", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);

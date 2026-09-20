@@ -50,17 +50,16 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
         await SeedPackageAsync(packages);
-        await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
         if (status != SecurityStatus.Pending)
         {
             var result = new ScanResult(status, []);
-            _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-            await security.CompleteScanAsync(
-                "pkg", "rev-1", "test", result, PkgBuildSecurityScanner.CurrentPolicyVersion);
+            _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+            await security.CompleteScanAsync("pkg", "rev-1", "test", result, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
         }
 
         var access = Create(packages, security);
-        var result1 = await access.CheckAsync("pkg");
+        var result1 = await access.CheckAsync("pkg", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(allowed, result1.Allowed);
         Assert.Equal(reason, result1.ReasonCode);
@@ -72,7 +71,7 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         await SeedPackageAsync(packages);
 
-        var result = await Create(packages, new InMemoryPackageSecurityRepository()).CheckAsync("pkg");
+        var result = await Create(packages, new InMemoryPackageSecurityRepository()).CheckAsync("pkg", ct: TestContext.Current.CancellationToken);
 
         Assert.False(result.Allowed);
         Assert.Equal(SecurityAccessReasonCodes.Pending, result.ReasonCode);
@@ -84,9 +83,9 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         await SeedPackageAsync(packages);
         var security = new InMemoryPackageSecurityRepository();
-        await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
 
-        var result = await Create(packages, security, false).CheckAsync("pkg");
+        var result = await Create(packages, security, false).CheckAsync("pkg", ct: TestContext.Current.CancellationToken);
 
         Assert.True(result.Allowed);
     }
@@ -97,28 +96,25 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
         await SeedPackageAsync(packages);
-        await packages.AppendRevisionAsync(
-            "pkg",
-            new PackageRevisionContentDocument
+        await packages.AppendRevisionAsync("pkg", new PackageRevisionContentDocument
             {
                 Id = PackageSchema.RevisionDocumentId("pkg", "rev-2"),
                 PackageName = "pkg",
                 RevisionId = "rev-2",
                 CreatedAt = DateTimeOffset.UtcNow,
                 Files = new Dictionary<string, PackageFile>()
-            },
-            10);
+            }, 10, TestContext.Current.CancellationToken);
 
-        await security.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await security.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await security.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await security.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
         await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
         await security.CompleteScanAsync("pkg", SecurityStatus.Flagged);
 
         var access = Create(packages, security);
 
-        var flagged = await access.CheckAsync("pkg", "rev-2");
-        var clean = await access.CheckAsync("pkg", "rev-1");
-        var head = await access.CheckAsync("pkg");
+        var flagged = await access.CheckAsync("pkg", "rev-2", TestContext.Current.CancellationToken);
+        var clean = await access.CheckAsync("pkg", "rev-1", TestContext.Current.CancellationToken);
+        var head = await access.CheckAsync("pkg", ct: TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -136,7 +132,7 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         await SeedPackageAsync(packages);
 
-        var result = await Create(packages, new InMemoryPackageSecurityRepository()).CheckAsync("pkg", "rev-missing");
+        var result = await Create(packages, new InMemoryPackageSecurityRepository()).CheckAsync("pkg", "rev-missing", TestContext.Current.CancellationToken);
 
         Assert.False(result.Allowed);
         Assert.Equal(SecurityAccessReasonCodes.Pending, result.ReasonCode);
@@ -145,7 +141,7 @@ public class PackageSecurityAccessTests
     [Fact]
     public async Task Unknown_package_is_allowed()
     {
-        var result = await Create(new InMemoryPackageRepository(), new InMemoryPackageSecurityRepository()).CheckAsync("missing");
+        var result = await Create(new InMemoryPackageRepository(), new InMemoryPackageSecurityRepository()).CheckAsync("missing", ct: TestContext.Current.CancellationToken);
 
         Assert.True(result.Allowed);
     }

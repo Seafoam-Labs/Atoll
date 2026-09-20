@@ -67,17 +67,17 @@ public class MongoApiEndpointsTests : IAsyncLifetime
             [
                 new PackageRevisionDocument { RevisionId = "rev-1", CreatedAt = now, Author = "test", Message = "seed" }
             ]
-        }, revisionContent);
+        }, revisionContent, TestContext.Current.CancellationToken);
 
-        var list = await _client.GetAsync("/v1/packages");
-        var head = await _client.GetAsync("/v1/packages/atoll-test");
-        var versions = await _client.GetAsync("/v1/packages/atoll-test/versions");
+        var list = await _client.GetAsync("/v1/packages", TestContext.Current.CancellationToken);
+        var head = await _client.GetAsync("/v1/packages/atoll-test", TestContext.Current.CancellationToken);
+        var versions = await _client.GetAsync("/v1/packages/atoll-test/versions", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, list.StatusCode);
         Assert.Equal(HttpStatusCode.OK, head.StatusCode);
         Assert.Equal(HttpStatusCode.OK, versions.StatusCode);
 
-        var listBody = await list.Content.ReadAsStringAsync();
+        var listBody = await list.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(listBody);
         var items = doc.RootElement.GetProperty("items");
         Assert.Equal(1, items.GetArrayLength());
@@ -115,14 +115,14 @@ public class MongoApiEndpointsTests : IAsyncLifetime
                 {
                     ["PKGBUILD"] = new() { Content = $"pkgname={name}\n", Size = 8 + name.Length, Hash = "h" }
                 }
-            });
+            }, TestContext.Current.CancellationToken);
         }
 
-        var response = await _client.GetAsync("/v1/packages?limit=2&page=2");
+        var response = await _client.GetAsync("/v1/packages?limit=2&page=2", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
@@ -171,7 +171,7 @@ public class MongoApiEndpointsTests : IAsyncLifetime
             [
                 new PackageRevisionDocument { RevisionId = "rev-1", CreatedAt = now, Author = "test", Message = "seed" }
             ]
-        }, revisionContent);
+        }, revisionContent, TestContext.Current.CancellationToken);
 
         // A head scan record exists before the delete; the cascade must remove it too.
         var scans = _mongo.GetDatabase(_factory.Database).GetCollection<BsonDocument>("package-security-scans");
@@ -182,22 +182,22 @@ public class MongoApiEndpointsTests : IAsyncLifetime
             ["revisionId"] = "rev-1",
             ["isHead"] = true,
             ["status"] = "Pending"
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
-        var del = await _client.DeleteAsync("/v1/packages/to-delete");
+        var del = await _client.DeleteAsync("/v1/packages/to-delete", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
 
-        Assert.False(await repo.ExistsAsync("to-delete"));
+        Assert.False(await repo.ExistsAsync("to-delete", TestContext.Current.CancellationToken));
 
         // Cascade: the deleted package's revision content documents are also gone.
         var revisionDocs = _mongo.GetDatabase(_factory.Database).GetCollection<BsonDocument>("package-revisions");
         Assert.Equal(
             0,
-            await revisionDocs.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")));
+            await revisionDocs.CountDocumentsAsync(new BsonDocument("packageName", "to-delete"), cancellationToken: TestContext.Current.CancellationToken));
 
         // Cascade: the deleted package's security scan documents are also gone.
         Assert.Equal(
             0,
-            await scans.CountDocumentsAsync(new BsonDocument("packageName", "to-delete")));
+            await scans.CountDocumentsAsync(new BsonDocument("packageName", "to-delete"), cancellationToken: TestContext.Current.CancellationToken));
     }
 }

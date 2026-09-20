@@ -128,7 +128,7 @@ public class PackageIndexRankerPerfTests
             var coldService = CreateService();
             var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
             var stopwatch = Stopwatch.StartNew();
-            var response = await coldService.GetIndexPageAsync(1, PageLimit, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+            var response = await coldService.GetIndexPageAsync(1, PageLimit, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
             stopwatch.Stop();
             coldAllocated += GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
             coldSamples[i] = stopwatch.Elapsed.TotalMilliseconds;
@@ -146,7 +146,7 @@ public class PackageIndexRankerPerfTests
         // 2. Cold view build per sort: one service whose generation is warmed with the cheapest sort,
         //    so each first request below measures exactly one view build plus one page fetch.
         var service = CreateService();
-        var warmup = await service.GetIndexPageAsync(1, PageLimit, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc);
+        var warmup = await service.GetIndexPageAsync(1, PageLimit, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
         Assert.Equal(PackageCount, warmup.TotalItems);
 
         foreach (var (sortBy, order) in new[]
@@ -161,7 +161,7 @@ public class PackageIndexRankerPerfTests
         {
             var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
             var stopwatch = Stopwatch.StartNew();
-            var response = await service.GetIndexPageAsync(1, PageLimit, sortBy, order);
+            var response = await service.GetIndexPageAsync(1, PageLimit, sortBy, order, TestContext.Current.CancellationToken);
             stopwatch.Stop();
             var allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
 

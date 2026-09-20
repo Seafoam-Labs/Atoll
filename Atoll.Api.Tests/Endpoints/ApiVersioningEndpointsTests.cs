@@ -24,7 +24,7 @@ public class ApiVersioningEndpointsTests : IDisposable
     [Fact]
     public async Task V1RestSurfaceIsServedAndAdvertisesSupportedVersions()
     {
-        var response = await _client.GetAsync("/v1/search?query=portable-kit");
+        var response = await _client.GetAsync("/v1/search?query=portable-kit", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(
@@ -36,9 +36,9 @@ public class ApiVersioningEndpointsTests : IDisposable
     [Fact]
     public async Task UnversionedRestRoutesReturn404()
     {
-        var search = await _client.GetAsync("/search?query=portable-kit");
-        var packages = await _client.GetAsync("/packages");
-        var package = await _client.GetAsync("/packages/portable-kit");
+        var search = await _client.GetAsync("/search?query=portable-kit", TestContext.Current.CancellationToken);
+        var packages = await _client.GetAsync("/packages", TestContext.Current.CancellationToken);
+        var package = await _client.GetAsync("/packages/portable-kit", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -51,8 +51,8 @@ public class ApiVersioningEndpointsTests : IDisposable
     [Fact]
     public async Task UnsupportedUrlSegmentVersionReturns404()
     {
-        var search = await _client.GetAsync("/v2/search?query=portable-kit");
-        var packages = await _client.GetAsync("/v2/packages");
+        var search = await _client.GetAsync("/v2/search?query=portable-kit", TestContext.Current.CancellationToken);
+        var packages = await _client.GetAsync("/v2/packages", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -64,7 +64,7 @@ public class ApiVersioningEndpointsTests : IDisposable
     [Fact]
     public async Task QueryStringVersioningIsNotHonored()
     {
-        var response = await _client.GetAsync("/packages?api-version=1.0");
+        var response = await _client.GetAsync("/packages?api-version=1.0", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -72,8 +72,8 @@ public class ApiVersioningEndpointsTests : IDisposable
     [Fact]
     public async Task ProtocolFixedSurfacesRemainVersionNeutral()
     {
-        var health = await _client.GetAsync("/health");
-        var rpc = await _client.GetAsync("/rpc?v=5&type=suggest&arg=portable");
+        var health = await _client.GetAsync("/health", TestContext.Current.CancellationToken);
+        var rpc = await _client.GetAsync("/rpc?v=5&type=suggest&arg=portable", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -85,8 +85,8 @@ public class ApiVersioningEndpointsTests : IDisposable
     [Fact]
     public async Task OpenApiDocumentIsServedPerVersionWithSubstitutedPaths()
     {
-        var v1 = await _client.GetAsync("/openapi/v1.json");
-        var bare = await _client.GetAsync("/openapi/1.0.json");
+        var v1 = await _client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+        var bare = await _client.GetAsync("/openapi/1.0.json", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -94,7 +94,7 @@ public class ApiVersioningEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.NotFound, bare.StatusCode);
         });
 
-        var json = await v1.Content.ReadAsStringAsync();
+        var json = await v1.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var paths = doc.RootElement.GetProperty("paths");
 

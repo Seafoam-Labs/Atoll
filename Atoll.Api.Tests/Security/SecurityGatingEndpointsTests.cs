@@ -76,7 +76,7 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Verified);
 
-        var response = await _client.GetAsync("/v1/packages/pkg");
+        var response = await _client.GetAsync("/v1/packages/pkg", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -86,10 +86,10 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Pending);
 
-        var response = await _client.GetAsync("/v1/packages/pkg");
+        var response = await _client.GetAsync("/v1/packages/pkg", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("security_status_pending", body);
     }
 
@@ -98,10 +98,10 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/v1/packages/pkg");
+        var response = await _client.GetAsync("/v1/packages/pkg", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("security_status_flagged", body);
     }
 
@@ -110,7 +110,7 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/v1/packages/pkg/versions/rev-1");
+        var response = await _client.GetAsync("/v1/packages/pkg/versions/rev-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -120,7 +120,7 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/v1/packages/pkg/versions");
+        var response = await _client.GetAsync("/v1/packages/pkg/versions", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -130,7 +130,7 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/v1/search?query=portable-kit");
+        var response = await _client.GetAsync("/v1/search?query=portable-kit", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -140,7 +140,7 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/v1/packages");
+        var response = await _client.GetAsync("/v1/packages", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -150,7 +150,7 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Pending);
 
-        var response = await _client.GetAsync("/packages/pkg.git/info/refs?service=git-upload-pack");
+        var response = await _client.GetAsync("/packages/pkg.git/info/refs?service=git-upload-pack", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -163,7 +163,7 @@ public class SecurityGatingEndpointsTests : IDisposable
         using var content = new ByteArrayContent([]);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/x-git-upload-pack-request");
 
-        var response = await _client.PostAsync("/packages/pkg.git/git-upload-pack", content);
+        var response = await _client.PostAsync("/packages/pkg.git/git-upload-pack", content, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -185,18 +185,18 @@ public class SecurityGatingEndpointsTests : IDisposable
             }
         };
 
-        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
-        await _factory.Repository.AppendRevisionAsync("pkg", rev2, 10);
-        Assert.Equal("rev-2", await _factory.Repository.GetHeadRevisionIdAsync("pkg"));
+        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"), TestContext.Current.CancellationToken);
+        await _factory.Repository.AppendRevisionAsync("pkg", rev2, 10, TestContext.Current.CancellationToken);
+        Assert.Equal("rev-2", await _factory.Repository.GetHeadRevisionIdAsync("pkg", TestContext.Current.CancellationToken));
 
-        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
         await _factory.SecurityRepository.CompleteScanAsync("pkg", SecurityStatus.Verified);
         await _factory.SecurityRepository.CompleteScanAsync("pkg", SecurityStatus.Flagged);
 
-        var flagged = await _client.GetAsync("/v1/packages/pkg/versions/rev-2");
-        var clean = await _client.GetAsync("/v1/packages/pkg/versions/rev-1");
-        var head = await _client.GetAsync("/v1/packages/pkg");
+        var flagged = await _client.GetAsync("/v1/packages/pkg/versions/rev-2", TestContext.Current.CancellationToken);
+        var clean = await _client.GetAsync("/v1/packages/pkg/versions/rev-1", TestContext.Current.CancellationToken);
+        var head = await _client.GetAsync("/v1/packages/pkg", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -211,10 +211,10 @@ public class SecurityGatingEndpointsTests : IDisposable
     {
         await SeedAsync(SecurityStatus.Flagged);
 
-        var response = await _client.GetAsync("/v1/packages/pkg/security");
+        var response = await _client.GetAsync("/v1/packages/pkg/security", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("Flagged", body);
     }
 }

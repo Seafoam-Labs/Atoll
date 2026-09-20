@@ -79,7 +79,7 @@ public class GitCommitFixtureTests : IAsyncLifetime
             var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
 
             await InsertVerifiedHistoryAsync(repo, security);
-            await cache.EnsureRepositoryAsync("fixture");
+            await cache.EnsureRepositoryAsync("fixture", TestContext.Current.CancellationToken);
 
             var gitDir = cache.GetRepositoryPath("fixture")!;
             var ct = CancellationToken.None;

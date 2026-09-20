@@ -84,7 +84,7 @@ public class PackageRefreshWorkerTests
         var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
         await SeedAsync(service, "shelly", BaseFiles);
 
-        var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+        var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         var mirror = new FakeRefreshMirror
         {
@@ -103,7 +103,7 @@ public class PackageRefreshWorkerTests
         var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
         var outcome = await worker.RunCycleAsync(CancellationToken.None);
-        var newHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+        var newHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         Assert.Multiple(() =>
         {
@@ -124,12 +124,11 @@ public class PackageRefreshWorkerTests
         var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
         await SeedAsync(service, "shelly", BaseFiles);
 
-        var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
-        await security.MarkPendingAsync("shelly", originalHead, true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
+        await security.MarkPendingAsync("shelly", originalHead, true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
         // Simulate the old head being scanned clean.
-        await security.TryClaimPendingScanAsync("scanner", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await security.CompleteScanAsync("shelly", originalHead, "scanner",
-            new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await security.TryClaimPendingScanAsync("scanner", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await security.CompleteScanAsync("shelly", originalHead, "scanner", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
 
         var mirror = new FakeRefreshMirror
         {
@@ -147,9 +146,9 @@ public class PackageRefreshWorkerTests
 
         await worker.RunCycleAsync(CancellationToken.None);
 
-        var newHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
-        var newHeadScan = await security.GetAsync("shelly", newHead);
-        var oldHeadScan = await security.GetAsync("shelly", originalHead);
+        var newHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
+        var newHeadScan = await security.GetAsync("shelly", newHead, TestContext.Current.CancellationToken);
+        var oldHeadScan = await security.GetAsync("shelly", originalHead, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -171,7 +170,7 @@ public class PackageRefreshWorkerTests
         await SeedAsync(service, "shelly", BaseFiles);
 
         // Pre-seed the sync watermark so the package looks already synced.
-        await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null);
+        await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null, TestContext.Current.CancellationToken);
 
         var mirror = new FakeRefreshMirror { BranchHeads = { ["shelly"] = "sha-stable" } };
         var status = new RefreshStatusStore(true);
@@ -196,8 +195,8 @@ public class PackageRefreshWorkerTests
         await SeedAsync(service, "libfoo", BaseFiles);
         await SeedAsync(service, "libfoo-devel", BaseFiles);
 
-        var libfooOriginalHead = (await repo.GetHeadAsync("libfoo"))!.HeadRevisionId;
-        var libfooDevelOriginalHead = (await repo.GetHeadAsync("libfoo-devel"))!.HeadRevisionId;
+        var libfooOriginalHead = (await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken))!.HeadRevisionId;
+        var libfooDevelOriginalHead = (await repo.GetHeadAsync("libfoo-devel", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         var mirror = new FakeRefreshMirror
         {
@@ -216,8 +215,8 @@ public class PackageRefreshWorkerTests
 
         await worker.RunCycleAsync(CancellationToken.None);
 
-        var libfooUpdated = (await repo.GetHeadAsync("libfoo"))!.HeadRevisionId;
-        var libfooDevelUpdated = (await repo.GetHeadAsync("libfoo-devel"))!.HeadRevisionId;
+        var libfooUpdated = (await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken))!.HeadRevisionId;
+        var libfooDevelUpdated = (await repo.GetHeadAsync("libfoo-devel", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         Assert.Multiple(() =>
         {
@@ -240,10 +239,10 @@ public class PackageRefreshWorkerTests
         await SeedAsync(service, "libfoo", BaseFiles);
         await SeedAsync(service, "libfoo-devel", BaseFiles);
 
-        var libfooOriginalHead = (await repo.GetHeadAsync("libfoo"))!.HeadRevisionId;
+        var libfooOriginalHead = (await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         // Make libfoo-devel's refresh fail by deleting its document mid-flight (e.g. a concurrent delete).
-        await repo.DeleteAsync("libfoo-devel");
+        await repo.DeleteAsync("libfoo-devel", TestContext.Current.CancellationToken);
 
         var mirror = new FakeRefreshMirror
         {
@@ -262,9 +261,9 @@ public class PackageRefreshWorkerTests
 
         await worker.RunCycleAsync(CancellationToken.None);
 
-        var libfooUpdated = (await repo.GetHeadAsync("libfoo"))!.HeadRevisionId;
-        var libfooDoc = await repo.GetHeadAsync("libfoo");
-        var libfooState = (await repo.ListSyncStatesAsync()).Single(s => s.PackageName == "libfoo");
+        var libfooUpdated = (await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken))!.HeadRevisionId;
+        var libfooDoc = await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken);
+        var libfooState = (await repo.ListSyncStatesAsync(TestContext.Current.CancellationToken)).Single(s => s.PackageName == "libfoo");
 
         Assert.Multiple(() =>
         {
@@ -285,7 +284,7 @@ public class PackageRefreshWorkerTests
         var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
         await SeedAsync(service, "shelly", BaseFiles);
 
-        var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+        var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         // Upstream head reports as moved, but files are identical (content hash unchanged).
         var mirror = new FakeRefreshMirror
@@ -301,8 +300,8 @@ public class PackageRefreshWorkerTests
 
         await worker.RunCycleAsync(CancellationToken.None);
 
-        var newHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
-        var state = (await repo.ListSyncStatesAsync()).Single();
+        var newHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
+        var state = (await repo.ListSyncStatesAsync(TestContext.Current.CancellationToken)).Single();
 
         Assert.Multiple(() =>
         {
@@ -359,7 +358,7 @@ public class PackageRefreshWorkerTests
         await SeedAsync(service, "good", BaseFiles);
         await SeedAsync(service, "broken", BaseFiles);
 
-        var goodOriginalHead = (await repo.GetHeadAsync("good"))!.HeadRevisionId;
+        var goodOriginalHead = (await repo.GetHeadAsync("good", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         var mirror = new FakeRefreshMirror
         {
@@ -379,7 +378,7 @@ public class PackageRefreshWorkerTests
 
         await worker.RunCycleAsync(CancellationToken.None);
 
-        var goodNewHead = (await repo.GetHeadAsync("good"))!.HeadRevisionId;
+        var goodNewHead = (await repo.GetHeadAsync("good", TestContext.Current.CancellationToken))!.HeadRevisionId;
         Assert.Multiple(() =>
         {
             Assert.NotEqual(goodOriginalHead, goodNewHead);
@@ -399,7 +398,7 @@ public class PackageRefreshWorkerTests
         await SeedAsync(service, "shelly", BaseFiles);
 
         // Mark synced with the current head but a long-since past success timestamp.
-        await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null);
+        await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null, TestContext.Current.CancellationToken);
 
         var mirror = new FakeRefreshMirror
         {
@@ -412,7 +411,7 @@ public class PackageRefreshWorkerTests
         var status = new RefreshStatusStore(true);
         _ = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), status);
 
-        var states = await repo.ListSyncStatesAsync();
+        var states = await repo.ListSyncStatesAsync(TestContext.Current.CancellationToken);
         var grouped = RefreshPlan.GroupByPackageBase([.. states], store.Current);
         var candidates = RefreshPlan.SelectCandidates(
             grouped,
@@ -432,9 +431,9 @@ public class PackageRefreshWorkerTests
         var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
         await SeedAsync(service, "shelly", BaseFiles);
         // Synced against the current head; only staleness will make it a candidate.
-        await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null);
+        await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null, TestContext.Current.CancellationToken);
 
-        var states = await repo.ListSyncStatesAsync();
+        var states = await repo.ListSyncStatesAsync(TestContext.Current.CancellationToken);
         var grouped = RefreshPlan.GroupByPackageBase([.. states], store.Current);
         var candidates = RefreshPlan.SelectCandidates(
             grouped,
@@ -572,7 +571,7 @@ public class PackageRefreshWorkerTests
         var service = new PackageService(repo, Options.Create(opts), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(opts), NullLogger<GitRepositoryCache>.Instance));
         await SeedAsync(service, "shelly", BaseFiles);
 
-        var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+        var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         var mirror = new FakeRefreshMirror
         {
@@ -596,8 +595,8 @@ public class PackageRefreshWorkerTests
 
         await worker.RunCycleAsync(CancellationToken.None);
 
-        var docAfterFirstCycle = await repo.GetHeadAsync("shelly");
-        var excludedBases = await exclusions.ListDocumentTooLargePackageBasesAsync();
+        var docAfterFirstCycle = await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken);
+        var excludedBases = await exclusions.ListDocumentTooLargePackageBasesAsync(TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -624,10 +623,10 @@ public class PackageRefreshWorkerTests
         var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
         await SeedAsync(service, "shelly", BaseFiles);
 
-        var originalHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+        var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         var exclusions = new InMemorySeedExclusionRepository();
-        await exclusions.RecordDocumentTooLargeAsync("shelly", ["shelly"], 17_000_000);
+        await exclusions.RecordDocumentTooLargeAsync("shelly", ["shelly"], 17_000_000, TestContext.Current.CancellationToken);
 
         var mirror = new FakeRefreshMirror
         {
@@ -646,7 +645,7 @@ public class PackageRefreshWorkerTests
 
         await worker.RunCycleAsync(CancellationToken.None);
 
-        var newHead = (await repo.GetHeadAsync("shelly"))!.HeadRevisionId;
+        var newHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
 
         Assert.Multiple(() =>
         {

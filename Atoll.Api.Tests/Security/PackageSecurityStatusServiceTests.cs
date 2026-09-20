@@ -67,7 +67,7 @@ public class PackageSecurityStatusServiceTests
     [Fact]
     public async Task GetHistoryAsync_unknown_package_returns_null()
     {
-        Assert.Null(await _service.GetHistoryAsync("missing"));
+        Assert.Null(await _service.GetHistoryAsync("missing", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class PackageSecurityStatusServiceTests
         await _security.CompleteScanAsync("pkg", SecurityStatus.Flagged,
             new SecurityFinding("dangerous-command", FindingSeverity.High, "rm -rf", "rm -rf /", "PKGBUILD"));
 
-        var history = await _service.GetHistoryAsync("pkg");
+        var history = await _service.GetHistoryAsync("pkg", TestContext.Current.CancellationToken);
 
         Assert.NotNull(history);
         var tail = history!.Revisions.Skip(1).Select(r => r.ScannedAt!.Value).ToArray();
@@ -107,7 +107,7 @@ public class PackageSecurityStatusServiceTests
     [Fact]
     public async Task GetRevisionAsync_unknown_package_returns_null()
     {
-        Assert.Null(await _service.GetRevisionAsync("missing", "rev-1"));
+        Assert.Null(await _service.GetRevisionAsync("missing", "rev-1", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public class PackageSecurityStatusServiceTests
     {
         await SeedAsync("pkg", "rev-1", "rev-1");
 
-        Assert.Null(await _service.GetRevisionAsync("pkg", "rev-99"));
+        Assert.Null(await _service.GetRevisionAsync("pkg", "rev-99", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -123,8 +123,8 @@ public class PackageSecurityStatusServiceTests
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
 
-        var head = await _service.GetRevisionAsync("pkg", "rev-1");
-        var older = await _service.GetRevisionAsync("pkg", "rev-2");
+        var head = await _service.GetRevisionAsync("pkg", "rev-1", TestContext.Current.CancellationToken);
+        var older = await _service.GetRevisionAsync("pkg", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -141,7 +141,7 @@ public class PackageSecurityStatusServiceTests
     [Fact]
     public async Task QueueRescanAsync_unknown_package_returns_null()
     {
-        Assert.Null(await _service.QueueRescanAsync("missing"));
+        Assert.Null(await _service.QueueRescanAsync("missing", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -149,8 +149,8 @@ public class PackageSecurityStatusServiceTests
     {
         await SeedAsync("pkg", "rev-1", "rev-1");
 
-        Assert.Null(await _service.QueueRescanAsync("pkg", "rev-99"));
-        Assert.Null(await _security.GetHeadAsync("pkg"));
+        Assert.Null(await _service.QueueRescanAsync("pkg", "rev-99", TestContext.Current.CancellationToken));
+        Assert.Null(await _security.GetHeadAsync("pkg", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -158,8 +158,8 @@ public class PackageSecurityStatusServiceTests
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
 
-        var queued = await _service.QueueRescanAsync("pkg");
-        var scan = await _security.GetAsync("pkg", "rev-1");
+        var queued = await _service.QueueRescanAsync("pkg", ct: TestContext.Current.CancellationToken);
+        var scan = await _security.GetAsync("pkg", "rev-1", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -177,10 +177,10 @@ public class PackageSecurityStatusServiceTests
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
         await QueueAsync("pkg", "rev-2", false);
         await _security.CompleteScanAsync("pkg", SecurityStatus.Verified);
-        Assert.Equal(SecurityStatus.Verified, (await _security.GetAsync("pkg", "rev-2"))!.Status);
+        Assert.Equal(SecurityStatus.Verified, (await _security.GetAsync("pkg", "rev-2", TestContext.Current.CancellationToken))!.Status);
 
-        var queued = await _service.QueueRescanAsync("pkg", "rev-2");
-        var scan = await _security.GetAsync("pkg", "rev-2");
+        var queued = await _service.QueueRescanAsync("pkg", "rev-2", TestContext.Current.CancellationToken);
+        var scan = await _security.GetAsync("pkg", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {

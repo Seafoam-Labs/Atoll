@@ -127,10 +127,10 @@ public class PackageSecurityWorkerTests
 
         var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(false), false);
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(200);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
         await worker.StopAsync(CancellationToken.None);
 
-        Assert.Equal(SecurityStatus.Pending, (await securityRepo.GetAsync("clean", "rev-1"))!.Status);
+        Assert.Equal(SecurityStatus.Pending, (await securityRepo.GetAsync("clean", "rev-1", TestContext.Current.CancellationToken))!.Status);
     }
 
     [Fact]
@@ -173,12 +173,12 @@ public class PackageSecurityWorkerTests
         await SeedAsync(repo, securityRepo, "current-clean", "pkgname=current-clean\npkgver=1.0\n");
 
         // Simulate legacy scan (version 1) on legacy-clean and v1-evil
-        _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: 1);
-        await securityRepo.CompleteScanAsync("legacy-clean", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 1);
-        _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: 1);
-        await securityRepo.CompleteScanAsync("v1-evil", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 1); // was incorrectly verified in v1
-        _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await securityRepo.CompleteScanAsync("current-clean", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion); // already current
+        _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: 1, ct: TestContext.Current.CancellationToken);
+        await securityRepo.CompleteScanAsync("legacy-clean", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 1, ct: TestContext.Current.CancellationToken);
+        _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: 1, ct: TestContext.Current.CancellationToken);
+        await securityRepo.CompleteScanAsync("v1-evil", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 1, ct: TestContext.Current.CancellationToken); // was incorrectly verified in v1
+        _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion, ct: TestContext.Current.CancellationToken);
+        await securityRepo.CompleteScanAsync("current-clean", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion, ct: TestContext.Current.CancellationToken); // already current
 
         var status = new SecurityScanStatusStore(true);
         var worker = CreateWorker(repo, securityRepo, status);
@@ -190,7 +190,7 @@ public class PackageSecurityWorkerTests
         var scan2 = await WaitForScanAsync(securityRepo, "v1-evil", expectedPolicyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion);
         await worker.StopAsync(CancellationToken.None);
 
-        var current = await securityRepo.GetAsync("current-clean", "rev-1");
+        var current = await securityRepo.GetAsync("current-clean", "rev-1", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -213,16 +213,16 @@ public class PackageSecurityWorkerTests
         var securityRepo = new InMemoryPackageSecurityRepository();
 
         await SeedAsync(repo, securityRepo, "pkg1", "pkgname=pkg1\n", requiredPolicyVersion: 1);
-        _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: 1);
-        await securityRepo.CompleteScanAsync("pkg1", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 1);
+        _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: 1, ct: TestContext.Current.CancellationToken);
+        await securityRepo.CompleteScanAsync("pkg1", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 1, ct: TestContext.Current.CancellationToken);
 
         var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(false), enabled: false);
 
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
         await worker.StopAsync(CancellationToken.None);
 
-        var scan = await securityRepo.GetAsync("pkg1", "rev-1");
+        var scan = await securityRepo.GetAsync("pkg1", "rev-1", TestContext.Current.CancellationToken);
         Assert.Equal(SecurityStatus.Verified, scan!.Status);
         Assert.Equal(1, scan.PolicyVersion);
     }
@@ -235,15 +235,15 @@ public class PackageSecurityWorkerTests
         await SeedAsync(repo, securityRepo, "future", "pkgname=future\n");
 
         // A newer deployment raised the requirement above this worker's policy version.
-        await securityRepo.RequeueOutdatedAsync(PkgBuildSecurityScanner.CurrentPolicyVersion + 1);
+        await securityRepo.RequeueOutdatedAsync(PkgBuildSecurityScanner.CurrentPolicyVersion + 1, TestContext.Current.CancellationToken);
 
         var status = new SecurityScanStatusStore(true);
         var worker = CreateWorker(repo, securityRepo, status);
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(200);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
         await worker.StopAsync(CancellationToken.None);
 
-        var scan = await securityRepo.GetAsync("future", "rev-1");
+        var scan = await securityRepo.GetAsync("future", "rev-1", TestContext.Current.CancellationToken);
         Assert.Multiple(() =>
         {
             Assert.Equal(SecurityStatus.Pending, scan!.Status);

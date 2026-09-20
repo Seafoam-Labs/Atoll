@@ -89,7 +89,7 @@ public class PackageBulkSeedWorkerTests
 
         var (seeded, skipped, _) = await worker.RunCycleAsync(10, TimeSpan.Zero, CancellationToken.None);
 
-        var shellySeeded = await repo.ExistsAsync("shelly");
+        var shellySeeded = await repo.ExistsAsync("shelly", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -111,8 +111,8 @@ public class PackageBulkSeedWorkerTests
 
         var (seeded, _, _) = await worker.RunCycleAsync(10, TimeSpan.Zero, CancellationToken.None);
 
-        var libfooSeeded = await repo.ExistsAsync("libfoo");
-        var libfooDevelSeeded = await repo.ExistsAsync("libfoo-devel");
+        var libfooSeeded = await repo.ExistsAsync("libfoo", TestContext.Current.CancellationToken);
+        var libfooDevelSeeded = await repo.ExistsAsync("libfoo-devel", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -135,8 +135,8 @@ public class PackageBulkSeedWorkerTests
 
         var (seeded, skipped, _) = await worker.RunCycleAsync(10, TimeSpan.Zero, CancellationToken.None);
 
-        var shellySeeded = await repo.ExistsAsync("shelly");
-        var ghostSeeded = await repo.ExistsAsync("ghost");
+        var shellySeeded = await repo.ExistsAsync("shelly", TestContext.Current.CancellationToken);
+        var ghostSeeded = await repo.ExistsAsync("ghost", TestContext.Current.CancellationToken);
         var snapshot = status.GetSnapshot();
 
         Assert.Multiple(() =>
@@ -160,7 +160,7 @@ public class PackageBulkSeedWorkerTests
         var repo = new InMemoryPackageRepository();
         var mirror = new FakeMirror { Branches = { "duckstation", "small-package" } };
         var exclusions = new InMemorySeedExclusionRepository();
-        await exclusions.RecordDocumentTooLargeAsync("duckstation", ["duckstation", "duckstation-gpl"], 21_957_167);
+        await exclusions.RecordDocumentTooLargeAsync("duckstation", ["duckstation", "duckstation-gpl"], 21_957_167, TestContext.Current.CancellationToken);
         var status = new BulkSeedStatusStore(true);
         var worker = CreateWorker(store, repo, mirror, status, exclusions);
 
@@ -282,7 +282,7 @@ public class PackageBulkSeedWorkerTests
         });
 
         foreach (var meta in metas)
-            Assert.True(await repo.ExistsAsync(meta.Name), $"package {meta.Name} should be seeded");
+            Assert.True(await repo.ExistsAsync(meta.Name, TestContext.Current.CancellationToken), $"package {meta.Name} should be seeded");
     }
 
     [Fact]
@@ -295,8 +295,8 @@ public class PackageBulkSeedWorkerTests
 
         var (seeded, skipped, _) = await worker.RunCycleAsync(10, TimeSpan.Zero, CancellationToken.None);
 
-        var aSeeded = await repo.ExistsAsync("a");
-        var bSeeded = await repo.ExistsAsync("b");
+        var aSeeded = await repo.ExistsAsync("a", TestContext.Current.CancellationToken);
+        var bSeeded = await repo.ExistsAsync("b", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {

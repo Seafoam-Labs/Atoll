@@ -74,7 +74,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
                      keys.Ascending(x => x.IsHead).Ascending(x => x.Status)
                  })
         {
-            await Scans.Indexes.CreateOneAsync(new CreateIndexModel<PackageSecurityScanDocument>(superseded));
+            await Scans.Indexes.CreateOneAsync(new CreateIndexModel<PackageSecurityScanDocument>(superseded), cancellationToken: TestContext.Current.CancellationToken);
         }
 
         Assert.Superset(
@@ -111,12 +111,11 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
                 IsHead = i % 2 == 0,
                 Status = SecurityStatus.Verified,
                 Findings = [new SecurityFinding("rule", FindingSeverity.High, "payload", "", "PKGBUILD")]
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
         }
 
         // Exercises the query shape used by MongoPackageSecurityRepository.ListHeadStatusesAsync.
-        var explain = await _client.GetDatabase(_database).RunCommandAsync<BsonDocument>(
-            new BsonDocumentCommand<BsonDocument>(new BsonDocument
+        var explain = await _client.GetDatabase(_database).RunCommandAsync<BsonDocument>(new BsonDocumentCommand<BsonDocument>(new BsonDocument
             {
                 {
                     "explain", new BsonDocument
@@ -128,7 +127,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
                     }
                 },
                 { "verbosity", "executionStats" }
-            }));
+            }), cancellationToken: TestContext.Current.CancellationToken);
 
         var stages = ValuesNamed(explain, "stage").Select(value => value.AsString).ToArray();
         var docsExamined = ValuesNamed(explain, "totalDocsExamined").Sum(value => value.ToInt64());
@@ -176,17 +175,17 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
             IsHead = true,
             Status = SecurityStatus.Pending,
             Findings = []
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
-        var claim = await _repo.TryClaimPendingScanAsync("v2-worker", TimeSpan.FromMinutes(1), workerPolicyVersion: 2);
+        var claim = await _repo.TryClaimPendingScanAsync("v2-worker", TimeSpan.FromMinutes(1), workerPolicyVersion: 2, ct: TestContext.Current.CancellationToken);
         Assert.NotNull(claim);
 
-        await _repo.ReleaseScanClaimAsync("legacy-pending", "rev-1", "v2-worker");
+        await _repo.ReleaseScanClaimAsync("legacy-pending", "rev-1", "v2-worker", TestContext.Current.CancellationToken);
 
-        var requeued = await _repo.RequeueOutdatedAsync(3);
+        var requeued = await _repo.RequeueOutdatedAsync(3, TestContext.Current.CancellationToken);
         Assert.Equal(1, requeued);
 
-        var scan = await _repo.GetAsync("legacy-pending", "rev-1");
+        var scan = await _repo.GetAsync("legacy-pending", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
@@ -210,7 +209,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
             PolicyVersion = null,
             ScannedAt = DateTimeOffset.UtcNow.AddDays(-5),
             Findings = []
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         // 2. Legacy unversioned flagged document with findings
         await collection.InsertOneAsync(new PackageSecurityScanDocument
@@ -223,7 +222,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
             PolicyVersion = null,
             ScannedAt = DateTimeOffset.UtcNow.AddDays(-5),
             Findings = [new SecurityFinding("rule-old", FindingSeverity.High, "old issue", "", "PKGBUILD")]
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         // 3. Document scanned under older policy version (e.g. 1)
         await collection.InsertOneAsync(new PackageSecurityScanDocument
@@ -236,7 +235,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
             PolicyVersion = 1,
             ScannedAt = DateTimeOffset.UtcNow.AddDays(-2),
             Findings = []
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         // 4. Document scanned under current policy version (e.g. 2)
         await collection.InsertOneAsync(new PackageSecurityScanDocument
@@ -249,7 +248,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
             PolicyVersion = 2,
             ScannedAt = DateTimeOffset.UtcNow,
             Findings = []
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         // 5. Document produced by a newer worker during a rolling deployment
         await collection.InsertOneAsync(new PackageSecurityScanDocument
@@ -262,17 +261,17 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
             PolicyVersion = 3,
             ScannedAt = DateTimeOffset.UtcNow,
             Findings = []
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         // 6. Document currently Pending with an outdated requirement
-        await _repo.MarkPendingAsync("already-pending", "rev-1", true, requiredPolicyVersion: 1);
+        await _repo.MarkPendingAsync("already-pending", "rev-1", true, requiredPolicyVersion: 1, ct: TestContext.Current.CancellationToken);
 
         // Requeue outdated scans with current policy version 2
-        var requeuedCount = await _repo.RequeueOutdatedAsync(2);
+        var requeuedCount = await _repo.RequeueOutdatedAsync(2, TestContext.Current.CancellationToken);
         Assert.Equal(4, requeuedCount);
 
         // Verify legacy-verified is now Pending, unversioned, timestamps cleared
-        var doc1 = await _repo.GetAsync("legacy-verified", "rev-1");
+        var doc1 = await _repo.GetAsync("legacy-verified", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(doc1);
         Assert.Multiple(() =>
         {
@@ -285,7 +284,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         });
 
         // Verify legacy-flagged is now Pending, findings cleared
-        var doc2 = await _repo.GetAsync("legacy-flagged", "rev-1");
+        var doc2 = await _repo.GetAsync("legacy-flagged", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(doc2);
         Assert.Multiple(() =>
         {
@@ -295,7 +294,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         });
 
         // Verify v1-error is now Pending, IsHead preserved
-        var doc3 = await _repo.GetAsync("v1-error", "rev-1");
+        var doc3 = await _repo.GetAsync("v1-error", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(doc3);
         Assert.Multiple(() =>
         {
@@ -305,12 +304,12 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         });
 
         // Verify the pending requirement was raised in place
-        var doc6 = await _repo.GetAsync("already-pending", "rev-1");
+        var doc6 = await _repo.GetAsync("already-pending", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(doc6);
         Assert.Equal(2, doc6!.RequiredPolicyVersion);
 
         // Verify v2-verified is unchanged
-        var doc4 = await _repo.GetAsync("v2-verified", "rev-1");
+        var doc4 = await _repo.GetAsync("v2-verified", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(doc4);
         Assert.Multiple(() =>
         {
@@ -319,7 +318,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         });
 
         // Verify a newer result is not downgraded by an older worker
-        var doc5 = await _repo.GetAsync("v3-verified", "rev-1");
+        var doc5 = await _repo.GetAsync("v3-verified", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(doc5);
         Assert.Multiple(() =>
         {
@@ -328,7 +327,7 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
         });
 
         // Idempotency: Running RequeueOutdatedAsync again returns 0
-        var secondRequeue = await _repo.RequeueOutdatedAsync(2);
+        var secondRequeue = await _repo.RequeueOutdatedAsync(2, TestContext.Current.CancellationToken);
         Assert.Equal(0, secondRequeue);
     }
 }

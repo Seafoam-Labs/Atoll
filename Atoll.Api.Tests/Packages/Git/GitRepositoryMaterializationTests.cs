@@ -70,12 +70,12 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             await security.MarkHeadVerifiedAsync("shelly");
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
 
             var gitDir = cache.GetRepositoryPath("shelly")!;
             Assert.True(Directory.Exists(gitDir));
             Assert.Equal("ref: refs/heads/main",
-                (await File.ReadAllTextAsync(Path.Combine(gitDir, "HEAD"))).Trim());
+                (await File.ReadAllTextAsync(Path.Combine(gitDir, "HEAD"), TestContext.Current.CancellationToken)).Trim());
 
             string[] args = ["rev-parse", "refs/heads/main"];
             var refSha = (await GitClient.ExecuteAsync(gitDir, args, null, null, CancellationToken.None)).Trim();
@@ -95,13 +95,13 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             await security.MarkHeadVerifiedAsync("shelly");
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
             var gitDir = cache.GetRepositoryPath("shelly")!;
             var marker = Path.Combine(gitDir, ".atoll-head");
             var firstMarkerWrite = File.GetLastWriteTimeUtc(marker);
 
-            await Task.Delay(50);
-            await cache.EnsureRepositoryAsync("shelly");
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
 
             var secondMarkerWrite = File.GetLastWriteTimeUtc(marker);
             Assert.Equal(firstMarkerWrite, secondMarkerWrite);
@@ -122,7 +122,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             await security.MarkHeadVerifiedAsync("shelly");
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
             var gitDir = cache.GetRepositoryPath("shelly")!;
 
             string[] args = ["clone", "--quiet", gitDir, cloneDir];
@@ -132,7 +132,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
             {
                 var fullPath = Path.Combine(cloneDir, name);
                 Assert.True(File.Exists(fullPath), $"missing {name}");
-                Assert.Equal(content, await File.ReadAllTextAsync(fullPath));
+                Assert.Equal(content, await File.ReadAllTextAsync(fullPath, TestContext.Current.CancellationToken));
             }
 
             string[] args1 = ["rev-list", "--count", "HEAD"];
@@ -152,7 +152,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         var (_, cache, _, reposRoot) = CreateService();
         try
         {
-            await cache.EnsureRepositoryAsync("does-not-exist");
+            await cache.EnsureRepositoryAsync("does-not-exist", TestContext.Current.CancellationToken);
         }
         finally
         {
@@ -168,7 +168,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             await security.MarkHeadVerifiedAsync("shelly");
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
 
             var gitDir = cache.GetRepositoryPath("shelly")!;
             var packDir = Path.Combine(gitDir, "objects", "pack");
@@ -194,7 +194,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
             await security.MarkHeadVerifiedAsync("shelly");
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
 
             // A revision append changes the marker, so the next request re-materializes the
             // whole chain over an already-packed object store.
@@ -203,10 +203,10 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
             };
-            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2));
+            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2, TestContext.Current.CancellationToken));
             await security.MarkHeadVerifiedAsync("shelly");
 
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
 
             var gitDir = cache.GetRepositoryPath("shelly")!;
             var packDir = Path.Combine(gitDir, "objects", "pack");
@@ -242,7 +242,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 
-        await cache.EnsureRepositoryAsync("shelly");
+        await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
         Assert.Null(cache.GetRepositoryPath("shelly"));
     }
 
@@ -263,11 +263,11 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\nsource=(\"https://example.com/install.sh\")\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
             };
-            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2));
+            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2, TestContext.Current.CancellationToken));
             var flaggedRevision = await security.CompleteScanAsync("shelly", SecurityStatus.Flagged,
                 new SecurityFinding("network-download", FindingSeverity.Critical, "test", "curl | sh", "PKGBUILD"));
 
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
             var (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
             {
@@ -277,10 +277,10 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
 
             // Rescan the flagged head to Verified; the marker must change and the lazy
             // rebuild must restore the revision to the cloneable history.
-            await security.MarkPendingAsync("shelly", flaggedRevision, true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+            await security.MarkPendingAsync("shelly", flaggedRevision, true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
             await security.MarkHeadVerifiedAsync("shelly");
 
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
             TryCleanup(cloneDir);
             (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
@@ -314,10 +314,10 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
             };
-            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2));
+            Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2, TestContext.Current.CancellationToken));
             await security.MarkHeadVerifiedAsync("shelly");
 
-            await cache.EnsureRepositoryAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
             var (commits, pkgbuild) = await CloneAndInspectAsync(cache, "shelly", cloneDir);
             Assert.Multiple(() =>
             {
@@ -349,13 +349,13 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
                 // while holding it, so a late materializer must re-read a missing head and
                 // bail instead of rebuilding the directory after the delete committed.
                 await Task.WhenAll(
-                    cache.EnsureRepositoryAsync("shelly"),
-                    cache.EnsureRepositoryAsync("shelly"),
-                    service.DeleteAsync("shelly"));
+                    cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken),
+                    cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken),
+                    service.DeleteAsync("shelly", TestContext.Current.CancellationToken));
 
                 Assert.False(Directory.Exists(repoDir),
                     $"iteration {i}: the deleted repository must not be resurrected");
-                Assert.False(await service.ExistsAsync("shelly"),
+                Assert.False(await service.ExistsAsync("shelly", TestContext.Current.CancellationToken),
                     $"iteration {i}: the package document must be gone");
             }
         }
@@ -423,8 +423,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         var cache = new GitRepositoryCache(hidingRepo, security, options, NullLogger<GitRepositoryCache>.Instance);
         try
         {
-            await repo.InsertSeedAsync(
-                new PackageDocument
+            await repo.InsertSeedAsync(new PackageDocument
                 {
                     Id = "pkg",
                     PackageName = "pkg",
@@ -432,8 +431,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
                     UpdatedAt = T0,
                     HeadRevisionId = "rev-1",
                     Revisions = [new PackageRevisionDocument { RevisionId = "rev-1", CreatedAt = T0 }]
-                },
-                new PackageRevisionContentDocument
+                }, new PackageRevisionContentDocument
                 {
                     Id = PackageSchema.RevisionDocumentId("pkg", "rev-1"),
                     PackageName = "pkg",
@@ -443,7 +441,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
                     {
                         ["PKGBUILD"] = new() { Content = "pkgname=pkg\npkgver=1.0\n", Size = 0, Hash = "unused" }
                     }
-                });
+                }, TestContext.Current.CancellationToken);
             await repo.AppendRevisionAsync("pkg", new PackageRevisionContentDocument
             {
                 Id = PackageSchema.RevisionDocumentId("pkg", "rev-2"),
@@ -454,14 +452,14 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
                 {
                     ["PKGBUILD"] = new() { Content = "pkgname=pkg\npkgver=2.0\n", Size = 0, Hash = "unused" }
                 }
-            }, 10);
+            }, 10, TestContext.Current.CancellationToken);
 
-            await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+            await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
             await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
-            await security.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+            await security.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
             await security.CompleteScanAsync("pkg", SecurityStatus.Verified);
 
-            await cache.EnsureRepositoryAsync("pkg");
+            await cache.EnsureRepositoryAsync("pkg", TestContext.Current.CancellationToken);
 
             var gitDir = cache.GetRepositoryPath("pkg")!;
             var ct = CancellationToken.None;

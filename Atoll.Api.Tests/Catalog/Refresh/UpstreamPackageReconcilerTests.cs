@@ -43,12 +43,12 @@ public class UpstreamPackageReconcilerTests
             await service.SeedFilesAsync("removed", Files);
             var removedRepo = cache.GetRepositoryPath("removed")!;
             Directory.CreateDirectory(removedRepo);
-            await File.WriteAllTextAsync(Path.Combine(removedRepo, "HEAD"), "stale");
+            await File.WriteAllTextAsync(Path.Combine(removedRepo, "HEAD"), "stale", TestContext.Current.CancellationToken);
 
             var deleted = await reconciler.ReconcileAsync(["kept"], 0, CancellationToken.None);
-            var keptExists = await repository.ExistsAsync("kept");
-            var removedExists = await repository.ExistsAsync("removed");
-            var removedScans = await security.ListForPackageAsync("removed");
+            var keptExists = await repository.ExistsAsync("kept", TestContext.Current.CancellationToken);
+            var removedExists = await repository.ExistsAsync("removed", TestContext.Current.CancellationToken);
+            var removedScans = await security.ListForPackageAsync("removed", TestContext.Current.CancellationToken);
 
             Assert.Multiple(() =>
             {
@@ -86,8 +86,8 @@ public class UpstreamPackageReconcilerTests
         await service.SeedFilesAsync("removed", Files);
 
         var deleted = await reconciler.ReconcileAsync(["kept"], 0, CancellationToken.None);
-        var keptExists = await repository.ExistsAsync("kept");
-        var removedExists = await repository.ExistsAsync("removed");
+        var keptExists = await repository.ExistsAsync("kept", TestContext.Current.CancellationToken);
+        var removedExists = await repository.ExistsAsync("removed", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {

@@ -31,11 +31,11 @@ public class PackageIndexEndpointsTests : IDisposable
 
         await AppendAsync("e-egg", "rev-2");
 
-        var response = await _client.GetAsync("/v1/packages?limit=3&page=2");
+        var response = await _client.GetAsync("/v1/packages?limit=3&page=2", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
@@ -71,11 +71,11 @@ public class PackageIndexEndpointsTests : IDisposable
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
             await SeedAsync(name);
 
-        var response = await _client.GetAsync("/v1/packages");
+        var response = await _client.GetAsync("/v1/packages", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
@@ -93,12 +93,12 @@ public class PackageIndexEndpointsTests : IDisposable
     [Fact]
     public async Task Index_returns_400_for_out_of_range_or_malformed_parameters()
     {
-        var zeroPage = await _client.GetAsync("/v1/packages?page=0");
-        var zeroLimit = await _client.GetAsync("/v1/packages?limit=0");
-        var overMaxLimit = await _client.GetAsync("/v1/packages?limit=201");
-        var malformedPage = await _client.GetAsync("/v1/packages?page=abc");
-        var malformedSort = await _client.GetAsync("/v1/packages?sortBy=bogus");
-        var malformedOrder = await _client.GetAsync("/v1/packages?order=bogus");
+        var zeroPage = await _client.GetAsync("/v1/packages?page=0", TestContext.Current.CancellationToken);
+        var zeroLimit = await _client.GetAsync("/v1/packages?limit=0", TestContext.Current.CancellationToken);
+        var overMaxLimit = await _client.GetAsync("/v1/packages?limit=201", TestContext.Current.CancellationToken);
+        var malformedPage = await _client.GetAsync("/v1/packages?page=abc", TestContext.Current.CancellationToken);
+        var malformedSort = await _client.GetAsync("/v1/packages?sortBy=bogus", TestContext.Current.CancellationToken);
+        var malformedOrder = await _client.GetAsync("/v1/packages?order=bogus", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -117,8 +117,8 @@ public class PackageIndexEndpointsTests : IDisposable
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
             await SeedAsync(name);
 
-        var descending = await _client.GetAsync("/v1/packages?sortBy=name&order=desc");
-        var ascending = await _client.GetAsync("/v1/packages?sortBy=name&order=ASC");
+        var descending = await _client.GetAsync("/v1/packages?sortBy=name&order=desc", TestContext.Current.CancellationToken);
+        var ascending = await _client.GetAsync("/v1/packages?sortBy=name&order=ASC", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -126,12 +126,12 @@ public class PackageIndexEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, ascending.StatusCode);
         });
 
-        var descendingBody = await descending.Content.ReadAsStringAsync();
+        var descendingBody = await descending.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var descendingDoc = JsonDocument.Parse(descendingBody);
         var descendingNames = descendingDoc.RootElement.GetProperty("items")
             .EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToArray();
 
-        var ascendingBody = await ascending.Content.ReadAsStringAsync();
+        var ascendingBody = await ascending.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var ascendingDoc = JsonDocument.Parse(ascendingBody);
         var ascendingNames = ascendingDoc.RootElement.GetProperty("items")
             .EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToArray();
@@ -149,11 +149,11 @@ public class PackageIndexEndpointsTests : IDisposable
         foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin", "a-absent" })
             await SeedAsync(name);
 
-        var response = await _client.GetAsync("/v1/packages?sortBy=votes&limit=4");
+        var response = await _client.GetAsync("/v1/packages?sortBy=votes&limit=4", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
         var names = doc.RootElement.GetProperty("items")
             .EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToArray();
@@ -168,8 +168,8 @@ public class PackageIndexEndpointsTests : IDisposable
         foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin", "a-absent" })
             await SeedAsync(name);
 
-        var firstPage = await _client.GetAsync("/v1/packages?sortBy=votes&order=desc&limit=2&page=1");
-        var secondPage = await _client.GetAsync("/v1/packages?sortBy=VOTES&order=desc&limit=2&page=2");
+        var firstPage = await _client.GetAsync("/v1/packages?sortBy=votes&order=desc&limit=2&page=1", TestContext.Current.CancellationToken);
+        var secondPage = await _client.GetAsync("/v1/packages?sortBy=VOTES&order=desc&limit=2&page=2", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -177,11 +177,11 @@ public class PackageIndexEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, secondPage.StatusCode);
         });
 
-        var firstBody = await firstPage.Content.ReadAsStringAsync();
+        var firstBody = await firstPage.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var firstDoc = JsonDocument.Parse(firstBody);
         var firstItems = firstDoc.RootElement.GetProperty("items");
 
-        var secondBody = await secondPage.Content.ReadAsStringAsync();
+        var secondBody = await secondPage.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var secondDoc = JsonDocument.Parse(secondBody);
         var secondItems = secondDoc.RootElement.GetProperty("items");
 
@@ -203,11 +203,11 @@ public class PackageIndexEndpointsTests : IDisposable
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
             await SeedAsync(name);
 
-        var response = await _client.GetAsync("/v1/packages?page=99&limit=3");
+        var response = await _client.GetAsync("/v1/packages?page=99&limit=3", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
@@ -226,11 +226,11 @@ public class PackageIndexEndpointsTests : IDisposable
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
             await SeedAsync(name);
 
-        var response = await _client.GetAsync("/v1/packages?page=2147483647&limit=200");
+        var response = await _client.GetAsync("/v1/packages?page=2147483647&limit=200", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
 
         Assert.Equal(0, doc.RootElement.GetProperty("items").GetArrayLength());
@@ -242,11 +242,11 @@ public class PackageIndexEndpointsTests : IDisposable
         using var factory = new SecurityTestFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v1/packages");
+        var response = await client.GetAsync("/v1/packages", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
@@ -266,11 +266,11 @@ public class PackageIndexEndpointsTests : IDisposable
         await SeedAsync("shelly-bin");
         await SeedAsync("a-apple");
 
-        var response = await _client.GetAsync("/v1/packages?limit=2");
+        var response = await _client.GetAsync("/v1/packages?limit=2", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
         var items = doc.RootElement.GetProperty("items");
 

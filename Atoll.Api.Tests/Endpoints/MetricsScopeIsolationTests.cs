@@ -21,8 +21,8 @@ public class MetricsScopeIsolationTests
         Assert.NotEqual(hostScope, otherScope);
 
         var client = host.CreateClient();
-        await client.GetAsync("/v1/search?query=portable-kit");
-        var body = await client.GetStringAsync("/metrics");
+        await client.GetAsync("/v1/search?query=portable-kit", TestContext.Current.CancellationToken);
+        var body = await client.GetStringAsync("/metrics", TestContext.Current.CancellationToken);
 
         var atollLines = body.Split('\n')
             .Where(static line => line.StartsWith("atoll_", StringComparison.Ordinal))

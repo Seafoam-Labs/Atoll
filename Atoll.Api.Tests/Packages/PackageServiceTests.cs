@@ -138,7 +138,7 @@ public class PackageServiceTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await service.SeedFilesAsync("big-pkg", big));
 
         Assert.Contains("big.bin", ex.Message);
-        Assert.False(await repo.ExistsAsync("big-pkg"));
+        Assert.False(await repo.ExistsAsync("big-pkg", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public class PackageServiceTests
         };
 
         var ex = await Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () => await service.SeedFilesAsync("too-large", files));
-        var packageExists = await repo.ExistsAsync("too-large");
+        var packageExists = await repo.ExistsAsync("too-large", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -186,9 +186,9 @@ public class PackageServiceTests
         };
 
         await Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () =>
-            await service.AppendRevisionFromUpstreamAsync("pkg", oversizedFiles));
+            await service.AppendRevisionFromUpstreamAsync("pkg", oversizedFiles, TestContext.Current.CancellationToken));
         var afterHistory = await service.GetHistoryAsync("pkg");
-        var packageExists = await repo.ExistsAsync("pkg");
+        var packageExists = await repo.ExistsAsync("pkg", TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -205,7 +205,7 @@ public class PackageServiceTests
         var service = CreateService(repo);
 
         await service.SeedFilesAsync("shelly", SampleFiles);
-        await service.DeleteAsync("shelly");
+        await service.DeleteAsync("shelly", TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(async () => await service.GetAsync("shelly"));
     }
@@ -260,8 +260,8 @@ public class PackageServiceTests
         foreach (var name in new[] { "v-a", "v-b", "v-c", "v-missing" })
             await service.SeedFilesAsync(name, SampleFiles);
 
-        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Votes);
-        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Votes);
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Votes, ct: TestContext.Current.CancellationToken);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Votes, ct: TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -289,8 +289,8 @@ public class PackageServiceTests
         foreach (var name in new[] { "v-a", "v-b", "v-c", "v-missing" })
             await service.SeedFilesAsync(name, SampleFiles);
 
-        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
-        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -317,8 +317,8 @@ public class PackageServiceTests
         foreach (var name in new[] { "p-a", "p-b", "p-c" })
             await service.SeedFilesAsync(name, SampleFiles);
 
-        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc);
-        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc);
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -344,8 +344,8 @@ public class PackageServiceTests
         foreach (var name in new[] { "ver-a", "ver-b", "ver-c", "ver-missing" })
             await service.SeedFilesAsync(name, SampleFiles);
 
-        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Version, PackageIndexSortOrder.Desc);
-        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Version, PackageIndexSortOrder.Desc);
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Version, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Version, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -366,8 +366,8 @@ public class PackageServiceTests
         foreach (var name in new[] { "n-a", "n-b", "n-c" })
             await service.SeedFilesAsync(name, SampleFiles);
 
-        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc);
-        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc);
+        var firstPage = await service.GetIndexPageAsync(1, 2, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
+        var secondPage = await service.GetIndexPageAsync(2, 2, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -392,7 +392,7 @@ public class PackageServiceTests
         foreach (var name in new[] { "ver-a", "ver-b", "ver-c", "ver-missing" })
             await service.SeedFilesAsync(name, SampleFiles);
 
-        var page = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Version);
+        var page = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Version, ct: TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -419,7 +419,7 @@ public class PackageServiceTests
         foreach (var name in new[] { "s-a", "s-b" })
             await service.SeedFilesAsync(name, SampleFiles);
 
-        var before = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        var before = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         store.Replace(await LoadIndexAsync(
             """
@@ -429,7 +429,7 @@ public class PackageServiceTests
             ]
             """));
 
-        var after = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        var after = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -445,13 +445,13 @@ public class PackageServiceTests
         var service = CreateService(repo);
 
         await service.SeedFilesAsync("m-a", SampleFiles);
-        var initial = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        var initial = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         await service.SeedFilesAsync("m-b", SampleFiles);
-        var afterSeed = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        var afterSeed = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
-        await service.DeleteAsync("m-a");
-        var afterDelete = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        await service.DeleteAsync("m-a", TestContext.Current.CancellationToken);
+        var afterDelete = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -478,7 +478,7 @@ public class PackageServiceTests
             return release.Task;
         };
 
-        var inFlight = service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        var inFlight = service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
         await entered.Task;
 
         // Seed once the ranking read has snapshotted the names, then let that read return them.
@@ -487,7 +487,7 @@ public class PackageServiceTests
         release.SetResult();
         var stale = await inFlight;
 
-        var next = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+        var next = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
@@ -520,7 +520,7 @@ public class PackageServiceTests
         var names = new List<string>();
         for (var page = 1; page <= 4; page++)
         {
-            var response = await service.GetIndexPageAsync(page, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc);
+            var response = await service.GetIndexPageAsync(page, 2, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
             Assert.Equal(4, response.TotalPages);
             names.AddRange(response.Items.Select(item => item.Name));
         }
@@ -572,7 +572,7 @@ public class PackageServiceTests
         await service.SeedFilesAsync("boundary", files);
 
         var persisted = await service.GetAsync("boundary");
-        var packageExists = await repo.ExistsAsync("boundary");
+        var packageExists = await repo.ExistsAsync("boundary", TestContext.Current.CancellationToken);
         Assert.Multiple(() =>
         {
             Assert.True(packageExists);
@@ -600,15 +600,15 @@ public class PackageServiceTests
         try
         {
             await service.SeedFilesAsync("shelly", SampleFiles);
-            Assert.Equal(1, await security.CountPendingAsync());
+            Assert.Equal(1, await security.CountPendingAsync(TestContext.Current.CancellationToken));
             var repoDir = cache.GetRepositoryPath("shelly")!;
             Directory.CreateDirectory(repoDir);
-            await File.WriteAllTextAsync(Path.Combine(repoDir, "HEAD"), "marker-for-cleanup");
+            await File.WriteAllTextAsync(Path.Combine(repoDir, "HEAD"), "marker-for-cleanup", TestContext.Current.CancellationToken);
 
-            await Assert.ThrowsAsync<InvalidOperationException>(async () => await retryService.DeleteAsync("shelly"));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await retryService.DeleteAsync("shelly", TestContext.Current.CancellationToken));
 
-            var remainingScans = await security.ListForPackageAsync("shelly");
-            var packageStillExists = await repo.ExistsAsync("shelly");
+            var remainingScans = await security.ListForPackageAsync("shelly", TestContext.Current.CancellationToken);
+            var packageStillExists = await repo.ExistsAsync("shelly", TestContext.Current.CancellationToken);
             Assert.Multiple(() =>
             {
                 // Derived state is removed before the authoritative document, so the failed
@@ -619,9 +619,9 @@ public class PackageServiceTests
                 Assert.True(packageStillExists);
             });
 
-            await retryService.DeleteAsync("shelly");
+            await retryService.DeleteAsync("shelly", TestContext.Current.CancellationToken);
 
-            Assert.False(await repo.ExistsAsync("shelly"));
+            Assert.False(await repo.ExistsAsync("shelly", TestContext.Current.CancellationToken));
         }
         finally
         {
