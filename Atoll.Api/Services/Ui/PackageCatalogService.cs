@@ -80,12 +80,12 @@ public sealed class PackageCatalogService(
         _sortedViews = new();
 
     /// <summary>
-    /// Drops the cached seeded/head snapshot, plus anything else tagged <c>catalog</c>. Call after a
-    /// write that changes seeded names or head scan statuses. A build already in flight still stores
-    /// its result afterwards, so a racing write can stay hidden for up to one TTL.
+    /// Drops the cached seeded/head snapshot without touching the ranker's sorted arrays. Call after
+    /// a write that changes head scan statuses. A build already in flight still stores its result
+    /// afterwards, so a racing write can stay hidden for up to one TTL.
     /// </summary>
     public ValueTask InvalidateSnapshotAsync(CancellationToken ct = default) =>
-        cache.RemoveByTagAsync(AtollCacheKeys.TagCatalog, ct);
+        cache.RemoveByTagAsync(AtollCacheKeys.TagHeadStatus, ct);
 
     public async Task<CatalogResult> SearchAsync(
         string? query,
@@ -273,7 +273,7 @@ public sealed class PackageCatalogService(
             AtollCacheKeys.SeededSnapshot,
             BuildSnapshotAsync,
             SnapshotOptions,
-            [AtollCacheKeys.TagCatalog],
+            [AtollCacheKeys.TagCatalog, AtollCacheKeys.TagHeadStatus],
             ct);
 
     private async ValueTask<SeededSnapshot> BuildSnapshotAsync(CancellationToken ct)

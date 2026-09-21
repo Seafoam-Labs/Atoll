@@ -10,6 +10,8 @@ internal static class AtollCacheKeys
 {
     public const string TagCatalog = "catalog";
 
+    public const string TagHeadStatus = "head-status";
+
     public const string RankNames = "atoll.rank.names";
 
     public const string SeededSnapshot = "atoll.ui.seeded-snapshot";

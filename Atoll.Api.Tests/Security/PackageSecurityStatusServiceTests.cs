@@ -3,6 +3,7 @@ using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
+using Microsoft.Extensions.Caching.Hybrid;
 using Xunit;
 
 namespace Atoll.Api.Tests.Security;
@@ -11,6 +12,7 @@ public class PackageSecurityStatusServiceTests
 {
     private readonly InMemoryPackageRepository _packages;
     private readonly InMemoryPackageSecurityRepository _security;
+    private readonly HybridCache _cache;
     private readonly PackageSecurityStatusService _service;
     private readonly int _policyVersion;
 
@@ -18,9 +20,10 @@ public class PackageSecurityStatusServiceTests
     {
         _packages = new InMemoryPackageRepository();
         _security = new InMemoryPackageSecurityRepository();
+        _cache = TestHybridCache.New();
         var scanner = new PkgBuildSecurityScanner();
         _policyVersion = scanner.PolicyVersion;
-        _service = new PackageSecurityStatusService(_packages, _security, scanner);
+        _service = new PackageSecurityStatusService(_packages, _security, scanner, _cache);
     }
 
     private async Task SeedAsync(string package, string head, params string[] revisions)
@@ -188,5 +191,33 @@ public class PackageSecurityStatusServiceTests
             Assert.Equal(SecurityStatus.Pending, scan!.Status);
             Assert.False(scan.IsHead, "a non-head revision keeps its head flag");
         });
+    }
+
+    [Fact]
+    public async Task QueueRescanAsync_on_the_head_drops_the_head_status_tag()
+    {
+        await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
+        var ct = TestContext.Current.CancellationToken;
+        var probe = new HeadStatusProbe(_cache);
+        await probe.ReadAsync(ct);
+
+        await _service.QueueRescanAsync("pkg", ct: ct);
+        await probe.ReadAsync(ct);
+
+        Assert.Equal(2, probe.Runs);
+    }
+
+    [Fact]
+    public async Task QueueRescanAsync_on_an_older_revision_keeps_the_head_status_entry()
+    {
+        await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
+        var ct = TestContext.Current.CancellationToken;
+        var probe = new HeadStatusProbe(_cache);
+        await probe.ReadAsync(ct);
+
+        await _service.QueueRescanAsync("pkg", "rev-2", ct);
+        await probe.ReadAsync(ct);
+
+        Assert.Equal(1, probe.Runs);
     }
 }

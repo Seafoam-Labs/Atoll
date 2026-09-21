@@ -212,6 +212,69 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     private static Task<CatalogResult> SearchSeededAsync(PackageCatalogService catalog, CancellationToken ct) =>
         catalog.SearchAsync(null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: ct);
 
+    private static Task<PackageIndexResponse> SortedPageAsync(IPackageService packages, CancellationToken ct) =>
+        packages.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
+
+    [Fact]
+    public async Task HeadRescanRebuildsTheSnapshotWithoutReListingTheRankedNames()
+    {
+        // One cache shared by the ranker's writer, the catalog, and the rescan queue, as in the
+        // host: the snapshot carries both tags, the ranker only <c>catalog</c>, so a head rescan
+        // must refresh the former and leave the latter warm.
+        var cache = TestHybridCache.New();
+        var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
+        var scanner = new PkgBuildSecurityScanner();
+        var options = Options.Create(new AtollOptions
+        {
+            Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
+        });
+        var packageService = new PackageService(
+            repo,
+            options,
+            security,
+            scanner,
+            new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance),
+            cache,
+            _store);
+        var catalog = new PackageCatalogService(_store, packageService, security, cache);
+        var status = new PackageSecurityStatusService(repo, security, scanner, cache);
+
+        var ct = TestContext.Current.CancellationToken;
+        await packageService.SeedFilesAsync("shelly-bin", new Dictionary<string, string>
+        {
+            ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
+            [".SRCINFO"] = "pkgname = shelly-bin\n"
+        });
+        await security.CompleteScanAsync("shelly-bin", SecurityStatus.Verified);
+
+        // Warming lists the names twice: once for the ranker, once for the snapshot. Only a ranked
+        // sort reaches the ranker; name ascending pages straight out of the repository.
+        await SortedPageAsync(packageService, ct);
+        var warm = await SearchSeededAsync(catalog, ct);
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(2, repo.ListCalls);
+            Assert.Equal(SecurityStatus.Verified, warm.Rows.Single().Head!.Status);
+        });
+
+        await status.QueueRescanAsync("shelly-bin", ct: ct);
+
+        var stillWarm = await SortedPageAsync(packageService, ct);
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(2, repo.ListCalls);
+            Assert.Equal(["shelly-bin"], stillWarm.Items.Select(item => item.Name));
+        });
+
+        var rebuilt = await SearchSeededAsync(catalog, ct);
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(3, repo.ListCalls);
+            Assert.Equal(SecurityStatus.Pending, rebuilt.Rows.Single().Head!.Status);
+        });
+    }
+
     [Fact]
     public async Task VotesDescendingSortOrdersByVotes()
     {
