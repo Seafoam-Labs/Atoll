@@ -153,13 +153,9 @@ public sealed class PackageCatalogService(
         var rows = new List<CatalogRow>(window?.Count ?? 0);
         if (window is not null)
         {
-            foreach (var package in window)
-            {
-                rows.Add(new CatalogRow(
-                    package,
-                    snapshot.SeededNames.Contains(package.Name),
-                    snapshot.HeadStatuses.TryGetValue(package.Name, out var head) ? head : null));
-            }
+            rows.AddRange(window.Select(package =>
+                new CatalogRow(package, snapshot.SeededNames.Contains(package.Name),
+                    snapshot.HeadStatuses.GetValueOrDefault(package.Name))));
         }
 
         return new CatalogResult(rows, total, page, PageSize, TotalPages(total));
@@ -256,18 +252,18 @@ public sealed class PackageCatalogService(
         {
             CatalogSort.NameAsc => Comparer<AurPackageMetadata>.Create(ByName),
             CatalogSort.NameDesc => Comparer<AurPackageMetadata>.Create((a, b) => ByName(b, a)),
-            CatalogSort.VotesAsc => Comparer<AurPackageMetadata>.Create(
-                (a, b) => a.NumVotes.CompareTo(b.NumVotes) is var c && c != 0 ? c : ByName(a, b)),
-            CatalogSort.VotesDesc => Comparer<AurPackageMetadata>.Create(
-                (a, b) => b.NumVotes.CompareTo(a.NumVotes) is var c && c != 0 ? c : ByName(a, b)),
-            CatalogSort.PopularityAsc => Comparer<AurPackageMetadata>.Create(
-                (a, b) => a.Popularity.CompareTo(b.Popularity) is var c && c != 0 ? c : ByName(a, b)),
-            CatalogSort.PopularityDesc => Comparer<AurPackageMetadata>.Create(
-                (a, b) => b.Popularity.CompareTo(a.Popularity) is var c && c != 0 ? c : ByName(a, b)),
-            CatalogSort.LastModifiedAsc => Comparer<AurPackageMetadata>.Create(
-                (a, b) => a.LastModified.CompareTo(b.LastModified) is var c && c != 0 ? c : ByName(a, b)),
-            CatalogSort.LastModifiedDesc => Comparer<AurPackageMetadata>.Create(
-                (a, b) => b.LastModified.CompareTo(a.LastModified) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.VotesAsc => Comparer<AurPackageMetadata>.Create((a, b) =>
+                a.NumVotes.CompareTo(b.NumVotes) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.VotesDesc => Comparer<AurPackageMetadata>.Create((a, b) =>
+                b.NumVotes.CompareTo(a.NumVotes) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.PopularityAsc => Comparer<AurPackageMetadata>.Create((a, b) =>
+                a.Popularity.CompareTo(b.Popularity) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.PopularityDesc => Comparer<AurPackageMetadata>.Create((a, b) =>
+                b.Popularity.CompareTo(a.Popularity) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.LastModifiedAsc => Comparer<AurPackageMetadata>.Create((a, b) =>
+                a.LastModified.CompareTo(b.LastModified) is var c && c != 0 ? c : ByName(a, b)),
+            CatalogSort.LastModifiedDesc => Comparer<AurPackageMetadata>.Create((a, b) =>
+                b.LastModified.CompareTo(a.LastModified) is var c && c != 0 ? c : ByName(a, b)),
             _ => Comparer<AurPackageMetadata>.Create(ByName)
         };
     }
