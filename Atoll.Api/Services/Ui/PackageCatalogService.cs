@@ -1,11 +1,14 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Caching;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace Atoll.Api.Services.Ui;
 
@@ -59,14 +62,16 @@ public sealed record CatalogResult(
 public sealed class PackageCatalogService(
     PackageIndexStore indexStore,
     IPackageService packageService,
-    IPackageSecurityRepository securityRepository)
+    IPackageSecurityRepository securityRepository,
+    HybridCache cache)
 {
     public const int PageSize = 50;
 
-    private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(30);
-
-    private readonly SemaphoreSlim _snapshotGate = new(1, 1);
-    private SeededSnapshot _snapshot = SeededSnapshot.Empty;
+    private static readonly HybridCacheEntryOptions SnapshotOptions = new()
+    {
+        Expiration = TimeSpan.FromSeconds(30),
+        LocalCacheExpiration = TimeSpan.FromSeconds(30),
+    };
 
     // Sorted package arrays cached per (index instance, sort). PackageIndexStore.Replace swaps the
     // whole SearchIndexData, and ConditionalWeakTable keys on that instance, so a generation's
@@ -74,11 +79,12 @@ public sealed class PackageCatalogService(
     private readonly ConditionalWeakTable<SearchIndexData, ConcurrentDictionary<CatalogSort, AurPackageMetadata[]>>
         _sortedViews = new();
 
-    /// <summary>Invalidates the cached seeded/head-status snapshot.</summary>
-    public void InvalidateSnapshot()
-    {
-        Volatile.Write(ref _snapshot, _snapshot with { FetchedAt = DateTimeOffset.MinValue });
-    }
+    /// <summary>
+    /// Drops the cached seeded/head snapshot, plus anything else tagged <c>catalog</c>. Call after a
+    /// write that changes seeded names or head scan statuses.
+    /// </summary>
+    public ValueTask InvalidateSnapshotAsync(CancellationToken ct = default) =>
+        cache.RemoveByTagAsync(AtollCacheKeys.TagCatalog, ct);
 
     public async Task<CatalogResult> SearchAsync(
         string? query,
@@ -265,52 +271,35 @@ public sealed class PackageCatalogService(
         };
     }
 
-    private async Task<SeededSnapshot> GetSeededSnapshotAsync(CancellationToken ct)
+    private ValueTask<SeededSnapshot> GetSeededSnapshotAsync(CancellationToken ct) =>
+        cache.GetOrCreateAsync(
+            AtollCacheKeys.SeededSnapshot,
+            BuildSnapshotAsync,
+            SnapshotOptions,
+            [AtollCacheKeys.TagCatalog],
+            ct);
+
+    private async ValueTask<SeededSnapshot> BuildSnapshotAsync(CancellationToken ct)
     {
-        var current = Volatile.Read(ref _snapshot);
-        if (current.IsFresh) return current;
+        var seeded = await packageService.ListAsync();
+        var heads = await securityRepository.ListHeadStatusesAsync(ct);
 
-        await _snapshotGate.WaitAsync(ct);
-        try
-        {
-            current = Volatile.Read(ref _snapshot);
-            if (current.IsFresh) return current;
+        // A head promotion leaves two isHead documents for one package until it demotes the
+        // previous head, so the last one read wins rather than a duplicate key throwing.
+        var headStatuses = new Dictionary<string, HeadScanStatus>(heads.Count, StringComparer.Ordinal);
+        foreach (var head in heads)
+            headStatuses[head.PackageName] = head;
 
-            var seeded = await packageService.ListAsync();
-            var heads = await securityRepository.ListHeadStatusesAsync(ct);
-
-            // A head promotion leaves two isHead documents for one package until it demotes the
-            // previous head, so the last one read wins rather than a duplicate key throwing.
-            var headStatuses = new Dictionary<string, HeadScanStatus>(heads.Count, StringComparer.Ordinal);
-            foreach (var head in heads)
-                headStatuses[head.PackageName] = head;
-
-            var next = new SeededSnapshot(
-                seeded.ToFrozenSet(StringComparer.Ordinal),
-                headStatuses.ToFrozenDictionary(StringComparer.Ordinal),
-                DateTimeOffset.UtcNow);
-
-            Volatile.Write(ref _snapshot, next);
-            return next;
-        }
-        finally
-        {
-            _snapshotGate.Release();
-        }
+        return new SeededSnapshot(
+            seeded.ToFrozenSet(StringComparer.Ordinal),
+            headStatuses.ToFrozenDictionary(StringComparer.Ordinal));
     }
 
+    // ImmutableObject keeps warm L1 reads reference-shared instead of serialization-cloned, which
+    // is also what makes the frozen collections safe: System.Text.Json cannot round-trip them, so
+    // an L2 would need a custom serializer or Immutable* types.
+    [ImmutableObject(true)]
     private sealed record SeededSnapshot(
         FrozenSet<string> SeededNames,
-        FrozenDictionary<string, HeadScanStatus> HeadStatuses,
-        DateTimeOffset FetchedAt)
-    {
-        public static SeededSnapshot Empty { get; } = new(
-            FrozenSet<string>.Empty,
-            FrozenDictionary<string, HeadScanStatus>.Empty,
-            DateTimeOffset.MinValue);
-
-        public bool IsFresh =>
-            FetchedAt != DateTimeOffset.MinValue
-            && DateTimeOffset.UtcNow - FetchedAt < SnapshotTtl;
-    }
+        FrozenDictionary<string, HeadScanStatus> HeadStatuses);
 }

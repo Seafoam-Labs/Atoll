@@ -1,9 +1,11 @@
 using System.Collections.Immutable;
+using Atoll.Api.Services.Caching;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
 using Atoll.Api.Services.Packages.Persistence;
 
@@ -15,7 +17,8 @@ public sealed class PackageService(
     IPackageSecurityRepository securityRepository,
     IPackageSecurityScanner scanner,
     IGitRepositoryCache gitCache,
-    PackageIndexStore? indexStore = null) : IPackageService
+    PackageIndexStore? indexStore = null,
+    HybridCache? hybridCache = null) : IPackageService
 {
     public const int DefaultIndexPageLimit = 50;
     public const int MaxIndexPageLimit = 200;
@@ -144,6 +147,8 @@ public sealed class PackageService(
         await using var deletion = await gitCache.BeginDeleteAsync(packageName, ct);
         await repo.DeleteAsync(packageName, ct);
         _ranker.Invalidate();
+        if (hybridCache is not null)
+            await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog, ct);
     }
 
     public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
@@ -165,6 +170,8 @@ public sealed class PackageService(
         await repo.InsertSeedAsync(doc, snapshot.Content);
         await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true, scanner.PolicyVersion);
         _ranker.Invalidate();
+        if (hybridCache is not null)
+            await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog);
     }
 
     public async Task<bool> AppendRevisionFromUpstreamAsync(

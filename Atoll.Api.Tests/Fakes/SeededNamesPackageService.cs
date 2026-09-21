@@ -4,8 +4,12 @@ namespace Atoll.Api.Tests.Fakes;
 
 internal sealed class SeededNamesPackageService(IReadOnlyList<string> seededNames) : IPackageService
 {
+    /// <summary>Counts calls so tests can pin snapshot caching.</summary>
+    internal int ListCalls { get; private set; }
+
     public Task<IReadOnlyList<string>> ListAsync()
     {
+        ListCalls++;
         return Task.FromResult(seededNames);
     }
 

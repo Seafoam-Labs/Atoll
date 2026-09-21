@@ -1,10 +1,14 @@
 using System.Collections.Immutable;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Git;
+using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Atoll.Api.Tests.Ui;
@@ -33,7 +37,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         return new PackageCatalogService(
             _store,
             new SeededNamesPackageService(_seededNames),
-            _securityRepository);
+            _securityRepository,
+            TestHybridCache.New());
     }
 
     [Fact]
@@ -146,6 +151,68 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SeededSnapshotIsBuiltOncePerWindowAndAgainAfterInvalidation()
+    {
+        var packageService = new SeededNamesPackageService(["shelly-bin"]);
+        var service = new PackageCatalogService(
+            _store, packageService, _securityRepository, TestHybridCache.New());
+
+        var ct = TestContext.Current.CancellationToken;
+        await SearchSeededAsync(service, ct);
+        await SearchSeededAsync(service, ct);
+
+        Assert.Equal(1, packageService.ListCalls);
+
+        await service.InvalidateSnapshotAsync(ct);
+
+        await SearchSeededAsync(service, ct);
+        Assert.Equal(2, packageService.ListCalls);
+    }
+
+    [Fact]
+    public async Task SeedingThroughPackageServiceMakesTheNextSearchSeeTheSeededRow()
+    {
+        // The catalog and the writer share one HybridCache, as they do as host singletons: the
+        // write-path tag removal, not a UI-side invalidator, is what refreshes the snapshot.
+        var cache = TestHybridCache.New();
+        var repo = new InMemoryPackageRepository();
+        var security = new InMemoryPackageSecurityRepository();
+        var options = Options.Create(new AtollOptions
+        {
+            Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
+        });
+        var packageService = new PackageService(
+            repo,
+            options,
+            security,
+            new PkgBuildSecurityScanner(),
+            new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance),
+            _store,
+            cache);
+        var catalog = new PackageCatalogService(_store, packageService, security, cache);
+
+        var ct = TestContext.Current.CancellationToken;
+        Assert.Empty((await SearchSeededAsync(catalog, ct)).Rows);
+
+        await packageService.SeedFilesAsync("shelly-bin", new Dictionary<string, string>
+        {
+            ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
+            [".SRCINFO"] = "pkgname = shelly-bin\n"
+        });
+
+        var seeded = await SearchSeededAsync(catalog, ct);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(["shelly-bin"], seeded.Rows.Select(row => row.Package.Name));
+            Assert.True(seeded.Rows.Single().IsSeeded);
+        });
+    }
+
+    private static Task<CatalogResult> SearchSeededAsync(PackageCatalogService catalog, CancellationToken ct) =>
+        catalog.SearchAsync(null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: ct);
+
+    [Fact]
     public async Task VotesDescendingSortOrdersByVotes()
     {
         var result = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, ct: TestContext.Current.CancellationToken);
@@ -170,7 +237,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository);
+            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New());
 
         var page1 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 1, ct: TestContext.Current.CancellationToken);
         var page2 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 2, ct: TestContext.Current.CancellationToken);
@@ -198,7 +265,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository);
+            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New());
 
         var page1 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 1, ct: TestContext.Current.CancellationToken);
         var page2 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 2, ct: TestContext.Current.CancellationToken);
@@ -233,7 +300,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository);
+            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New());
 
         var result = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 0, ct: TestContext.Current.CancellationToken);
 
@@ -251,7 +318,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository);
+            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New());
 
         var before = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
         Assert.Equal(["pkg-a"], before.Rows.Select(row => row.Package.Name));

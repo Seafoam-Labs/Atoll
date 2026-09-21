@@ -4,6 +4,7 @@ using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Xunit;
 
 namespace Atoll.Api.Tests.Ui;
@@ -79,7 +80,8 @@ public class PackageCatalogServicePerfTests
         _service = new PackageCatalogService(
             store,
             new SeededNamesPackageService(seeded),
-            new InMemoryPackageSecurityRepository());
+            new InMemoryPackageSecurityRepository(),
+            TestHybridCache.New());
     }
 
     [Fact]
