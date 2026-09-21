@@ -1,12 +1,15 @@
+using System.ComponentModel;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Sync.Bulk;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Sync.Refresh;
+using Atoll.Api.Services.Caching;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Ui;
@@ -17,6 +20,7 @@ namespace Atoll.Api.Services.Ui;
 ///     assembly time instead of implying a consistent snapshot. Assembled models are cached briefly
 ///     so repeated page loads or polling do not re-query MongoDB on every hit.
 /// </summary>
+[ImmutableObject(true)]
 public sealed record StatusDashboardModel(
     RefreshStatusSnapshot IndexRefresh,
     int IndexPackages,
@@ -42,44 +46,26 @@ public sealed class StatusDashboardService(
     DirectSeedStatusStore directSeedStatus,
     BulkSeedStatusStore bulkSeedStatus,
     RefreshStatusStore refreshStatus,
-    IOptions<AtollOptions> options)
+    IOptions<AtollOptions> options,
+    HybridCache cache)
 {
     public const int ExclusionRenderCap = 50;
 
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(5);
-
-    private readonly SemaphoreSlim _cacheGate = new(1, 1);
-    private StatusDashboardModel? _cached;
-
-    public async Task<StatusDashboardModel> GetAsync(CancellationToken ct = default)
+    private static readonly HybridCacheEntryOptions DashboardOptions = new()
     {
-        ct.ThrowIfCancellationRequested();
+        Expiration = TimeSpan.FromSeconds(5),
+        LocalCacheExpiration = TimeSpan.FromSeconds(5),
+    };
 
-        var cached = Volatile.Read(ref _cached);
-        if (cached is not null && IsFresh(cached)) return cached;
+    public Task<StatusDashboardModel> GetAsync(CancellationToken ct = default) =>
+        cache.GetOrCreateAsync(
+            AtollCacheKeys.StatusDashboard,
+            AssembleAsync,
+            DashboardOptions,
+            cancellationToken: ct)
+            .AsTask();
 
-        await _cacheGate.WaitAsync(ct);
-        try
-        {
-            cached = Volatile.Read(ref _cached);
-            if (cached is not null && IsFresh(cached)) return cached;
-
-            var model = await AssembleAsync(ct);
-            Volatile.Write(ref _cached, model);
-            return model;
-        }
-        finally
-        {
-            _cacheGate.Release();
-        }
-    }
-
-    private static bool IsFresh(StatusDashboardModel model)
-    {
-        return DateTimeOffset.UtcNow - model.AssembledUtc < CacheTtl;
-    }
-
-    private async Task<StatusDashboardModel> AssembleAsync(CancellationToken ct)
+    private async ValueTask<StatusDashboardModel> AssembleAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 

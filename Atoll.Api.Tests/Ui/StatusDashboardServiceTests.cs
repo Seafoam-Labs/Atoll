@@ -8,6 +8,7 @@ using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -62,7 +63,8 @@ public class StatusDashboardServiceTests
             new DirectSeedStatusStore(seedMode == SeedMode.Direct),
             new BulkSeedStatusStore(seedMode == SeedMode.Bulk),
             new RefreshStatusStore(refreshEnabled),
-            Options.Create(new AtollOptions { Seed = new SeedOptions { Mode = seedMode } }));
+            Options.Create(new AtollOptions { Seed = new SeedOptions { Mode = seedMode } }),
+            TestHybridCache.New());
     }
 
     [Fact]
