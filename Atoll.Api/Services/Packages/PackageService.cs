@@ -72,7 +72,7 @@ public sealed class PackageService(
 
         // Same overflow guard; totals describe the ranked snapshot the page is sliced from.
         var rankedSkip = (long)(page - 1) * limit;
-        if (rankedSkip >= rankedTotal || rankedSkip > int.MaxValue)
+        if (rankedSkip >= rankedTotal)
             return new PackageIndexResponse([], page, limit, rankedTotal, rankedPages);
 
         var start = (int)rankedSkip;
