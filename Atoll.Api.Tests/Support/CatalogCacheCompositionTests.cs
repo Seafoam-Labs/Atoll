@@ -51,7 +51,7 @@ public class CatalogCacheCompositionTests
     public void The_host_raises_the_payload_cap_above_the_stock_default()
     {
         // The ranker stores full-corpus name arrays (~2.5 MB at 119k names). The stock 1 MB cap does
-        // not refuse the store but logs one Error per store (spike 0.1), so the host must raise it.
+        // not refuse the store but logs one Error per store, so the host must raise it.
         using var factory = new SecurityTestFactory();
         var options = factory.Services.GetRequiredService<IOptions<HybridCacheOptions>>().Value;
 

@@ -3,9 +3,8 @@ using Xunit;
 
 namespace Atoll.Api.Tests.Support;
 
-// Contracts the HybridCache-backed services (ranker, catalog snapshot, dashboard) lean on,
-// graduated from the step 0 spike of cache.md. Built on the real DefaultHybridCache: mocking the
-// abstract class would not pin stampede coalescing.
+// Contracts the HybridCache-backed services (ranker, catalog snapshot, dashboard) lean on. Built
+// on the real DefaultHybridCache: mocking the abstract class would not pin stampede coalescing.
 public class HybridCacheSemanticsTests
 {
     private static readonly HybridCacheEntryOptions LongLived = new()
@@ -18,7 +17,7 @@ public class HybridCacheSemanticsTests
 
     // Measured: a removal that lands while a factory is in flight does not evict that factory's late
     // store. A value generated before a write can therefore serve for one full TTL after a racing
-    // write; the next invalidation or expiry heals it (accepted delta 2 in cache.md).
+    // write; the next invalidation or expiry heals it.
     [Fact]
     public async Task RemoveByTagAsync_does_not_evict_the_late_store_of_an_in_flight_factory()
     {
