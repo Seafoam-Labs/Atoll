@@ -18,6 +18,7 @@ using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Services.Ui;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -257,6 +258,17 @@ internal static class ServiceCollectionExtensions
             if (refreshEnabled)
                 services.AddHostedService<PackageRefreshWorker>();
 
+            return services;
+        }
+
+        /// <summary>
+        ///     Shared HybridCache (L1 only) for the TTL caches. The default 1 MB payload cap logs an
+        ///     error on every store of the ranker's full name arrays, so it is raised; 16 MB measured
+        ///     clean. No default entry options: each consuming service passes its own TTL explicitly.
+        /// </summary>
+        public IServiceCollection AddCachingServices()
+        {
+            services.AddHybridCache(options => options.MaximumPayloadBytes = 16 * 1024 * 1024);
             return services;
         }
 

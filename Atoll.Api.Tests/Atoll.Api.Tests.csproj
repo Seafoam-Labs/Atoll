@@ -10,6 +10,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.10.0" />
         <PackageReference Include="Testcontainers.MongoDb" Version="4.15.0" />
         <PackageReference Include="xunit.v3" Version="4.0.1" />
         <PackageReference Include="xunit.analyzers" Version="2.1.0">

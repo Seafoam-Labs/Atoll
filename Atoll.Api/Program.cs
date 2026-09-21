@@ -10,6 +10,7 @@ builder.WebHost.UseStaticWebAssets();
 builder.Services.AddAtollOptions(builder.Configuration);
 builder.Services.AddAtollInfrastructure();
 builder.Services.AddAtollObservability();
+builder.Services.AddCachingServices();
 builder.Services.AddCatalogServices();
 builder.Services.AddPackageServices();
 builder.Services.AddGitServices();
