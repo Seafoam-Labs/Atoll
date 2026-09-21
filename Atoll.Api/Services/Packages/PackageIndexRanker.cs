@@ -47,7 +47,9 @@ internal sealed class PackageIndexRanker(
         var catalog = CurrentIndex.ByNames;
         var sorted = (await cache.GetOrCreateAsync(
             AtollCacheKeys.RankSorted(sortBy, order),
-            _ => new ValueTask<RankedNames>(new RankedNames(Rank(names, catalog, sortBy, order))),
+            (names, catalog, sortBy, order),
+            static (state, _) => new ValueTask<RankedNames>(
+                new RankedNames(Rank(state.names, state.catalog, state.sortBy, state.order))),
             RankOptions,
             [AtollCacheKeys.TagCatalog],
             ct)).Names;
