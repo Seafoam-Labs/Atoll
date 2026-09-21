@@ -27,7 +27,7 @@ public sealed class PackageService(
 
     // Internal implementation detail built from the same dependencies rather than registered:
     // PackageIndexRanker has no other consumers.
-    private readonly PackageIndexRanker _ranker = new(repo, hybridCache, indexStore);
+    private readonly PackageIndexRanker _ranker = new(repo, hybridCache, indexStore, options);
 
     public Task<IReadOnlyList<string>> ListAsync()
     {

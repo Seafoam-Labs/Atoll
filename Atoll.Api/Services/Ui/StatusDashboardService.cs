@@ -51,17 +51,17 @@ public sealed class StatusDashboardService(
 {
     public const int ExclusionRenderCap = 50;
 
-    private static readonly HybridCacheEntryOptions DashboardOptions = new()
+    private readonly HybridCacheEntryOptions _dashboardOptions = new()
     {
-        Expiration = TimeSpan.FromSeconds(5),
-        LocalCacheExpiration = TimeSpan.FromSeconds(5),
+        Expiration = TimeSpan.FromSeconds(options.Value.Caching.DashboardTtlSeconds),
+        LocalCacheExpiration = TimeSpan.FromSeconds(options.Value.Caching.DashboardTtlSeconds),
     };
 
     public Task<StatusDashboardModel> GetAsync(CancellationToken ct = default) =>
         cache.GetOrCreateAsync(
             AtollCacheKeys.StatusDashboard,
             AssembleAsync,
-            DashboardOptions,
+            _dashboardOptions,
             cancellationToken: ct)
             .AsTask();
 

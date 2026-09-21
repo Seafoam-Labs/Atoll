@@ -13,6 +13,7 @@ public sealed class AtollOptions
     public MutationsOptions Mutations { get; init; } = new();
     public ProxyOptions Proxy { get; init; } = new();
     public UiOptions Ui { get; init; } = new();
+    public CachingOptions Caching { get; init; } = new();
 }
 
 public enum SeedMode
@@ -154,4 +155,13 @@ public sealed class UiOptions
     [Required] [Url] public string ExternalBaseUrl { get; init; } = "http://localhost:5290";
 
     [Url] public string? GrafanaUrl { get; init; }
+}
+
+public sealed class CachingOptions
+{
+    [Range(1, 3600)] public int RankTtlSeconds { get; init; } = 30;
+
+    [Range(1, 3600)] public int SnapshotTtlSeconds { get; init; } = 30;
+
+    [Range(1, 3600)] public int DashboardTtlSeconds { get; init; } = 5;
 }

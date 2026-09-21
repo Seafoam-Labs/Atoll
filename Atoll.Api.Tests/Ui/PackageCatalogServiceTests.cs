@@ -38,7 +38,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
             _store,
             new SeededNamesPackageService(_seededNames),
             _securityRepository,
-            TestHybridCache.New());
+            TestHybridCache.New(),
+            Options.Create(new AtollOptions()));
     }
 
     [Fact]
@@ -170,7 +171,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
             new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance),
             cache,
             _store);
-        var catalog = new PackageCatalogService(_store, packageService, security, cache);
+        var catalog = new PackageCatalogService(_store, packageService, security, cache, options);
 
         var ct = TestContext.Current.CancellationToken;
         Assert.Empty((await SearchSeededAsync(catalog, ct)).Rows);
@@ -222,7 +223,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
             new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance),
             cache,
             _store);
-        var catalog = new PackageCatalogService(_store, packageService, security, cache);
+        var catalog = new PackageCatalogService(_store, packageService, security, cache, options);
         var status = new PackageSecurityStatusService(repo, security, scanner, cache);
 
         var ct = TestContext.Current.CancellationToken;
@@ -285,7 +286,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New());
+            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New(),
+            Options.Create(new AtollOptions()));
 
         var page1 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 1, ct: TestContext.Current.CancellationToken);
         var page2 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 2, ct: TestContext.Current.CancellationToken);
@@ -313,7 +315,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New());
+            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New(),
+            Options.Create(new AtollOptions()));
 
         var page1 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 1, ct: TestContext.Current.CancellationToken);
         var page2 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 2, ct: TestContext.Current.CancellationToken);
@@ -348,7 +351,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New());
+            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New(),
+            Options.Create(new AtollOptions()));
 
         var result = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 0, ct: TestContext.Current.CancellationToken);
 
@@ -366,7 +370,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New());
+            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New(),
+            Options.Create(new AtollOptions()));
 
         var before = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
         Assert.Equal(["pkg-a"], before.Rows.Select(row => row.Package.Name));

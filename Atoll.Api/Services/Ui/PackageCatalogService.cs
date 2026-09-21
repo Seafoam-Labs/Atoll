@@ -9,6 +9,7 @@ using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Ui;
 
@@ -63,14 +64,15 @@ public sealed class PackageCatalogService(
     PackageIndexStore indexStore,
     IPackageService packageService,
     IPackageSecurityRepository securityRepository,
-    HybridCache cache)
+    HybridCache cache,
+    IOptions<AtollOptions> options)
 {
     public const int PageSize = 50;
 
-    private static readonly HybridCacheEntryOptions SnapshotOptions = new()
+    private readonly HybridCacheEntryOptions _snapshotOptions = new()
     {
-        Expiration = TimeSpan.FromSeconds(30),
-        LocalCacheExpiration = TimeSpan.FromSeconds(30),
+        Expiration = TimeSpan.FromSeconds(options.Value.Caching.SnapshotTtlSeconds),
+        LocalCacheExpiration = TimeSpan.FromSeconds(options.Value.Caching.SnapshotTtlSeconds),
     };
 
     // Sorted package arrays cached per (index instance, sort). PackageIndexStore.Replace swaps the
@@ -266,7 +268,7 @@ public sealed class PackageCatalogService(
         cache.GetOrCreateAsync(
             AtollCacheKeys.SeededSnapshot,
             BuildSnapshotAsync,
-            SnapshotOptions,
+            _snapshotOptions,
             [AtollCacheKeys.TagCatalog, AtollCacheKeys.TagHeadStatus],
             ct);
 

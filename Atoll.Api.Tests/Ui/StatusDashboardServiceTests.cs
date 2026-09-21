@@ -51,7 +51,8 @@ public class StatusDashboardServiceTests
         InMemoryPackageSecurityRepository? security = null,
         InMemorySeedExclusionRepository? exclusions = null,
         SeedMode seedMode = SeedMode.Direct,
-        bool refreshEnabled = false)
+        bool refreshEnabled = false,
+        CachingOptions? caching = null)
     {
         return new StatusDashboardService(
             store,
@@ -63,7 +64,11 @@ public class StatusDashboardServiceTests
             new DirectSeedStatusStore(seedMode == SeedMode.Direct),
             new BulkSeedStatusStore(seedMode == SeedMode.Bulk),
             new RefreshStatusStore(refreshEnabled),
-            Options.Create(new AtollOptions { Seed = new SeedOptions { Mode = seedMode } }),
+            Options.Create(new AtollOptions
+            {
+                Seed = new SeedOptions { Mode = seedMode },
+                Caching = caching ?? new CachingOptions()
+            }),
             TestHybridCache.New());
     }
 
@@ -183,6 +188,35 @@ public class StatusDashboardServiceTests
             Assert.True(ReferenceEquals(first, second));
             Assert.Equal(1, counting.CountCalls);
             Assert.Equal(first.AssembledUtc, second.AssembledUtc);
+        });
+    }
+
+    [Fact]
+    public async Task GetAsync_rebuilds_after_the_configured_ttl_elapses()
+    {
+        var counting = new CountingPackageService(3);
+        var service = CreateService(
+            IndexWithPackages(Meta("one")),
+            packageService: counting,
+            caching: new CachingOptions { DashboardTtlSeconds = 1 });
+
+        var first = await service.GetAsync(TestContext.Current.CancellationToken);
+        var second = await service.GetAsync(TestContext.Current.CancellationToken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.True(ReferenceEquals(first, second));
+            Assert.Equal(1, counting.CountCalls);
+        });
+
+        await Task.Delay(TimeSpan.FromMilliseconds(1500), TestContext.Current.CancellationToken);
+
+        var third = await service.GetAsync(TestContext.Current.CancellationToken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(2, counting.CountCalls);
+            Assert.NotEqual(second.AssembledUtc, third.AssembledUtc);
         });
     }
 

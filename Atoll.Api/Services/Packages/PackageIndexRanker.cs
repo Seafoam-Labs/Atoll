@@ -5,6 +5,7 @@ using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Packages.Persistence;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Packages;
 
@@ -12,17 +13,18 @@ namespace Atoll.Api.Services.Packages;
 /// Ranks the seeded-package set (Mongo <c>packages</c> names) by in-memory catalog keys. The name
 /// list and one sorted name array per sort key are entries in the shared cache, so a sorted page
 /// costs O(limit) instead of sorting the whole corpus. Everything carries the <c>catalog</c> tag:
-/// seeded-set writes drop it, and the 30 s TTL is the backstop.
+/// seeded-set writes drop it, and the configured TTL is the backstop.
 /// </summary>
 internal sealed class PackageIndexRanker(
     IPackageRepository repo,
     HybridCache cache,
-    PackageIndexStore indexStore)
+    PackageIndexStore indexStore,
+    IOptions<AtollOptions> options)
 {
-    private static readonly HybridCacheEntryOptions RankOptions = new()
+    private readonly HybridCacheEntryOptions _rankOptions = new()
     {
-        Expiration = TimeSpan.FromSeconds(30),
-        LocalCacheExpiration = TimeSpan.FromSeconds(30),
+        Expiration = TimeSpan.FromSeconds(options.Value.Caching.RankTtlSeconds),
+        LocalCacheExpiration = TimeSpan.FromSeconds(options.Value.Caching.RankTtlSeconds),
     };
 
     private SearchIndexData CurrentIndex => indexStore.Current;
@@ -38,7 +40,7 @@ internal sealed class PackageIndexRanker(
         var names = (await cache.GetOrCreateAsync(
             AtollCacheKeys.RankNames,
             FetchNamesAsync,
-            RankOptions,
+            _rankOptions,
             [AtollCacheKeys.TagCatalog],
             ct)).Names;
 
@@ -50,7 +52,7 @@ internal sealed class PackageIndexRanker(
             (names, catalog, sortBy, order),
             static (state, _) => new ValueTask<RankedNames>(
                 new RankedNames(Rank(state.names, state.catalog, state.sortBy, state.order))),
-            RankOptions,
+            _rankOptions,
             [AtollCacheKeys.TagCatalog],
             ct)).Names;
 

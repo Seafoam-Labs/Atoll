@@ -264,7 +264,7 @@ internal static class ServiceCollectionExtensions
         /// <summary>
         ///     Shared HybridCache (L1 only) for the TTL caches. The default 1 MB payload cap logs an
         ///     error on every store of the ranker's full name arrays, so it is raised; 16 MB measured
-        ///     clean. No default entry options: each consuming service passes its own TTL explicitly.
+        ///     clean. No default entry options: consumers read their TTL from <c>Atoll:Caching</c>.
         /// </summary>
         public IServiceCollection AddCachingServices()
         {

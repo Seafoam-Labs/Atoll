@@ -5,6 +5,7 @@ using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Atoll.Api.Tests.Ui;
@@ -81,7 +82,8 @@ public class PackageCatalogServicePerfTests
             store,
             new SeededNamesPackageService(seeded),
             new InMemoryPackageSecurityRepository(),
-            TestHybridCache.New());
+            TestHybridCache.New(),
+            Options.Create(new AtollOptions()));
     }
 
     [Fact]
