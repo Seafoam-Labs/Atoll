@@ -5,10 +5,10 @@ using Xunit;
 
 namespace Atoll.Api.Tests.Support;
 
-// Write-path catalog invalidation depends on DI handing the singleton PackageService the same
-// HybridCache the catalog reads from. That constructor parameter is optional, so a dropped
-// registration would silently stop invalidating rather than fail at startup, and per-test
-// construction cannot catch it: only the composed host can.
+// Write-path catalog invalidation and the ranker's cached name list both depend on DI handing the
+// singleton PackageService the HybridCache the catalog reads from. That constructor parameter is
+// optional, so a dropped registration would silently fall back to the uncached path rather than
+// fail at startup, and per-test construction cannot catch it: only the composed host can.
 public class CatalogCacheCompositionTests
 {
     [Fact]
@@ -29,6 +29,20 @@ public class CatalogCacheCompositionTests
         });
 
         Assert.Equal(["shelly-bin"], (await SearchSeededAsync(catalog, ct)).Rows.Select(row => row.Package.Name));
+    }
+
+    [Fact]
+    public async Task Sorted_page_through_the_host_package_service_lists_the_names_once()
+    {
+        await using var factory = new SecurityTestFactory();
+        var packages = factory.Services.GetRequiredService<IPackageService>();
+        var ct = TestContext.Current.CancellationToken;
+        var listsBefore = factory.Repository.ListCalls;
+
+        await packages.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
+        await packages.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
+
+        Assert.Equal(1, factory.Repository.ListCalls - listsBefore);
     }
 
     private static Task<CatalogResult> SearchSeededAsync(PackageCatalogService catalog, CancellationToken ct) =>

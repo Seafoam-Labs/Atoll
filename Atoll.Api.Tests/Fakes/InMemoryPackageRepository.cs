@@ -14,12 +14,16 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
     /// <summary>Test seam awaited after <see cref="ListAsync"/> snapshots the names, to hold one open.</summary>
     internal Func<Task>? AfterListAsync { get; set; }
 
+    /// <summary>Counts calls so tests can pin the ranker's cached name list.</summary>
+    internal int ListCalls { get; private set; }
+
     public async Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
     {
         IReadOnlyList<string> result;
         lock (_gate)
         {
             result = [.. _docs.Keys];
+            ListCalls++;
         }
 
         if (AfterListAsync is { } hook)

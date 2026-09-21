@@ -10,7 +10,9 @@ public static class TestHybridCache
     public static HybridCache New()
     {
         var services = new ServiceCollection();
-        services.AddHybridCache();
+        // Mirrors AddCachingServices: the rank arrays exceed the 1 MB default, whose store-anyway
+        // behavior with an error log is a quirk, not something to lean on.
+        services.AddHybridCache(options => options.MaximumPayloadBytes = 16 * 1024 * 1024);
         return services.BuildServiceProvider().GetRequiredService<HybridCache>();
     }
 }

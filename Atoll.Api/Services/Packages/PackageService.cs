@@ -27,7 +27,7 @@ public sealed class PackageService(
 
     // Built here rather than injected: PackageService is a singleton and every direct construction
     // in tests passes only the primary-constructor arguments.
-    private readonly PackageIndexRanker _ranker = new(repo, indexStore);
+    private readonly PackageIndexRanker _ranker = new(repo, indexStore, hybridCache);
 
     public Task<IReadOnlyList<string>> ListAsync()
     {
@@ -50,8 +50,8 @@ public sealed class PackageService(
         var catalog = indexStore?.Current.ByNames;
 
         // Name ascending pages directly in MongoDB. Everything else ranks the seeded set through
-        // PackageIndexRanker, which caches sorted name views per (index generation, sort), because
-        // votes, popularity, and version live only in the in-memory catalog, not Mongo.
+        // PackageIndexRanker, which caches one sorted name array per sort key, because votes,
+        // popularity, and version live only in the in-memory catalog, not Mongo.
         if (sortBy is PackageIndexSortBy.Name && direction is PackageIndexSortOrder.Asc)
         {
             var total = await repo.CountAsync(ct);
@@ -83,7 +83,7 @@ public sealed class PackageService(
         var entries = await repo.ListIndexEntriesAsync(pageNames, ct);
 
         // The repository returns rows unordered; reorder to the ranked page order. A name deleted
-        // between the generation build and this fetch drops out, shortening the page.
+        // between the ranking build and this fetch drops out, shortening the page.
         var byName = entries.ToDictionary(entry => entry.Name, StringComparer.Ordinal);
         var ordered = new List<PackageIndexEntry>(count);
         foreach (var name in pageNames)
@@ -146,7 +146,6 @@ public sealed class PackageService(
         // authoritative delete. The scope keeps both steps atomic with respect to materialization.
         await using var deletion = await gitCache.BeginDeleteAsync(packageName, ct);
         await repo.DeleteAsync(packageName, ct);
-        _ranker.Invalidate();
         if (hybridCache is not null)
             await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog, ct);
     }
@@ -169,7 +168,6 @@ public sealed class PackageService(
 
         await repo.InsertSeedAsync(doc, snapshot.Content);
         await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true, scanner.PolicyVersion);
-        _ranker.Invalidate();
         if (hybridCache is not null)
             await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog);
     }

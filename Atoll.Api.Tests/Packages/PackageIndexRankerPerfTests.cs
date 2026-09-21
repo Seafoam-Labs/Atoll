@@ -7,6 +7,7 @@ using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -16,8 +17,8 @@ namespace Atoll.Api.Tests.Packages;
 /// <summary>
 /// Cost probe for the sorted <c>/v1/packages</c> path at a realistic seeded-set scale (~85k names),
 /// exercising <see cref="PackageIndexRanker"/> through <see cref="PackageService.GetIndexPageAsync"/>
-/// with the in-memory repository. Reports a cold sorted request, a cold view build per sort on a warm
-/// generation, and the steady-state warm page, because each has a different trigger. Log-only: sanity
+/// with the in-memory repository. Reports a cold sorted request, a cold sort build on a warm name
+/// list, and the steady-state warm page, because each has a different trigger. Log-only: sanity
 /// assertions rather than timing gates, so it stays in the normal test run.
 /// </summary>
 public class PackageIndexRankerPerfTests
@@ -120,7 +121,7 @@ public class PackageIndexRankerPerfTests
     public async Task SortedIndexPageCostAtRealisticSeededScale()
     {
         // 1. Cold sorted request: what a request pays after a mutation, TTL expiry, or restart.
-        //    A fresh service per sample keeps the ranker cold (generation + view + page).
+        //    A fresh service (and cache) per sample keeps the ranker cold (names + sort + page).
         var coldSamples = new double[RebuildIterations];
         var coldAllocated = 0L;
         for (var i = 0; i < RebuildIterations; i++)
@@ -139,12 +140,12 @@ public class PackageIndexRankerPerfTests
 
         Array.Sort(coldSamples);
         _output.WriteLine(
-            $"cold sorted request (fresh generation + view, votes desc)  " +
+            $"cold sorted request (fresh names + sort, votes desc)  " +
             $"median={coldSamples[coldSamples.Length / 2],7:F1} ms  min={coldSamples[0],7:F1} ms  " +
             $"alloc={coldAllocated / (double)RebuildIterations / 1024,7:F0} KB/call");
 
-        // 2. Cold view build per sort: one service whose generation is warmed with the cheapest sort,
-        //    so each first request below measures exactly one view build plus one page fetch.
+        // 2. Cold sort build per key: one service whose name list is warmed with the cheapest sort,
+        //    so each first request below measures exactly one sort build plus one page fetch.
         var service = CreateService();
         var warmup = await service.GetIndexPageAsync(1, PageLimit, PackageIndexSortBy.Name, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
         Assert.Equal(PackageCount, warmup.TotalItems);
@@ -169,11 +170,11 @@ public class PackageIndexRankerPerfTests
             Assert.Equal(PageLimit, response.Items.Count);
 
             _output.WriteLine(
-                $"cold view (warm generation) {sortBy,-10} {order,-4}  " +
+                $"cold sort (warm names) {sortBy,-10} {order,-4}  " +
                 $"{stopwatch.Elapsed.TotalMilliseconds,7:F1} ms  alloc={allocated / 1024.0,7:F0} KB");
         }
 
-        // 3. Warm page: cached view slice plus one name-filtered repository read, the steady state.
+        // 3. Warm page: cached sort slice plus one name-filtered repository read, the steady state.
         var warm = await MeasureAsync(
             () => service.GetIndexPageAsync(1, PageLimit, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc));
 
@@ -190,7 +191,8 @@ public class PackageIndexRankerPerfTests
             _security,
             _scanner,
             new GitRepositoryCache(_repo, _security, _options, NullLogger<GitRepositoryCache>.Instance),
-            _store);
+            _store,
+            TestHybridCache.New());
     }
 
     private static async Task<Measurement> MeasureAsync(Func<Task<PackageIndexResponse>> call)

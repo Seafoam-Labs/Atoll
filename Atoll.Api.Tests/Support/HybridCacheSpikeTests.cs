@@ -120,7 +120,7 @@ public class HybridCacheSpikeTests
             Assert.Equal(1, calls);
             Assert.True(ReferenceEquals(first, second));
             Assert.True(ReferenceEquals(first.Names, second.Names));
-            Assert.Single(logs.Messages.Where(m => m.Contains("MaximumPayloadBytes", StringComparison.Ordinal)));
+            Assert.Single(logs.Messages, m => m.Contains("MaximumPayloadBytes", StringComparison.Ordinal));
         });
     }
 

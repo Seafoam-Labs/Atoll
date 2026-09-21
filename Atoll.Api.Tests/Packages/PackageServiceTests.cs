@@ -1,9 +1,12 @@
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -23,13 +26,14 @@ public class PackageServiceTests
     private static PackageService CreateService(
         InMemoryPackageRepository repo,
         IPackageSecurityRepository? securityRepository = null,
-        PackageIndexStore? indexStore = null)
+        PackageIndexStore? indexStore = null,
+        HybridCache? cache = null)
     {
         var options = Options.Create(new AtollOptions
         {
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         });
-        return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance), indexStore);
+        return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance), indexStore, cache ?? TestHybridCache.New());
     }
 
     private static async Task<SearchIndexData> LoadIndexAsync(string packagesJson)
@@ -51,6 +55,12 @@ public class PackageServiceTests
         var store = new PackageIndexStore();
         store.Replace(await LoadIndexAsync(packagesJson));
         return store;
+    }
+
+    private static AurPackageMetadata Meta(string name, int numVotes, double popularity)
+    {
+        return new AurPackageMetadata(0, name, 0, name, "1.0", "d", null, numVotes, popularity, null, null, null, 0, 0, "",
+            [], [], [], [], [], [], [], []);
     }
 
     [Fact]
@@ -404,8 +414,52 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_reflects_index_swap_inside_ttl_window()
+    public async Task GetIndexPageAsync_cached_rankings_match_direct_sorts_of_the_same_corpus()
     {
+        // One cached corpus, three sort keys covering both key components: each page must equal a
+        // plain LINQ sort of the same names and keys, so a mis-keyed or wrongly unwrapped entry
+        // cannot pass.
+        var corpus = new (string Name, int NumVotes, double Popularity)[]
+        {
+            ("o-a", 7, 0.5),
+            ("o-b", 3, 0.1),
+            ("o-c", 7, 9.9),
+            ("o-d", 0, 0.2)
+        };
+
+        var store = new PackageIndexStore();
+        store.Replace(PackageIndexBuilder.BuildFromPackages(
+            [.. corpus.Select(entry => Meta(entry.Name, entry.NumVotes, entry.Popularity))]));
+
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, indexStore: store);
+        foreach (var entry in corpus)
+            await service.SeedFilesAsync(entry.Name, SampleFiles);
+
+        var ct = TestContext.Current.CancellationToken;
+        var votesDesc = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
+        var votesAsc = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Asc, ct);
+        var popularity = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc, ct);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(
+                corpus.OrderByDescending(entry => entry.NumVotes).ThenBy(entry => entry.Name, StringComparer.Ordinal).Select(entry => entry.Name),
+                votesDesc.Items.Select(item => item.Name));
+            Assert.Equal(
+                corpus.OrderBy(entry => entry.NumVotes).ThenBy(entry => entry.Name, StringComparer.Ordinal).Select(entry => entry.Name),
+                votesAsc.Items.Select(item => item.Name));
+            Assert.Equal(
+                corpus.OrderByDescending(entry => entry.Popularity).ThenBy(entry => entry.Name, StringComparer.Ordinal).Select(entry => entry.Name),
+                popularity.Items.Select(item => item.Name));
+        });
+    }
+
+    [Fact]
+    public async Task GetIndexPageAsync_serves_the_previous_ranking_after_an_index_swap_until_a_write()
+    {
+        // An index swap alone no longer drops the cached ranking, so voted keys can trail the
+        // catalog by up to the entry TTL; a seeded-set write removes the catalog tag and heals it.
         var repo = new InMemoryPackageRepository();
         var store = await CreateIndexStoreAsync(
             """
@@ -429,12 +483,16 @@ public class PackageServiceTests
             ]
             """));
 
-        var after = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
+        var stale = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
+
+        await service.SeedFilesAsync("s-c", SampleFiles);
+        var healed = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
             Assert.Equal(new[] { "s-b", "s-a" }, before.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "s-a", "s-b" }, after.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "s-b", "s-a" }, stale.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "s-a", "s-b", "s-c" }, healed.Items.Select(item => item.Name));
         });
     }
 
@@ -464,8 +522,10 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_does_not_reuse_a_ranking_built_across_a_seed()
+    public async Task GetIndexPageAsync_serves_a_ranking_built_across_a_seed_until_the_next_write()
     {
+        // A tag removal landing while a factory is in flight does not evict that factory's later
+        // store, so a ranking built across a seed serves stale names until the next write or TTL.
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
         await service.SeedFilesAsync("r-a", SampleFiles);
@@ -486,14 +546,17 @@ public class PackageServiceTests
         repo.AfterListAsync = null;
         release.SetResult();
         var stale = await inFlight;
+        var staleNext = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
-        var next = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
+        await service.SeedFilesAsync("r-c", SampleFiles);
+        var healed = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken);
 
         Assert.Multiple(() =>
         {
             Assert.Equal(new[] { "r-a" }, stale.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "r-a", "r-b" }, next.Items.Select(item => item.Name));
-            Assert.Equal(2, next.TotalItems);
+            Assert.Equal(new[] { "r-a" }, staleNext.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "r-a", "r-b", "r-c" }, healed.Items.Select(item => item.Name));
+            Assert.Equal(3, healed.TotalItems);
         });
     }
 

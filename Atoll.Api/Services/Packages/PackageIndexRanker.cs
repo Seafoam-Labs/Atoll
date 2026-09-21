@@ -1,25 +1,29 @@
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
+using System.ComponentModel;
+using Atoll.Api.Services.Caching;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Packages.Persistence;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace Atoll.Api.Services.Packages;
 
 /// <summary>
-/// Ranks the seeded-package set (Mongo <c>packages</c> names) by in-memory catalog keys and caches one
-/// sorted name array per sort key, so a sorted page costs O(limit) instead of sorting the whole corpus.
+/// Ranks the seeded-package set (Mongo <c>packages</c> names) by in-memory catalog keys. The name
+/// list and one sorted name array per sort key are entries in the shared cache, so a sorted page
+/// costs O(limit) instead of sorting the whole corpus. Everything carries the <c>catalog</c> tag:
+/// seeded-set writes drop it, and the 30 s TTL is the backstop.
 /// </summary>
-internal sealed class PackageIndexRanker(IPackageRepository repo, PackageIndexStore? indexStore)
+internal sealed class PackageIndexRanker(
+    IPackageRepository repo,
+    PackageIndexStore? indexStore,
+    HybridCache? cache)
 {
-    private static readonly TimeSpan GenerationTtl = TimeSpan.FromSeconds(30);
-
-    // Keyed on the index instance so PackageIndexStore.Replace drops a generation's views with the
-    // index it was built from. Nothing stored here may reference the key, or the weak key keeps
-    // itself alive.
-    private readonly ConditionalWeakTable<SearchIndexData, RankCache> _caches = new();
+    private static readonly HybridCacheEntryOptions RankOptions = new()
+    {
+        Expiration = TimeSpan.FromSeconds(30),
+        LocalCacheExpiration = TimeSpan.FromSeconds(30),
+    };
 
     private SearchIndexData CurrentIndex => indexStore?.Current ?? SearchIndexData.Empty;
 
@@ -31,58 +35,34 @@ internal sealed class PackageIndexRanker(IPackageRepository repo, PackageIndexSt
         PackageIndexSortOrder order,
         CancellationToken ct)
     {
-        var index = CurrentIndex;
-        var generation = await GetGenerationAsync(_caches.GetValue(index, static _ => new RankCache()), ct);
-        var catalog = index.ByNames;
+        if (cache is null)
+            return Rank([.. await repo.ListAsync(ct)], CurrentIndex.ByNames, sortBy, order);
 
-        // Lazy with ExecutionAndPublication: a bare GetOrAdd factory would run N duplicate full sorts
-        // when a cold generation meets constant-arrival traffic.
-        return generation.Sorted.GetOrAdd(
-            (sortBy, order),
-            key => new Lazy<string[]>(
-                () => Rank(generation.Names, catalog, key.SortBy, key.Order),
-                LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+        var names = (await cache.GetOrCreateAsync(
+            AtollCacheKeys.RankNames,
+            FetchNamesAsync,
+            RankOptions,
+            [AtollCacheKeys.TagCatalog],
+            ct)).Names;
+
+        // Captured when the array is ranked; an index swap after that is not seen until the entry
+        // TTL expires or a write drops the tag.
+        var catalog = CurrentIndex.ByNames;
+        var sorted = (await cache.GetOrCreateAsync(
+            AtollCacheKeys.RankSorted(sortBy, order),
+            _ => new ValueTask<RankedNames>(new RankedNames(Rank(names, catalog, sortBy, order))),
+            RankOptions,
+            [AtollCacheKeys.TagCatalog],
+            ct)).Names;
+
+        return sorted;
     }
 
-    /// <summary>
-    /// Marks the cached generation for the current index stale. Called from the seeded-set writers;
-    /// stays a single atomic write so per-package bulk seeding pays nothing beyond it.
-    /// </summary>
-    public void Invalidate()
+    private async ValueTask<RankedNames> FetchNamesAsync(CancellationToken ct)
     {
-        if (_caches.TryGetValue(CurrentIndex, out var cache))
-            Interlocked.Increment(ref cache.Epoch);
+        var names = await repo.ListAsync(ct);
+        return new RankedNames([.. names]);
     }
-
-    private async Task<Generation> GetGenerationAsync(RankCache cache, CancellationToken ct)
-    {
-        var generation = Volatile.Read(ref cache.Generation);
-        if (IsUsable(cache, generation))
-            return generation;
-
-        await cache.Gate.WaitAsync(ct);
-        try
-        {
-            generation = Volatile.Read(ref cache.Generation);
-            if (IsUsable(cache, generation))
-                return generation;
-
-            // Read the epoch before the names: a seeded-set write landing during the read bumps it, so
-            // names that predate the write are served to this caller but never reused by the next one.
-            var epoch = Volatile.Read(ref cache.Epoch);
-            var names = await repo.ListAsync(ct);
-            generation = new Generation([.. names], DateTimeOffset.UtcNow, epoch);
-            Volatile.Write(ref cache.Generation, generation);
-            return generation;
-        }
-        finally
-        {
-            cache.Gate.Release();
-        }
-    }
-
-    private static bool IsUsable(RankCache cache, [NotNullWhen(true)] Generation? generation) =>
-        generation is { IsFresh: true } && generation.Epoch == Volatile.Read(ref cache.Epoch);
 
     private static string[] Rank(
         string[] names,
@@ -146,24 +126,8 @@ internal sealed class PackageIndexRanker(IPackageRepository repo, PackageIndexSt
         return sorted;
     }
 
-    private sealed class RankCache
-    {
-        public readonly SemaphoreSlim Gate = new(1, 1);
-        public Generation? Generation;
-
-        // Bumped by every seeded-set write; a generation carrying an older value is never reused.
-        public long Epoch;
-    }
-
-    private sealed class Generation(string[] names, DateTimeOffset fetchedAt, long epoch)
-    {
-        public string[] Names { get; } = names;
-
-        public long Epoch { get; } = epoch;
-
-        // Views live on the generation so a refresh can never serve a view built from older names.
-        public ConcurrentDictionary<(PackageIndexSortBy SortBy, PackageIndexSortOrder Order), Lazy<string[]>> Sorted { get; } = new();
-
-        public bool IsFresh => DateTimeOffset.UtcNow - fetchedAt < GenerationTtl;
-    }
+    // ImmutableObject marks the payload safe to share by reference, so warm L1 reads skip the
+    // serialization clone unmarked records pay.
+    [ImmutableObject(true)]
+    private sealed record RankedNames(string[] Names);
 }
