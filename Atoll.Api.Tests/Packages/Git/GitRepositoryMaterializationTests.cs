@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
@@ -49,7 +50,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        return (new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache), cache, security, reposRoot);
+        return (new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache, TestHybridCache.New(), new PackageIndexStore()), cache, security, reposRoot);
     }
 
     public async ValueTask InitializeAsync()
@@ -238,7 +239,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
         });
         var security = new InMemoryPackageSecurityRepository();
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache, TestHybridCache.New(), new PackageIndexStore());
 
         await service.SeedFilesAsync("shelly", SampleFiles);
 

@@ -187,8 +187,8 @@ public class PackageCatalogServiceTests : IAsyncLifetime
             security,
             new PkgBuildSecurityScanner(),
             new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance),
-            _store,
-            cache);
+            cache,
+            _store);
         var catalog = new PackageCatalogService(_store, packageService, security, cache);
 
         var ct = TestContext.Current.CancellationToken;

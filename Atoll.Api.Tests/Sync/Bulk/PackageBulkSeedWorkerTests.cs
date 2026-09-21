@@ -8,6 +8,7 @@ using Atoll.Api.Services.Sync.Bulk;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -64,7 +65,7 @@ public class PackageBulkSeedWorkerTests
         var options = Options.Create(BulkOptions());
         var security = new InMemoryPackageSecurityRepository();
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache, TestHybridCache.New(), store);
         var seeder = new DirectPackageSeeder(repo, store, new AurGitPackageSource(), service);
         exclusions ??= new InMemorySeedExclusionRepository();
         return new PackageBulkSeedWorker(
@@ -207,7 +208,7 @@ public class PackageBulkSeedWorkerTests
         var options = Options.Create(BulkOptions());
         var security = new InMemoryPackageSecurityRepository();
         var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(),
-            new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance));
+            new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await service.SeedFilesAsync("shelly", BaseFiles); // pre-seeded
 
         var mirror = new FakeMirror { Branches = { "shelly", "other" } };

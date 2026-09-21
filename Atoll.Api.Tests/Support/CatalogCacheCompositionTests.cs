@@ -8,9 +8,9 @@ using Xunit;
 namespace Atoll.Api.Tests.Support;
 
 // Write-path catalog invalidation and the ranker's cached name list both depend on DI handing the
-// singleton PackageService the HybridCache the catalog reads from. That constructor parameter is
-// optional, so a dropped registration would silently fall back to the uncached path rather than
-// fail at startup, and per-test construction cannot catch it: only the composed host can.
+// singleton PackageService the HybridCache the catalog reads from. The constructor parameter is
+// required, so a dropped registration now fails at startup; this is the end-to-end check that the
+// composed host shares one cache instance between the writers and the readers.
 public class CatalogCacheCompositionTests
 {
     [Fact]

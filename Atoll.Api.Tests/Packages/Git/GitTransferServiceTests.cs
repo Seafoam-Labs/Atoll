@@ -42,7 +42,7 @@ public class GitTransferServiceTests : IAsyncLifetime
             Git = new GitOptions { RepositoriesPath = reposRoot }
         });
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var packages = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
+        var packages = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache, TestHybridCache.New(), new PackageIndexStore());
         var git = new GitTransferService(repo, cache, new AurRpcService(new PackageIndexStore()));
         return (git, packages, cache, security, reposRoot);
     }

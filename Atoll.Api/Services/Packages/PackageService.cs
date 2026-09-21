@@ -17,17 +17,17 @@ public sealed class PackageService(
     IPackageSecurityRepository securityRepository,
     IPackageSecurityScanner scanner,
     IGitRepositoryCache gitCache,
-    PackageIndexStore? indexStore = null,
-    HybridCache? hybridCache = null) : IPackageService
+    HybridCache hybridCache,
+    PackageIndexStore indexStore) : IPackageService
 {
     public const int DefaultIndexPageLimit = 50;
     public const int MaxIndexPageLimit = 200;
 
     private readonly AtollOptions _options = options.Value;
 
-    // Built here rather than injected: PackageService is a singleton and every direct construction
-    // in tests passes only the primary-constructor arguments.
-    private readonly PackageIndexRanker _ranker = new(repo, indexStore, hybridCache);
+    // Internal implementation detail built from the same dependencies rather than registered:
+    // PackageIndexRanker has no other consumers.
+    private readonly PackageIndexRanker _ranker = new(repo, hybridCache, indexStore);
 
     public Task<IReadOnlyList<string>> ListAsync()
     {
@@ -47,7 +47,7 @@ public sealed class PackageService(
         CancellationToken ct = default)
     {
         var direction = order ?? PackageIndexSortOrder.Asc;
-        var catalog = indexStore?.Current.ByNames;
+        var catalog = indexStore.Current.ByNames;
 
         // Name ascending pages directly in MongoDB. Everything else ranks the seeded set through
         // PackageIndexRanker, which caches one sorted name array per sort key, because votes,
@@ -95,10 +95,10 @@ public sealed class PackageService(
 
     private static PackageIndexEntry[] EnrichWithCatalog(
         IReadOnlyList<PackageIndexEntry> items,
-        ImmutableDictionary<string, AurPackageMetadata>? catalog)
+        ImmutableDictionary<string, AurPackageMetadata> catalog)
     {
         return items
-            .Select(item => catalog?.GetValueOrDefault(item.Name) is { } metadata
+            .Select(item => catalog.GetValueOrDefault(item.Name) is { } metadata
                 ? item with
                 {
                     Description = metadata.Description,
@@ -146,8 +146,7 @@ public sealed class PackageService(
         // authoritative delete. The scope keeps both steps atomic with respect to materialization.
         await using var deletion = await gitCache.BeginDeleteAsync(packageName, ct);
         await repo.DeleteAsync(packageName, ct);
-        if (hybridCache is not null)
-            await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog, ct);
+        await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog, ct);
     }
 
     public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
@@ -168,8 +167,7 @@ public sealed class PackageService(
 
         await repo.InsertSeedAsync(doc, snapshot.Content);
         await securityRepository.MarkPendingAsync(packageName, snapshot.RevisionId, true, scanner.PolicyVersion);
-        if (hybridCache is not null)
-            await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog);
+        await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog);
     }
 
     public async Task<bool> AppendRevisionFromUpstreamAsync(

@@ -6,6 +6,7 @@ using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -81,7 +82,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
@@ -121,7 +122,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
@@ -166,7 +167,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
 
         // Pre-seed the sync watermark so the package looks already synced.
@@ -191,7 +192,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "libfoo", BaseFiles);
         await SeedAsync(service, "libfoo-devel", BaseFiles);
 
@@ -235,7 +236,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "libfoo", BaseFiles);
         await SeedAsync(service, "libfoo-devel", BaseFiles);
 
@@ -281,7 +282,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
@@ -319,7 +320,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("ghost", "ghost"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
         await SeedAsync(service, "ghost", BaseFiles);
 
@@ -354,7 +355,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("good", "good"), Meta("broken", "broken"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "good", BaseFiles);
         await SeedAsync(service, "broken", BaseFiles);
 
@@ -394,7 +395,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
 
         // Mark synced with the current head but a long-since past success timestamp.
@@ -428,7 +429,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
         // Synced against the current head; only staleness will make it a candidate.
         await repo.UpdateSyncStateAsync(["shelly"], "sha-stable", true, null, TestContext.Current.CancellationToken);
@@ -467,7 +468,7 @@ public class PackageRefreshWorkerTests
             },
             Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
         };
-        var service = new PackageService(repo, Options.Create(opts), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(opts), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(opts), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(opts), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "a", BaseFiles);
         await SeedAsync(service, "b", BaseFiles);
         await SeedAsync(service, "c", BaseFiles);
@@ -500,7 +501,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(metas);
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         foreach (var meta in metas)
             await SeedAsync(service, meta.Name, BaseFiles);
 
@@ -568,7 +569,7 @@ public class PackageRefreshWorkerTests
             },
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         };
-        var service = new PackageService(repo, Options.Create(opts), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(opts), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(opts), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(opts), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
@@ -620,7 +621,7 @@ public class PackageRefreshWorkerTests
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
-        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance));
+        var service = new PackageService(repo, Options.Create(EnabledOptions()), security, new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, security, Options.Create(EnabledOptions()), NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), store);
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;

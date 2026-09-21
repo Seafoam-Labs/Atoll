@@ -5,6 +5,7 @@ using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -55,9 +56,10 @@ public class DirectPackageSeederTests
         });
         var security = new InMemoryPackageSecurityRepository();
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
+        var indexStore = store ?? new PackageIndexStore();
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache, TestHybridCache.New(), indexStore);
         var source = new FakeAurPackageSource();
-        var seeder = new DirectPackageSeeder(repo, store ?? new PackageIndexStore(), source, service);
+        var seeder = new DirectPackageSeeder(repo, indexStore, source, service);
         return (seeder, source, repo);
     }
 

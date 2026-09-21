@@ -16,8 +16,8 @@ namespace Atoll.Api.Services.Packages;
 /// </summary>
 internal sealed class PackageIndexRanker(
     IPackageRepository repo,
-    PackageIndexStore? indexStore,
-    HybridCache? cache)
+    HybridCache cache,
+    PackageIndexStore indexStore)
 {
     private static readonly HybridCacheEntryOptions RankOptions = new()
     {
@@ -25,7 +25,7 @@ internal sealed class PackageIndexRanker(
         LocalCacheExpiration = TimeSpan.FromSeconds(30),
     };
 
-    private SearchIndexData CurrentIndex => indexStore?.Current ?? SearchIndexData.Empty;
+    private SearchIndexData CurrentIndex => indexStore.Current;
 
     /// <summary>
     /// Sorted names for one sort key. The returned array is shared; callers must not mutate it.
@@ -35,9 +35,6 @@ internal sealed class PackageIndexRanker(
         PackageIndexSortOrder order,
         CancellationToken ct)
     {
-        if (cache is null)
-            return Rank([.. await repo.ListAsync(ct)], CurrentIndex.ByNames, sortBy, order);
-
         var names = (await cache.GetOrCreateAsync(
             AtollCacheKeys.RankNames,
             FetchNamesAsync,

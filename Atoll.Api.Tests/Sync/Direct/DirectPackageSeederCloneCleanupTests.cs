@@ -4,6 +4,7 @@ using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Fakes;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -39,8 +40,9 @@ public class DirectPackageSeederCloneCleanupTests : IAsyncLifetime
         });
         var security = new InMemoryPackageSecurityRepository();
         var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache);
-        var seeder = new DirectPackageSeeder(repo, new PackageIndexStore(), new AurGitPackageSource(), service);
+        var store = new PackageIndexStore();
+        var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache, TestHybridCache.New(), store);
+        var seeder = new DirectPackageSeeder(repo, store, new AurGitPackageSource(), service);
 
         // A space in the package name makes the clone URL malformed, which git rejects
         // client-side before any network access. The temp directory is named

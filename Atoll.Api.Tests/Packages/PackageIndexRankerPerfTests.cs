@@ -191,8 +191,8 @@ public class PackageIndexRankerPerfTests
             _security,
             _scanner,
             new GitRepositoryCache(_repo, _security, _options, NullLogger<GitRepositoryCache>.Instance),
-            _store,
-            TestHybridCache.New());
+            TestHybridCache.New(),
+            _store);
     }
 
     private static async Task<Measurement> MeasureAsync(Func<Task<PackageIndexResponse>> call)
