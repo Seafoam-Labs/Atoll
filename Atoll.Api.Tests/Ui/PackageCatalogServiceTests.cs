@@ -151,25 +151,6 @@ public class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SeededSnapshotIsBuiltOncePerWindowAndAgainAfterInvalidation()
-    {
-        var packageService = new SeededNamesPackageService(["shelly-bin"]);
-        var service = new PackageCatalogService(
-            _store, packageService, _securityRepository, TestHybridCache.New());
-
-        var ct = TestContext.Current.CancellationToken;
-        await SearchSeededAsync(service, ct);
-        await SearchSeededAsync(service, ct);
-
-        Assert.Equal(1, packageService.ListCalls);
-
-        await service.InvalidateSnapshotAsync(ct);
-
-        await SearchSeededAsync(service, ct);
-        Assert.Equal(2, packageService.ListCalls);
-    }
-
-    [Fact]
     public async Task SeedingThroughPackageServiceMakesTheNextSearchSeeTheSeededRow()
     {
         // The catalog and the writer share one HybridCache, as they do as host singletons: the
@@ -193,6 +174,9 @@ public class PackageCatalogServiceTests : IAsyncLifetime
 
         var ct = TestContext.Current.CancellationToken;
         Assert.Empty((await SearchSeededAsync(catalog, ct)).Rows);
+        Assert.Empty((await SearchSeededAsync(catalog, ct)).Rows);
+        // The snapshot is built once per window, not once per search.
+        Assert.Equal(1, repo.ListCalls);
 
         await packageService.SeedFilesAsync("shelly-bin", new Dictionary<string, string>
         {
@@ -206,6 +190,7 @@ public class PackageCatalogServiceTests : IAsyncLifetime
         {
             Assert.Equal(["shelly-bin"], seeded.Rows.Select(row => row.Package.Name));
             Assert.True(seeded.Rows.Single().IsSeeded);
+            Assert.Equal(2, repo.ListCalls);
         });
     }
 

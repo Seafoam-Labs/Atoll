@@ -79,14 +79,6 @@ public sealed class PackageCatalogService(
     private readonly ConditionalWeakTable<SearchIndexData, ConcurrentDictionary<CatalogSort, AurPackageMetadata[]>>
         _sortedViews = new();
 
-    /// <summary>
-    /// Drops the cached seeded/head snapshot without touching the ranker's sorted arrays. Call after
-    /// a write that changes head scan statuses. A build already in flight still stores its result
-    /// afterwards, so a racing write can stay hidden for up to one TTL.
-    /// </summary>
-    public ValueTask InvalidateSnapshotAsync(CancellationToken ct = default) =>
-        cache.RemoveByTagAsync(AtollCacheKeys.TagHeadStatus, ct);
-
     public async Task<CatalogResult> SearchAsync(
         string? query,
         CatalogSeededFilter seededFilter,
@@ -268,6 +260,8 @@ public sealed class PackageCatalogService(
         };
     }
 
+    // A build already in flight stores its result after a tag removal, so a racing head-status write
+    // can stay hidden for up to one TTL.
     private ValueTask<SeededSnapshot> GetSeededSnapshotAsync(CancellationToken ct) =>
         cache.GetOrCreateAsync(
             AtollCacheKeys.SeededSnapshot,

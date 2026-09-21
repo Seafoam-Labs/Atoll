@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +32,32 @@ public class CatalogCacheCompositionTests
         });
 
         Assert.Equal(["shelly-bin"], (await SearchSeededAsync(catalog, ct)).Rows.Select(row => row.Package.Name));
+    }
+
+    [Fact]
+    public async Task A_rest_rescan_through_the_host_refreshes_the_catalog_snapshot()
+    {
+        await using var factory = new SecurityTestFactory();
+        var catalog = factory.Services.GetRequiredService<PackageCatalogService>();
+        var packages = factory.Services.GetRequiredService<IPackageService>();
+        var ct = TestContext.Current.CancellationToken;
+
+        await packages.SeedFilesAsync("shelly-bin", new Dictionary<string, string>
+        {
+            ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
+            [".SRCINFO"] = "pkgname = shelly-bin\n"
+        });
+        await factory.SecurityRepository.MarkHeadVerifiedAsync("shelly-bin");
+
+        // Warms the snapshot, so only an invalidation can flip the reported head status.
+        Assert.Equal(SecurityStatus.Verified, (await SearchSeededAsync(catalog, ct)).Rows.Single().Head!.Status);
+
+        // No worker runs under this factory, so nothing scans the queued revision back.
+        var response = await factory.CreateClient()
+            .PostAsync("/v1/packages/shelly-bin/security/rescan", null, ct);
+        response.EnsureSuccessStatusCode();
+
+        Assert.Equal(SecurityStatus.Pending, (await SearchSeededAsync(catalog, ct)).Rows.Single().Head!.Status);
     }
 
     [Fact]

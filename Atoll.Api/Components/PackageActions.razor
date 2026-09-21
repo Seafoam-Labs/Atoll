@@ -1,8 +1,6 @@
 @rendermode InteractiveServer
 @inject DirectPackageSeeder Seeder
-@inject IPackageSecurityRepository SecurityRepository
-@inject IPackageSecurityScanner SecurityScanner
-@inject PackageCatalogService Catalog
+@inject PackageSecurityStatusService Security
 @inject NavigationManager Navigation
 @inject IOptions<AtollOptions> Atoll
 @inject ILogger<PackageActions> Logger
@@ -91,8 +89,15 @@
         _error = null;
         try
         {
-            await SecurityRepository.MarkPendingAsync(Name, HeadRevisionId, isHead: true, SecurityScanner.PolicyVersion);
-            await Catalog.InvalidateSnapshotAsync();
+            // No revision: page state can trail the live head, and the service defaults to it.
+            var revision = await Security.QueueRescanAsync(Name);
+            if (revision is null)
+            {
+                _error = "This package is no longer known to the AUR index.";
+                _busy = false;
+                return;
+            }
+
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }
         catch (Exception ex)
