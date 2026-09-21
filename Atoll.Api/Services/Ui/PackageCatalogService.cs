@@ -81,7 +81,8 @@ public sealed class PackageCatalogService(
 
     /// <summary>
     /// Drops the cached seeded/head snapshot, plus anything else tagged <c>catalog</c>. Call after a
-    /// write that changes seeded names or head scan statuses.
+    /// write that changes seeded names or head scan statuses. A build already in flight still stores
+    /// its result afterwards, so a racing write can stay hidden for up to one TTL.
     /// </summary>
     public ValueTask InvalidateSnapshotAsync(CancellationToken ct = default) =>
         cache.RemoveByTagAsync(AtollCacheKeys.TagCatalog, ct);

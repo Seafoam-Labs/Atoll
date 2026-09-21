@@ -67,8 +67,6 @@ public sealed class StatusDashboardService(
 
     private async ValueTask<StatusDashboardModel> AssembleAsync(CancellationToken ct)
     {
-        ct.ThrowIfCancellationRequested();
-
         var indexRefresh = indexUpdater.GetStatus();
         var indexPackages = indexStore.Current.ByNames.Count;
 
