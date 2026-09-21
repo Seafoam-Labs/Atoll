@@ -191,10 +191,12 @@ external UI clients:
 - Ordering is `packageName` ascending for the default `sortBy=name&order=asc` (paged in MongoDB, so pages are
   deterministic). Every other combination ranks the seeded-package set through cached per-sort name views
   (`PackageIndexRanker`): votes, popularity, and version only exist in the in-memory catalog, not Mongo, so the
-  sorted names are cached per `(catalog generation, sort)` and a page costs one name-filtered Mongo query.
-  Views refresh through explicit invalidation from the seeded-set writers (`SeedFilesAsync`, `DeleteAsync`) plus
-  a 30 s TTL backstop for repository writes that bypass `IPackageService`, so a sorted page can lag a bypass
-  write by up to 30 s. Tie-breaking is on `packageName` ascending for deterministic pages. Packages absent from
+  sorted names are HybridCache entries (`atoll.rank.names` plus one `atoll.rank.sorted/{sort}/{order}` array per
+  key) under the shared `catalog` tag, and a page costs one name-filtered Mongo query. Seeded-set writers
+  (`SeedFilesAsync`, `DeleteAsync`) drop the tag, while a 30 s TTL backstops repository writes that bypass
+  `IPackageService`, so a sorted page can lag a bypass write by up to 30 s. Index swaps and stores racing a tag
+  removal are not evicted by it, so pre-write rankings can ride out their remaining TTL (the cache ADR records
+  the worst-case bounds). Tie-breaking is on `packageName` ascending for deterministic pages. Packages absent from
   the catalog rank as zero votes/popularity and sort first (ascending) or last (descending) on version; version
   strings compare ordinally, not semver-aware. A `page` beyond the last returns `200` with empty `items`; an
   empty corpus reports `totalItems: 0` and `totalPages: 0`.
@@ -206,7 +208,7 @@ external UI clients:
   catalog fields are hydrated by batching `GET /v1/search?by=name&query={page names}`
   (keep batches ≤ 100 names so URLs stay short).
 - On the sorted paths `totalItems`/`totalPages` describe the cached name snapshot the page is sliced from, so a
-  name deleted between the generation build and the page fetch drops out and shortens the page instead of
+  name deleted between the ranking build and the page fetch drops out and shortens the page instead of
   re-ranking. The default `name` ascending path keeps a live Mongo count, where concurrent seeding can skew
   `totalItems` slightly against `items`. Acceptable for a browse feed.
 
@@ -265,7 +267,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | Atomic snapshot swap in `PackageIndexStore` | Lock-free, zero-contention reads; consistent view per query. | Full index rebuild on refresh; temporary 2× peak memory during rebuild. | Active |
 | Cached sorted views in `PackageCatalogService` | Fast UI pagination over 100k+ packages. Each `(generation, sort)` is pre-sorted once into an array reference. | First request per sort pays O(N log N). Substring queries still scan linearly (~10-25 ms). | Active |
 | Frozen seeded/head snapshot in `PackageCatalogService` | Row filters probe a `FrozenSet`/`FrozenDictionary` instead of immutable hash collections; the seeded-filter scenario drops ~2.3x at 85k packages and the rebuild is ~2.7x faster. | ~5.5 MB more transient garbage per rebuild (at most one per 30 s TTL). Duplicate `isHead` documents during a head promotion force the last-wins indexed build, since the key-selector overload throws. | Active |
-| Cached sorted name views in `PackageIndexRanker` | Bounds the sorted REST feed: the seeded set is ranked once per `(index generation, sort)` into a cached name array, so a page costs O(limit) instead of sorting ~118k enriched rows per request. | Staleness contract on a public surface (explicit invalidation plus a 30 s TTL backstop); seeded names absent from the catalog rank by default keys. | Active |
+| HybridCache for the TTL caches (`PackageIndexRanker`, catalog seeded snapshot, status dashboard) | Bounds the sorted REST feed (the seeded set is ranked once per sort into a cached name array, so a page costs O(limit) instead of sorting ~118k enriched rows) while collapsing three bespoke gate/epoch/TTL implementations into one library pattern: `GetOrCreateAsync` with keys from `AtollCacheKeys`, tag `catalog` dropped by write paths. | Per-instance invalidation and coalescing only (no backplane); a tag removal cannot cancel an in-flight store, so an index swap trails cached rankings by up to 30 s and a write racing a store can serve stale membership for ~60 s on ranked paths; a names expiry under warm sort entries costs one extra Mongo LIST per window; each cold store pays one discardable size-check serialization while there is no L2. | Active |
 | Response compression (Brotli + Gzip) | Reduces dynamic SSR and API payload sizes ~5× without external infrastructure. | Minor CPU overhead (mitigated by `Fastest` level). Disabled over HTTPS by default to prevent BREACH attacks. | Active |
 | Open endpoints / Trusted network model | Keeps the API and Git clone surface simple and standard for self-hosted instances. | Anyone on the network can mutate data unless `Atoll:Mutations:Enabled=false` is set. | Active |
 | URL-segment REST versioning (`Asp.Versioning`) | The JSON REST surface evolves without breaking pinned clients: `/v1/…` reserves the contract, and a future breaking revision ships side-by-side as `/v2/…`. Query/header readers are disabled so the version is unambiguous and cache-friendly. | AUR RPC, Git Smart HTTP, `/health`, and `/metrics` stay version-neutral forever (client-built URLs); unsupported or unversioned paths `404`. Breaking move off the old unversioned `/search` and `/packages` paths. | Active |

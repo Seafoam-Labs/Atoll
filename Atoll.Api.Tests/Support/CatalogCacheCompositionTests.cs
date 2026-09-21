@@ -1,6 +1,8 @@
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Ui;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Atoll.Api.Tests.Support;
@@ -43,6 +45,17 @@ public class CatalogCacheCompositionTests
         await packages.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
 
         Assert.Equal(1, factory.Repository.ListCalls - listsBefore);
+    }
+
+    [Fact]
+    public void The_host_raises_the_payload_cap_above_the_stock_default()
+    {
+        // The ranker stores full-corpus name arrays (~2.5 MB at 119k names). The stock 1 MB cap does
+        // not refuse the store but logs one Error per store (spike 0.1), so the host must raise it.
+        using var factory = new SecurityTestFactory();
+        var options = factory.Services.GetRequiredService<IOptions<HybridCacheOptions>>().Value;
+
+        Assert.True(options.MaximumPayloadBytes > 1024 * 1024);
     }
 
     private static Task<CatalogResult> SearchSeededAsync(PackageCatalogService catalog, CancellationToken ct) =>
