@@ -223,9 +223,10 @@ changes the ids visible in historical documents.
 
 The persisted `Pending` state is the durable work queue — there is no in-process queue:
 
-1. A new revision is seeded or a rescan is requested (`POST /v1/packages/{name}/security/rescan`, optionally
-   `?revision={sha}`); both call `MarkPendingAsync` (the endpoint through
-   `PackageSecurityStatusService.QueueRescanAsync`, which rejects unknown revisions first), which upserts the
+1. A new revision is seeded or a rescan is requested (the package page's rescan button, or
+   `POST /v1/packages/{name}/security/rescan`, optionally `?revision={sha}`); both reach `MarkPendingAsync` through
+   `PackageSecurityStatusService.QueueRescanAsync`, which rejects unknown packages and revisions first and resolves an
+   omitted revision to the live Mongo head. It upserts the
    `(package, revision)` document to `Pending`, clears prior findings/lease, and stamps `requiredPolicyVersion` with the
    enqueuing scanner's current policy version (monotonic: an existing requirement is never lowered). On public instances
    set `Atoll:Mutations:Enabled=false` to make the rescan endpoint return `403` and hide the UI button (this also
