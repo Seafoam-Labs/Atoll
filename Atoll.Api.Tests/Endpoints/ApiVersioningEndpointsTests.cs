@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class ApiVersioningEndpointsTests : IDisposable
+public sealed class ApiVersioningEndpointsTests : IDisposable
 {
     private readonly HttpClient _client;
     private readonly ApiTestFactory _factory;

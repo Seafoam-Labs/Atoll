@@ -252,10 +252,7 @@ public class PackageIndexUpdaterTests
 
     private sealed class StubHttpClientFactory(byte[] payload) : IHttpClientFactory
     {
-        public HttpClient CreateClient(string name)
-        {
-            return new HttpClient(new StubHttpMessageHandler(payload), true);
-        }
+        public HttpClient CreateClient(string name) => new(new StubHttpMessageHandler(payload), disposeHandler: true);
     }
 
     private sealed class StubHttpMessageHandler(byte[] payload) : HttpMessageHandler

@@ -43,7 +43,7 @@ internal sealed class GitTestFactory : WebApplicationFactory<Program>
             services.RemoveAll<IAurMetadataRepository>();
 
             var store = new PackageIndexStore();
-            store.Replace(TestData.LoadSampleIndexesAsync().GetAwaiter().GetResult());
+            store.Replace(TestData.LoadSampleIndexes());
             services.AddSingleton(store);
 
             services.AddSingleton<IPackageRepository>(Repository);

@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Atoll.Api.Tests.Sync.Mirror;
 
-public class AurMirrorGitIntegrationTests : IDisposable
+public sealed class AurMirrorGitIntegrationTests : IDisposable
 {
     private readonly string _cache;
     private readonly string _scratch;

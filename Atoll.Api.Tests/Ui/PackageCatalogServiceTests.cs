@@ -13,18 +13,20 @@ using Xunit;
 
 namespace Atoll.Api.Tests.Ui;
 
-public class PackageCatalogServiceTests : IAsyncLifetime
+public sealed class PackageCatalogServiceTests : IAsyncLifetime
 {
     private PackageIndexStore _store = null!;
     private InMemoryPackageSecurityRepository _securityRepository = null!;
     private IReadOnlyList<string> _seededNames = [];
 
-    public async ValueTask InitializeAsync()
+    public ValueTask InitializeAsync()
     {
         _store = new PackageIndexStore();
-        _store.Replace(await TestData.LoadSampleIndexesAsync());
+        _store.Replace(TestData.LoadSampleIndexes());
         _securityRepository = new InMemoryPackageSecurityRepository();
         _seededNames = [];
+
+        return ValueTask.CompletedTask;
     }
 
     public ValueTask DisposeAsync()

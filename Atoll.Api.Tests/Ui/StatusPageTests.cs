@@ -6,7 +6,7 @@ using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Ui;
 
-public class StatusPageTests : IDisposable
+public sealed class StatusPageTests : IDisposable
 {
     private SecurityTestFactory _factory = null!;
     private HttpClient _client = null!;

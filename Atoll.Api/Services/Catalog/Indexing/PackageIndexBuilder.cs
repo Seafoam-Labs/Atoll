@@ -10,11 +10,25 @@ public static class PackageIndexBuilder
     {
         await using var stream = File.OpenRead(filePath);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return ParseDump(doc.RootElement);
+    }
 
-        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+    /// <summary>
+    /// Builds the index from dump text, for callers that hold the JSON and cannot await. The file
+    /// based <see cref="LoadAsync" /> stays the production entry point.
+    /// </summary>
+    internal static SearchIndexData Parse(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        return ParseDump(doc.RootElement);
+    }
+
+    private static SearchIndexData ParseDump(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("AUR package dump is not a JSON array.");
 
-        var packages = doc.RootElement.EnumerateArray()
+        var packages = root.EnumerateArray()
             .Where(element => element.TryGetProperty("Name", out var nameElement) &&
                               nameElement.ValueKind == JsonValueKind.String &&
                               !string.IsNullOrEmpty(nameElement.GetString()))

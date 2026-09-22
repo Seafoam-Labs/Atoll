@@ -9,7 +9,7 @@ using Atoll.Api.Services.Packages.Persistence;
 namespace Atoll.Api.Tests.Endpoints;
 
 [Trait("Category", "RequiresMongo")]
-public class MongoApiEndpointsTests : IAsyncLifetime
+public sealed class MongoApiEndpointsTests : IAsyncLifetime
 {
     private readonly HttpClient _client;
     private readonly MongoApiTestFactory _factory;

@@ -11,7 +11,7 @@ using Xunit;
 namespace Atoll.Api.Tests.Packages.Git;
 
 [Trait("Category", "RequiresGit")]
-public class GitSmartHttpEndpointsTests : IDisposable
+public sealed class GitSmartHttpEndpointsTests : IDisposable
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
         new Dictionary<string, string>

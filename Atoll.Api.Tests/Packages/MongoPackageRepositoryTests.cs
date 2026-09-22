@@ -9,7 +9,7 @@ using Atoll.Api.Services.Packages.Persistence;
 namespace Atoll.Api.Tests.Packages;
 
 [Trait("Category", "RequiresMongo")]
-public class MongoPackageRepositoryTests : IAsyncLifetime
+public sealed class MongoPackageRepositoryTests : IAsyncLifetime
 {
     private const string RevisionCollection = "package-revisions";
 

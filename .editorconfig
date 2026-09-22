@@ -25,25 +25,42 @@ dotnet_diagnostic.CA1305.severity = error
 dotnet_diagnostic.CA1310.severity = error
 dotnet_diagnostic.CA1311.severity = error
 dotnet_diagnostic.CA1862.severity = error
+dotnet_diagnostic.MA0074.severity = error
 
 # Async/cancellation, including the fire-and-forget check VSTHRD110. MA0040 forwards the caller's
 # token (tests use Xunit.TestContext.Current.CancellationToken); VSTHRD103 keeps the async overload
-# inside async methods and has one per-file exemption at the bottom of this file.
+# inside async methods and has one per-file exemption at the bottom of this file; MA0042 disposes
+# asynchronously wherever the type offers it.
 dotnet_diagnostic.CA2016.severity = error
 dotnet_diagnostic.MA0040.severity = error
+dotnet_diagnostic.MA0042.severity = error
 dotnet_diagnostic.VSTHRD103.severity = error
 dotnet_diagnostic.VSTHRD110.severity = error
 
-# Collections/LINQ hygiene and logging message templates.
+# Collections/LINQ hygiene and logging message templates. An indexable collection answers through
+# its indexer or length, and Order replaces an OrderBy whose key is the element itself.
+dotnet_diagnostic.CA1826.severity = error
+dotnet_diagnostic.CA1829.severity = error
 dotnet_diagnostic.CA1841.severity = error
 dotnet_diagnostic.CA1860.severity = error
 dotnet_diagnostic.CA2254.severity = error
+dotnet_diagnostic.MA0159.severity = error
 
-# Redundant constructs that the declaration or the API signature already expresses.
+# Ownership of disposables: a class that owns one either seals itself or offers a virtual dispose
+# core, and an IHttpClientFactory double hands out a single client.
+dotnet_diagnostic.CA1816.severity = error
+dotnet_diagnostic.IDISP014.severity = error
+dotnet_diagnostic.IDISP025.severity = error
+dotnet_diagnostic.IDISP026.severity = error
+
+# Redundant constructs that the declaration or the API signature already expresses: a member that
+# touches no instance data, an interpolation hole with nothing in it.
 dotnet_diagnostic.CA1805.severity = error
+dotnet_diagnostic.CA1822.severity = error
 dotnet_diagnostic.CA2263.severity = error
 dotnet_diagnostic.MA0089.severity = error
 dotnet_diagnostic.MA0160.severity = error
+dotnet_diagnostic.MA0184.severity = error
 dotnet_diagnostic.MA0194.severity = error
 
 # --- Left at suggestion on purpose: active and useful, but high-count, so they would flood
@@ -59,22 +76,15 @@ dotnet_diagnostic.MA0194.severity = error
 # --- Production scope: promote a rule as soon as its Atoll.Api column is clean, even while
 # the test project still carries findings for it.
 [Atoll.Api/**.cs]
-# Step 2: zero findings in production, test fixtures only, so a violation breaks the app
-# build while the test project keeps its own column.
-dotnet_diagnostic.CA1816.severity = error
-dotnet_diagnostic.CA1822.severity = error
-dotnet_diagnostic.CA1826.severity = error
-dotnet_diagnostic.CA1829.severity = error
+# These four stay here because their test findings are the rule's premise not holding, not debt.
+# CA1861 assumes a method that is called repeatedly, while an assertion runs once and its array is
+# the expected literal. MA0136 would ban every multi-line raw string, which is how the PKGBUILD and
+# dump fixtures are written. VSTHRD002's two remaining sites are a static skip predicate and a
+# synchronous test constructor, neither of which can await. IDISP007's is the assembly Mongo fixture
+# disposing the container it started itself, held statically so tests can probe availability.
 dotnet_diagnostic.CA1861.severity = error
 dotnet_diagnostic.IDISP007.severity = error
-dotnet_diagnostic.IDISP014.severity = error
-dotnet_diagnostic.IDISP025.severity = error
-dotnet_diagnostic.IDISP026.severity = error
-dotnet_diagnostic.MA0042.severity = error
-dotnet_diagnostic.MA0074.severity = error
 dotnet_diagnostic.MA0136.severity = error
-dotnet_diagnostic.MA0159.severity = error
-dotnet_diagnostic.MA0184.severity = error
 dotnet_diagnostic.VSTHRD002.severity = error
 
 # --- Per-file exemption: the last matching section wins, so this must stay below the `[*.cs]`

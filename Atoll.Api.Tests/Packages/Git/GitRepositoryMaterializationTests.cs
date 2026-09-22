@@ -14,7 +14,7 @@ using Atoll.Api.Services.Packages.Persistence;
 namespace Atoll.Api.Tests.Packages.Git;
 
 [Trait("Category", "RequiresGit")]
-public class GitRepositoryMaterializationTests : IAsyncLifetime
+public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
         new Dictionary<string, string>

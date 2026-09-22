@@ -103,7 +103,7 @@ public class PackageSecurityStatusServiceTests
             Assert.Equal(0, history.Revisions[0].FindingCount);
             Assert.Equal("rev-3", history.Revisions[1].RevisionId);
             Assert.Equal(1, history.Revisions[1].FindingCount);
-            Assert.Equal(tail.OrderByDescending(d => d), tail);
+            Assert.Equal(tail.OrderDescending(), tail);
         });
     }
 

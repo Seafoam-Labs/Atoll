@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class PackageTarballEndpointsTests : IDisposable
+public sealed class PackageTarballEndpointsTests : IDisposable
 {
     private static readonly UnixFileMode RegularFileMode =
         UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
@@ -202,8 +202,8 @@ public class PackageTarballEndpointsTests : IDisposable
     private static async Task<List<TarEntryData>> ReadTarballAsync(HttpResponseMessage response)
     {
         var bytes = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
-        using var gzip = new GZipStream(new MemoryStream(bytes), CompressionMode.Decompress);
-        using var tar = new TarReader(gzip);
+        await using var gzip = new GZipStream(new MemoryStream(bytes), CompressionMode.Decompress);
+        await using var tar = new TarReader(gzip);
 
         var entries = new List<TarEntryData>();
         while (await tar.GetNextEntryAsync(cancellationToken: TestContext.Current.CancellationToken) is { } entry)

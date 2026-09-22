@@ -18,7 +18,7 @@ namespace Atoll.Api.Tests.Packages.Git;
 ///     (fixed dates, authors, messages, and file content), so every SHA below is reproducible.
 /// </summary>
 [Trait("Category", "RequiresGit")]
-public class GitCommitFixtureTests : IAsyncLifetime
+public sealed class GitCommitFixtureTests : IAsyncLifetime
 {
     private const string Commit1 = "05cf997338ec40468b61cd3c0bdabd138b69a39e";
     private const string Commit2 = "646ba0035f252f4668a17676698dda616f96856a";

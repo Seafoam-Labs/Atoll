@@ -15,7 +15,7 @@ using Xunit;
 namespace Atoll.Api.Tests.Packages.Git;
 
 [Trait("Category", "RequiresGit")]
-public class GitTransferServiceTests : IAsyncLifetime
+public sealed class GitTransferServiceTests : IAsyncLifetime
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
         new Dictionary<string, string>

@@ -13,8 +13,8 @@ public class MetricsScopeIsolationTests
         // Guards against the parallel-runner flake: WebApplicationFactory hosts
         // share one process and .NET metric listeners match meters by name
         // process-wide, so every host must expose its own Atoll meter scope.
-        using var other = new ApiTestFactory();
-        using var host = new ApiTestFactory();
+        await using var other = new ApiTestFactory();
+        await using var host = new ApiTestFactory();
 
         var hostScope = host.Services.GetRequiredService<AtollMetrics>().ScopeName;
         var otherScope = other.Services.GetRequiredService<AtollMetrics>().ScopeName;

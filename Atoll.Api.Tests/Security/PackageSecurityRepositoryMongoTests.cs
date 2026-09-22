@@ -8,7 +8,7 @@ using Xunit;
 namespace Atoll.Api.Tests.Security;
 
 [Trait("Category", "RequiresMongo")]
-public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryContract, IAsyncLifetime
+public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryContract, IAsyncLifetime
 {
     /// <summary>The index set <see cref="MongoPackageSecurityRepository" /> leaves behind, including the primary key.</summary>
     private static readonly string[] EnsuredIndexNames =

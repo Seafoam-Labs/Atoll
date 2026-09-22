@@ -66,7 +66,7 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
 
             var store = new PackageIndexStore();
             if (LoadSampleIndex)
-                store.Replace(TestData.LoadSampleIndexesAsync().GetAwaiter().GetResult());
+                store.Replace(TestData.LoadSampleIndexes());
             services.AddSingleton(store);
 
             services.AddSingleton<IPackageRepository>(Repository);

@@ -13,7 +13,7 @@ public class HybridCacheSemanticsTests
         LocalCacheExpiration = TimeSpan.FromMinutes(5),
     };
 
-    private CancellationToken Ct => TestContext.Current.CancellationToken;
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // Measured: a removal that lands while a factory is in flight does not evict that factory's late
     // store. A value generated before a write can therefore serve for one full TTL after a racing
@@ -92,7 +92,7 @@ public class HybridCacheSemanticsTests
             calls++;
             started.SetResult();
             var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using (ct.Register(static s => ((TaskCompletionSource)s!).SetResult(), cancelled))
+            await using (ct.Register(static s => ((TaskCompletionSource)s!).SetResult(), cancelled))
             {
                 var winner = await Task.WhenAny(release.Task, cancelled.Task);
                 factorySawCancellation = winner == cancelled.Task;

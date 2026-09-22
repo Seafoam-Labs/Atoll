@@ -6,7 +6,7 @@ using Xunit;
 namespace Atoll.Api.Tests.Catalog.Indexing;
 
 [Trait("Category", "RequiresMongo")]
-public class AurMetadataRepositoryMongoTests : AurMetadataRepositoryContract, IAsyncLifetime
+public sealed class AurMetadataRepositoryMongoTests : AurMetadataRepositoryContract, IAsyncLifetime
 {
     private readonly IMongoClient _client;
     private readonly string _database;

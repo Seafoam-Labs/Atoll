@@ -7,7 +7,7 @@ using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Ui;
 
-public class UiPagesTests : IDisposable
+public sealed class UiPagesTests : IDisposable
 {
     private readonly HttpClient _client;
     private readonly SecurityTestFactory _factory;
@@ -292,7 +292,7 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task PackageDetailsRendersCustomExternalBaseUrlInCloneBlock()
     {
-        using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
+        await using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
         using var client = factory.CreateClient();
         await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
         await factory.SecurityRepository.ScanRevisionAsync("shelly-bin", "rev-1", SecurityStatus.Verified);
@@ -311,7 +311,7 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task PackageDetailsTrimsTrailingSlashFromExternalBaseUrlInCloneBlock()
     {
-        using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
+        await using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
         using var client = factory.CreateClient();
         await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
         await factory.SecurityRepository.ScanRevisionAsync("shelly-bin", "rev-1", SecurityStatus.Verified);
@@ -394,8 +394,8 @@ public class UiPagesTests : IDisposable
             Assert.Contains("badge-verified", body);
             Assert.Contains("badge-flagged", body);
             Assert.Contains(">head</span>", body);
-            Assert.Contains($"href=\"/package/shelly-bin?rev=rev-1\"", body);
-            Assert.Contains($"href=\"/package/shelly-bin/files?rev=rev-2\"", body);
+            Assert.Contains("href=\"/package/shelly-bin?rev=rev-1\"", body);
+            Assert.Contains("href=\"/package/shelly-bin/files?rev=rev-2\"", body);
         });
     }
 
@@ -597,7 +597,7 @@ public class UiPagesTests : IDisposable
     [Fact]
     public async Task PackagePagesServeOpenGraphAndCanonicalFromExternalBaseUrl()
     {
-        using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
+        await using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
         using var client = factory.CreateClient();
 
         var routes = new[]

@@ -7,7 +7,7 @@ using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Security;
 
-public class SecurityGatingEndpointsTests : IDisposable
+public sealed class SecurityGatingEndpointsTests : IDisposable
 {
     private readonly HttpClient _client;
     private readonly SecurityTestFactory _factory;

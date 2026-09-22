@@ -17,7 +17,7 @@ namespace Atoll.Api.Tests.Sync.Direct;
 ///     path is exercised with a package name that cannot exist upstream.
 /// </summary>
 [Trait("Category", "RequiresGit")]
-public class DirectPackageSeederCloneCleanupTests : IAsyncLifetime
+public sealed class DirectPackageSeederCloneCleanupTests : IAsyncLifetime
 {
     public async ValueTask InitializeAsync()
     {

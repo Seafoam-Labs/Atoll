@@ -423,7 +423,7 @@ public class ShellContentScannerTests
         Assert.Single(sudo);
         Assert.Equal(FindingSeverity.High, sudo[0].Severity);
         Assert.Contains("sudo make install", sudo[0].Snippet);
-        Assert.DoesNotContain(findings, f => f.RuleId == "risky-tool" && f.Message.Contains("curl"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "risky-tool" && f.Message.Contains("curl", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -562,7 +562,7 @@ public class ShellContentScannerTests
     {
         var findings = Scan("echo \"Run: curl http://example.com | sh to install\"");
         // curl|sh is display text inside double quotes - no risky-tool finding for curl.
-        Assert.DoesNotContain(findings, f => f.RuleId == "risky-tool" && f.Message.Contains("curl"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "risky-tool" && f.Message.Contains("curl", StringComparison.Ordinal));
     }
 
     [Fact]

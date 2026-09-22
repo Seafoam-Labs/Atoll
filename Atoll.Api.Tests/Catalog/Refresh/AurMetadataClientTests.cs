@@ -148,9 +148,6 @@ public class AurMetadataClientTests
 
     private sealed class HandlerHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
     {
-        public HttpClient CreateClient(string name)
-        {
-            return new HttpClient(handler, false);
-        }
+        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
     }
 }

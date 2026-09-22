@@ -9,7 +9,7 @@ using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Ui;
 
-public class PackageDetailsServiceTests : IAsyncLifetime
+public sealed class PackageDetailsServiceTests : IAsyncLifetime
 {
     private PackageIndexStore _store = null!;
     private InMemoryPackageRepository _repository = null!;
@@ -18,10 +18,10 @@ public class PackageDetailsServiceTests : IAsyncLifetime
 
     private const string Name = "shelly-bin";
 
-    public async ValueTask InitializeAsync()
+    public ValueTask InitializeAsync()
     {
         _store = new PackageIndexStore();
-        _store.Replace(await TestData.LoadSampleIndexesAsync());
+        _store.Replace(TestData.LoadSampleIndexes());
         _repository = new InMemoryPackageRepository();
         _securityRepository = new InMemoryPackageSecurityRepository();
         _service = new PackageDetailsService(
@@ -29,6 +29,8 @@ public class PackageDetailsServiceTests : IAsyncLifetime
             _repository,
             _securityRepository,
             new PackageSecurityAccess(_repository, _securityRepository, Options.Create(new AtollOptions())));
+
+        return ValueTask.CompletedTask;
     }
 
     public ValueTask DisposeAsync()

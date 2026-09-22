@@ -160,7 +160,7 @@ public class StatusDashboardServiceTests
         {
             Assert.Equal(StatusDashboardService.ExclusionRenderCap + 5, model.ExcludedPackageBases);
             Assert.Equal(StatusDashboardService.ExclusionRenderCap, model.ExcludedPackageBaseNames.Count);
-            Assert.Equal("base-000", model.ExcludedPackageBaseNames.First());
+            Assert.Equal("base-000", model.ExcludedPackageBaseNames[0]);
         });
     }
 

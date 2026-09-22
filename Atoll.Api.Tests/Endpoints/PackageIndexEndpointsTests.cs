@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Atoll.Api.Tests.Endpoints;
 
-public class PackageIndexEndpointsTests : IDisposable
+public sealed class PackageIndexEndpointsTests : IDisposable
 {
     private readonly HttpClient _client;
     private readonly SecurityTestFactory _factory;
@@ -239,7 +239,7 @@ public class PackageIndexEndpointsTests : IDisposable
     [Fact]
     public async Task Index_returns_empty_envelope_for_empty_corpus()
     {
-        using var factory = new SecurityTestFactory();
+        await using var factory = new SecurityTestFactory();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/v1/packages", TestContext.Current.CancellationToken);

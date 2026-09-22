@@ -140,7 +140,7 @@ public class PackageIndexRankerPerfTests
 
         Array.Sort(coldSamples);
         _output.WriteLine(
-            $"cold sorted request (fresh names + sort, votes desc)  " +
+            "cold sorted request (fresh names + sort, votes desc)  " +
             $"median={coldSamples[coldSamples.Length / 2],7:F1} ms  min={coldSamples[0],7:F1} ms  " +
             $"alloc={coldAllocated / (double)RebuildIterations / 1024,7:F0} KB/call");
 

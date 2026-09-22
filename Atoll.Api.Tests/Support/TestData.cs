@@ -50,9 +50,5 @@ internal static class TestData
         return path;
     }
 
-    internal static async Task<SearchIndexData> LoadSampleIndexesAsync()
-    {
-        var path = await WriteSamplePackagesAsync();
-        return await PackageIndexBuilder.LoadAsync(path, CancellationToken.None);
-    }
+    internal static SearchIndexData LoadSampleIndexes() => PackageIndexBuilder.Parse(SamplePackagesJson);
 }
