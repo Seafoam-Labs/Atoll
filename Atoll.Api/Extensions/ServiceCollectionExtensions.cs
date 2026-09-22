@@ -42,11 +42,7 @@ internal static class ServiceCollectionExtensions
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
-            services.AddOptions<SecurityOptions>()
-                .Bind(configuration.GetSection("Atoll:Security"))
-                .ValidateDataAnnotations()
-                .ValidateOnStart();
-
+            // Razor components inject IOptions<UiOptions>, so this section needs its own binding.
             services.AddOptions<UiOptions>()
                 .Bind(configuration.GetSection("Atoll:Ui"))
                 .ValidateDataAnnotations()

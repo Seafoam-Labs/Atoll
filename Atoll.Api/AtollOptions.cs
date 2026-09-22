@@ -1,19 +1,24 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Options;
 
 namespace Atoll.Api;
 
+/// <summary>
+///     Every nested member needs <see cref="ValidateObjectMembersAttribute"/>; without it its
+///     own annotations bind but are never checked.
+/// </summary>
 public sealed class AtollOptions
 {
-    public DataSourceOptions DataSource { get; init; } = new();
-    public MongoOptions Mongo { get; init; } = new();
-    public GitOptions Git { get; init; } = new();
-    public SeedOptions Seed { get; init; } = new();
-    public RefreshOptions Refresh { get; init; } = new();
-    public SecurityOptions Security { get; init; } = new();
-    public MutationsOptions Mutations { get; init; } = new();
-    public ProxyOptions Proxy { get; init; } = new();
-    public UiOptions Ui { get; init; } = new();
-    public CachingOptions Caching { get; init; } = new();
+    [ValidateObjectMembers] public DataSourceOptions DataSource { get; init; } = new();
+    [ValidateObjectMembers] public MongoOptions Mongo { get; init; } = new();
+    [ValidateObjectMembers] public GitOptions Git { get; init; } = new();
+    [ValidateObjectMembers] public SeedOptions Seed { get; init; } = new();
+    [ValidateObjectMembers] public RefreshOptions Refresh { get; init; } = new();
+    [ValidateObjectMembers] public SecurityOptions Security { get; init; } = new();
+    [ValidateObjectMembers] public MutationsOptions Mutations { get; init; } = new();
+    [ValidateObjectMembers] public ProxyOptions Proxy { get; init; } = new();
+    [ValidateObjectMembers] public UiOptions Ui { get; init; } = new();
+    [ValidateObjectMembers] public CachingOptions Caching { get; init; } = new();
 }
 
 public enum SeedMode
@@ -27,9 +32,9 @@ public sealed class SeedOptions
 {
     public SeedMode Mode { get; init; } = SeedMode.Direct;
 
-    public DirectSeedOptions Direct { get; init; } = new();
+    [ValidateObjectMembers] public DirectSeedOptions Direct { get; init; } = new();
 
-    public BulkSeedOptions Bulk { get; init; } = new();
+    [ValidateObjectMembers] public BulkSeedOptions Bulk { get; init; } = new();
 }
 
 public sealed class DirectSeedOptions
@@ -63,7 +68,7 @@ public sealed class MongoOptions
 
     [Required] public string Database { get; init; } = "atoll";
 
-    public MongoCollections Collections { get; init; } = new();
+    [ValidateObjectMembers] public MongoCollections Collections { get; init; } = new();
 
     [Range(1, 200)] public int MaxRevisions { get; init; } = 10;
 

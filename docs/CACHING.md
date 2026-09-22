@@ -6,8 +6,8 @@ changing an invalidation path.
 
 The shared HybridCache TTLs come from `Atoll:Caching` (`RankTtlSeconds` 30, `SnapshotTtlSeconds` 30,
 `DashboardTtlSeconds` 5) and are read once when a consuming service is constructed, so changing them needs a
-restart. The `[Range]` attributes on nested options sections bind but are not enforced at startup:
-`ValidateDataAnnotations` does not recurse into nested members.
+restart. Their `[Range]` attributes are enforced at startup: `AtollOptions` marks each nested section with
+`[ValidateObjectMembers]`, which is what makes `ValidateDataAnnotations` descend into it.
 
 ## Inventory
 
