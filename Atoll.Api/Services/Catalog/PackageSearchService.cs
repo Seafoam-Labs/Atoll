@@ -8,7 +8,7 @@ public sealed class PackageSearchService(PackageIndexStore store)
 
     public long RequestCount => Interlocked.Read(ref _requestCount);
 
-    public AurPackageMetadata[] FindByNames(HashSet<string> names)
+    public AurPackageMetadata[] FindByNames(IReadOnlySet<string> names)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
@@ -22,7 +22,7 @@ public sealed class PackageSearchService(PackageIndexStore store)
         ];
     }
 
-    public AurPackageMetadata[] FindByProvides(HashSet<string> names)
+    public AurPackageMetadata[] FindByProvides(IReadOnlySet<string> names)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);
@@ -45,7 +45,7 @@ public sealed class PackageSearchService(PackageIndexStore store)
         ];
     }
 
-    public AurPackageMetadata[] FindByWords(HashSet<string> words)
+    public AurPackageMetadata[] FindByWords(IReadOnlySet<string> words)
     {
         var snapshot = store.Current;
         Interlocked.Increment(ref _requestCount);

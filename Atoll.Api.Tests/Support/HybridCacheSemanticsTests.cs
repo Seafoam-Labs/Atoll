@@ -26,25 +26,25 @@ public class HybridCacheSemanticsTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var freshCalls = 0;
 
-        async ValueTask<string> InFlight(CancellationToken _)
+        async ValueTask<string> InFlightAsync(CancellationToken _)
         {
             started.SetResult();
             await release.Task;
             return "in-flight";
         }
 
-        ValueTask<string> Fresh(CancellationToken _)
+        ValueTask<string> FreshAsync(CancellationToken _)
         {
             freshCalls++;
             return new ValueTask<string>("fresh");
         }
 
-        var read1 = cache.GetOrCreateAsync("rank.names", InFlight, LongLived, ["catalog"], Ct).AsTask();
+        var read1 = cache.GetOrCreateAsync("rank.names", InFlightAsync, LongLived, ["catalog"], Ct).AsTask();
         await started.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
         await cache.RemoveByTagAsync("catalog", Ct);
         release.SetResult();
         var first = await read1.WaitAsync(TimeSpan.FromSeconds(10), Ct);
-        var second = await cache.GetOrCreateAsync("rank.names", Fresh, LongLived, ["catalog"], Ct);
+        var second = await cache.GetOrCreateAsync("rank.names", FreshAsync, LongLived, ["catalog"], Ct);
 
         Assert.Multiple(() =>
         {
@@ -64,14 +64,14 @@ public class HybridCacheSemanticsTests
         await cancelled.CancelAsync();
         var calls = 0;
 
-        ValueTask<string> Factory(CancellationToken _)
+        ValueTask<string> FactoryAsync(CancellationToken _)
         {
             calls++;
             return new ValueTask<string>("never served");
         }
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            cache.GetOrCreateAsync("rank.names", Factory, LongLived, cancellationToken: cancelled.Token).AsTask());
+            cache.GetOrCreateAsync("rank.names", FactoryAsync, LongLived, cancellationToken: cancelled.Token).AsTask());
 
         Assert.Equal(0, calls);
     }
@@ -87,7 +87,7 @@ public class HybridCacheSemanticsTests
         var calls = 0;
         var factorySawCancellation = false;
 
-        async ValueTask<string> Factory(CancellationToken ct)
+        async ValueTask<string> FactoryAsync(CancellationToken ct)
         {
             calls++;
             started.SetResult();
@@ -103,9 +103,9 @@ public class HybridCacheSemanticsTests
         }
 
         using var aborting = new CancellationTokenSource();
-        var waiterA = cache.GetOrCreateAsync("rank.names", Factory, LongLived, cancellationToken: aborting.Token).AsTask();
+        var waiterA = cache.GetOrCreateAsync("rank.names", FactoryAsync, LongLived, cancellationToken: aborting.Token).AsTask();
         await started.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
-        var waiterB = cache.GetOrCreateAsync("rank.names", Factory, LongLived, cancellationToken: Ct).AsTask();
+        var waiterB = cache.GetOrCreateAsync("rank.names", FactoryAsync, LongLived, cancellationToken: Ct).AsTask();
         await aborting.CancelAsync();
 
         // Await the abort before releasing the factory. The aborted join cancels on its own token, so
@@ -116,7 +116,7 @@ public class HybridCacheSemanticsTests
 
         release.TrySetResult();
         var b = await waiterB.WaitAsync(TimeSpan.FromSeconds(10), Ct);
-        var third = await cache.GetOrCreateAsync("rank.names", Factory, LongLived, cancellationToken: Ct);
+        var third = await cache.GetOrCreateAsync("rank.names", FactoryAsync, LongLived, cancellationToken: Ct);
 
         Assert.Multiple(() =>
         {

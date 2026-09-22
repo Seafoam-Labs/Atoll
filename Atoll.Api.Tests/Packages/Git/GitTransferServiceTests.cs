@@ -24,7 +24,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
             [".SRCINFO"] = "pkgname = shelly\n"
         };
 
-    private static async Task<bool> GitIsAvailable()
+    private static async Task<bool> GitIsAvailableAsync()
     {
         var (exitCode, _) = await GitClient.TryExecuteAsync(["--version"], CancellationToken.None);
         return exitCode == 0;
@@ -50,7 +50,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        Assert.SkipUnless(await GitIsAvailable(), "git binary is required for these tests");
+        Assert.SkipUnless(await GitIsAvailableAsync(), "git binary is required for these tests");
     }
 
     public ValueTask DisposeAsync()

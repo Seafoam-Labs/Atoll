@@ -46,7 +46,7 @@ public sealed class GitCommitFixtureTests : IAsyncLifetime
             ["notes.txt"] = "#!/usr/bin/env cat\njust text\n"
         };
 
-    private static async Task<bool> GitIsAvailable()
+    private static async Task<bool> GitIsAvailableAsync()
     {
         var (exitCode, _) = await GitClient.TryExecuteAsync(["--version"], CancellationToken.None);
         return exitCode == 0;
@@ -54,7 +54,7 @@ public sealed class GitCommitFixtureTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        Assert.SkipUnless(await GitIsAvailable(), "git binary is required for these tests");
+        Assert.SkipUnless(await GitIsAvailableAsync(), "git binary is required for these tests");
     }
 
     public ValueTask DisposeAsync()

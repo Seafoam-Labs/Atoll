@@ -36,7 +36,7 @@ public sealed class PackageTarballService(IPackageRepository repository)
             return null;
 
         var resolved = string.IsNullOrEmpty(revisionId) ? head.HeadRevisionId : revisionId;
-        if (head.Revisions.All(r => !string.Equals(r.RevisionId, resolved, StringComparison.Ordinal)))
+        if (head.Revisions.TrueForAll(r => !string.Equals(r.RevisionId, resolved, StringComparison.Ordinal)))
             return null;
 
         var revision = await repository.GetRevisionAsync(packageName, resolved, ct);

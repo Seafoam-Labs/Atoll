@@ -14,7 +14,7 @@ internal enum DirectSeedCycleOutcome
 
 internal sealed record DirectSeedCycleResult(DirectSeedCycleOutcome Outcome, int Seeded);
 
-public sealed class DirectSeedWorker(
+public sealed partial class DirectSeedWorker(
     PackageIndexStore indexStore,
     IPackageRepository repo,
     DirectPackageSeeder seeder,
@@ -107,14 +107,14 @@ public sealed class DirectSeedWorker(
                     await seeder.SeedAsync(packageName, stoppingToken);
                     seeded++;
                     status.RecordSeeded();
-                    logger.LogTrace("Seeded package {PackageName}.", packageName);
+                    LogSeededPackage(logger, packageName);
                 }
                 catch (PackageConflictException ex)
                 {
                     // Race condition: package was seeded between list and seed.
                     alreadyPresent++;
                     status.RecordAlreadyPresent();
-                    logger.LogDebug(ex, "Package {PackageName} was seeded by another operation.", packageName);
+                    LogAlreadySeeded(logger, ex, packageName);
                 }
                 catch (Exception ex)
                 {
@@ -137,4 +137,12 @@ public sealed class DirectSeedWorker(
 
         return new DirectSeedCycleResult(DirectSeedCycleOutcome.Completed, seeded);
     }
+
+    // Per-package calls: these run once for every seeded package, so they use the
+    // source-generated LoggerMessage form. The per-cycle calls above stay on LoggerExtensions.
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Seeded package {PackageName}.")]
+    private static partial void LogSeededPackage(ILogger logger, string packageName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Package {PackageName} was seeded by another operation.")]
+    private static partial void LogAlreadySeeded(ILogger logger, Exception exception, string packageName);
 }

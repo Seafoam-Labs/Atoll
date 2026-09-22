@@ -6,7 +6,7 @@ using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Services.Security;
 
-public sealed class PackageSecurityWorker(
+public sealed partial class PackageSecurityWorker(
     IPackageRepository packageRepository,
     IPackageSecurityRepository securityRepo,
     IPackageSecurityScanner scanner,
@@ -133,9 +133,7 @@ public sealed class PackageSecurityWorker(
             var revision = await packageRepository.GetRevisionAsync(claim.PackageName, claim.RevisionId, ct);
             if (revision is null)
             {
-                logger.LogDebug(
-                    "Dropping security scan claim for {PackageName} revision {RevisionId}: revision content no longer retained.",
-                    claim.PackageName, claim.RevisionId);
+                LogDroppingScanClaim(logger, claim.PackageName, claim.RevisionId);
                 await securityRepo.DeleteAsync(claim.PackageName, claim.RevisionId, ct);
                 status.RecordScanDropped();
                 return true;
@@ -156,13 +154,9 @@ public sealed class PackageSecurityWorker(
                 await cache.RemoveByTagAsync(AtollCacheKeys.TagHeadStatus, ct);
 
             if (result.Status == SecurityStatus.Flagged)
-                logger.LogDebug(
-                    "Security scan flagged {PackageName} revision {RevisionId}: {FindingCount} findings.",
-                    claim.PackageName, claim.RevisionId, result.Findings.Count);
+                LogScanFlagged(logger, claim.PackageName, claim.RevisionId, result.Findings.Count);
             else
-                logger.LogDebug(
-                    "Security scan for {PackageName} revision {RevisionId} -> {Status} ({FindingCount} findings).",
-                    claim.PackageName, claim.RevisionId, result.Status, result.Findings.Count);
+                LogScanResult(logger, claim.PackageName, claim.RevisionId, result.Status, result.Findings.Count);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -196,8 +190,7 @@ public sealed class PackageSecurityWorker(
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Failed to release security scan claim for {PackageName} revision {RevisionId}.",
-                claim.PackageName, claim.RevisionId);
+            LogReleaseClaimFailed(logger, ex, claim.PackageName, claim.RevisionId);
         }
     }
 
@@ -219,8 +212,30 @@ public sealed class PackageSecurityWorker(
     private void LogStaleClaim(PackageSecurityScanDocument claim)
     {
         // A policy mismatch is normal during a rolling deployment, not a scan failure.
-        logger.LogInformation(
-            "Discarded security scan result for {PackageName} revision {RevisionId}: the claim became stale (lease lost or required policy version raised).",
-            claim.PackageName, claim.RevisionId);
+        LogStaleScanClaim(logger, claim.PackageName, claim.RevisionId);
     }
+
+    // Per-revision calls: these run once for every scanned revision, so they use the
+    // source-generated LoggerMessage form. The per-cycle calls above stay on LoggerExtensions.
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Dropping security scan claim for {PackageName} revision {RevisionId}: revision content no longer retained.")]
+    private static partial void LogDroppingScanClaim(ILogger logger, string packageName, string revisionId);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Security scan flagged {PackageName} revision {RevisionId}: {FindingCount} findings.")]
+    private static partial void LogScanFlagged(ILogger logger, string packageName, string revisionId, int findingCount);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Security scan for {PackageName} revision {RevisionId} -> {Status} ({FindingCount} findings).")]
+    private static partial void LogScanResult(
+        ILogger logger, string packageName, string revisionId, SecurityStatus status, int findingCount);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Failed to release security scan claim for {PackageName} revision {RevisionId}.")]
+    private static partial void LogReleaseClaimFailed(ILogger logger, Exception exception, string packageName, string revisionId);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Discarded security scan result for {PackageName} revision {RevisionId}: " +
+                  "the claim became stale (lease lost or required policy version raised).")]
+    private static partial void LogStaleScanClaim(ILogger logger, string packageName, string revisionId);
 }

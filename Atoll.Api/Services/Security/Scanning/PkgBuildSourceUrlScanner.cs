@@ -14,10 +14,10 @@ internal static partial class PkgBuildSourceUrlScanner
                 !line.Contains("source=", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            foreach (Match match in HttpRegex().Matches(line))
+            foreach (Match match in HttpRegex.Matches(line))
             {
                 var url = match.Value.TrimEnd(')', ']', '}', ',', ';');
-                if (!SuspiciousSourceUrl().IsMatch(url))
+                if (!SuspiciousSourceUrl.IsMatch(url))
                     continue;
 
                 var rule = SecurityFindingRules.SuspiciousSourceUrl;
@@ -31,10 +31,10 @@ internal static partial class PkgBuildSourceUrlScanner
         }
     }
 
-    [GeneratedRegex(@"^https?://[^\s/]+\.(zip|rar|7z|tar\.gz|tar\.bz2|tgz|exe|msi|bin)$",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
-    private static partial Regex SuspiciousSourceUrl();
+    [GeneratedRegex(@"^https?://[^\s/]+\.(?:zip|rar|7z|tar\.gz|tar\.bz2|tgz|exe|msi|bin)$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled, 250, "en-US")]
+    private static partial Regex SuspiciousSourceUrl { get; }
 
-    [GeneratedRegex(@"https?://[^\s'""]+")]
-    private static partial Regex HttpRegex();
+    [GeneratedRegex(@"https?://[^\s'""]+", RegexOptions.None, 250)]
+    private static partial Regex HttpRegex { get; }
 }

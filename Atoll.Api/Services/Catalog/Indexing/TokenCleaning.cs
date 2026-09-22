@@ -46,23 +46,23 @@ public static partial class TokenCleaning
     ///     Splits on punctuation/symbols/brackets.
     ///     <example>"foo-bar.baz" → "foo", "bar", "baz"</example>
     /// </summary>
-    [GeneratedRegex("[-_!,:/()\\[\\].'+?=*\"#$%&{}|;~\\\\<>@`^]")]
-    private static partial Regex SeparatorsRegex();
+    [GeneratedRegex("[-_!,:/()\\[\\].'+?=*\"#$%&{}|;~\\\\<>@`^]", RegexOptions.None, 250)]
+    private static partial Regex SeparatorsRegex { get; }
 
     /// <summary>
     ///     Splits at lower→upper or digit→upper boundaries.
     ///     <example>"XmlHttpRequest" → "Xml", "Http", "Request"</example>
     /// </summary>
-    [GeneratedRegex("(?<=[a-z0-9])(?=[A-Z])")]
-    private static partial Regex CamelCaseRegex();
+    [GeneratedRegex("(?<=[a-z0-9])(?=[A-Z])", RegexOptions.None, 250)]
+    private static partial Regex CamelCaseRegex { get; }
 
     public static IEnumerable<string> SplitAndClean(IEnumerable<string> source)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var token in source)
-        foreach (var split in SeparatorsRegex().Split(token))
-        foreach (var part in CamelCaseRegex().Split(split))
+        foreach (var split in SeparatorsRegex.Split(token))
+        foreach (var part in CamelCaseRegex.Split(split))
         {
             if (part.Length < MinimumTokenLength
                 && !AllowedShortTerms.Contains(part.ToLowerInvariant())) continue;

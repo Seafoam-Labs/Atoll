@@ -73,9 +73,9 @@ public sealed class AurRpcEndpointsTests : IDisposable
     [Fact]
     public async Task LegacySearch_supports_default_and_relation_fields()
     {
-        var byDescription = await Json("/rpc?v=5&type=search&arg=modern");
-        var byProvides = await Json("/rpc?v=5&type=search&arg=shelly&by=provides");
-        var byCheckDepends = await Json("/rpc?v=5&type=search&arg=bats&by=checkdepends");
+        var byDescription = await JsonAsync("/rpc?v=5&type=search&arg=modern");
+        var byProvides = await JsonAsync("/rpc?v=5&type=search&arg=shelly&by=provides");
+        var byCheckDepends = await JsonAsync("/rpc?v=5&type=search&arg=bats&by=checkdepends");
 
         Assert.Multiple(() =>
         {
@@ -88,10 +88,10 @@ public sealed class AurRpcEndpointsTests : IDisposable
     [Fact]
     public async Task PathRpc_and_suggestions_are_supported()
     {
-        var info = await Json("/rpc/v5/info/shelly-bin");
-        var search = await Json("/rpc/v5/search/portable?by=name");
-        var suggestions = await Json("/rpc/v5/suggest/port");
-        var packageBaseSuggestions = await Json("/rpc/v5/suggest-pkgbase/shel");
+        var info = await JsonAsync("/rpc/v5/info/shelly-bin");
+        var search = await JsonAsync("/rpc/v5/search/portable?by=name");
+        var suggestions = await JsonAsync("/rpc/v5/suggest/port");
+        var packageBaseSuggestions = await JsonAsync("/rpc/v5/suggest-pkgbase/shel");
 
         Assert.Multiple(() =>
         {
@@ -109,7 +109,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     [InlineData("/rpc?v=5&type=search&arg=shelly&by=unknown", "Incorrect by field specified.")]
     public async Task Invalid_requests_return_aurweb_error_envelopes(string path, string expectedError)
     {
-        var body = await Json(path);
+        var body = await JsonAsync(path);
 
         Assert.Multiple(() =>
         {
@@ -119,7 +119,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
         });
     }
 
-    private async Task<JsonElement> Json(string path)
+    private async Task<JsonElement> JsonAsync(string path)
     {
         var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

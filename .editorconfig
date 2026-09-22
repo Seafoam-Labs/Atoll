@@ -49,20 +49,25 @@ dotnet_diagnostic.MA0127.severity = error
 # Async/cancellation, including the fire-and-forget check VSTHRD110. MA0040 forwards the caller's
 # token (tests use Xunit.TestContext.Current.CancellationToken); VSTHRD103 keeps the async overload
 # inside async methods and has one per-file exemption at the bottom of this file; MA0042 disposes
-# asynchronously wherever the type offers it.
+# asynchronously wherever the type offers it; VSTHRD200 wants the Async suffix on a method that
+# returns an awaitable, which the route-handler and test-helper names now carry.
 dotnet_diagnostic.CA2016.severity = error
 dotnet_diagnostic.MA0040.severity = error
 dotnet_diagnostic.MA0042.severity = error
 dotnet_diagnostic.VSTHRD103.severity = error
 dotnet_diagnostic.VSTHRD110.severity = error
+dotnet_diagnostic.VSTHRD200.severity = error
 
 # Collections/LINQ hygiene and logging message templates. An indexable collection answers through
-# its indexer or length, and Order replaces an OrderBy whose key is the element itself.
+# its indexer or length, List<T> predicates replace the equivalent LINQ scan, public signatures
+# take the collection abstraction, and Order replaces an OrderBy whose key is the element itself.
 dotnet_diagnostic.CA1826.severity = error
 dotnet_diagnostic.CA1829.severity = error
 dotnet_diagnostic.CA1841.severity = error
 dotnet_diagnostic.CA1860.severity = error
 dotnet_diagnostic.CA2254.severity = error
+dotnet_diagnostic.MA0016.severity = error
+dotnet_diagnostic.MA0020.severity = error
 dotnet_diagnostic.MA0159.severity = error
 
 # Ownership of disposables: a class that owns one either seals itself or offers a virtual dispose
@@ -120,6 +125,28 @@ dotnet_diagnostic.CA1863.severity = error
 dotnet_diagnostic.CA5350.severity = error
 dotnet_diagnostic.CA5351.severity = error
 
+# Regular expressions reading untrusted AUR text. Every pattern is source-generated from a
+# constant with an explicit match timeout, so a pathological package name, PKGBUILD line or
+# index token cannot hang the scanner or the tokenizer. SYSLIB1045 and MA0110 both ask for
+# GeneratedRegexAttribute, MA0190 for its property rather than method form, MA0023 for a
+# non-capturing group wherever the capture is never read, and MA0009 for the timeout.
+# A timeout is the only ReDoS lever the lookaround patterns have, since NonBacktracking
+# rejects lookbehind. It turns pathological input into RegexMatchTimeoutException, which is
+# deliberately uncaught: the security worker fails the revision closed and one index refresh
+# cycle is abandoned and retried.
+dotnet_diagnostic.MA0009.severity = error
+dotnet_diagnostic.MA0023.severity = error
+dotnet_diagnostic.MA0110.severity = error
+dotnet_diagnostic.MA0190.severity = error
+dotnet_diagnostic.SYSLIB1045.severity = error
+
+# Method size. The rule checks lines and statements independently and reports once per method,
+# so both keys are needed; the caps are the current worst method on each axis (the bulk refresh
+# loop), which makes this a no-growth gate rather than a demand to split the scanner loops.
+MA0051.maximum_lines_per_method = 225
+MA0051.maximum_statements_per_method = 107
+dotnet_diagnostic.MA0051.severity = error
+
 # --- Left at suggestion on purpose: active and useful, but high-count, so they would flood
 # rather than guide. Count a rule's findings with a forced Rebuild; an incremental build
 # reports a false clean and every warning prints twice in the log.
@@ -152,6 +179,19 @@ dotnet_diagnostic.MA0076.severity = error
 # cannot express.
 [Atoll.Api/Services/Security/Persistence/MongoPackageSecurityRepository.cs]
 dotnet_diagnostic.VSTHRD103.severity = suggestion
+
+# --- Per-file exemptions for MA0016, which has neither a per-member configuration nor a code fix.
+# These are BSON documents: the concrete List<T> and Dictionary<TKey,TValue> properties are what
+# the MongoDB serializer and init-only construction need, the same reason CA1002 is opted out
+# repo-wide above.
+[Atoll.Api/Services/Packages/Persistence/PackageDocuments.cs]
+dotnet_diagnostic.MA0016.severity = suggestion
+
+[Atoll.Api/Services/Packages/Persistence/SeedExclusionDocument.cs]
+dotnet_diagnostic.MA0016.severity = suggestion
+
+[Atoll.Api/Services/Security/Persistence/PackageSecurityScanDocument.cs]
+dotnet_diagnostic.MA0016.severity = suggestion
 
 # --- Test scope: conventions that are a deliberate choice only inside tests.
 [Atoll.Api.Tests/**.cs]

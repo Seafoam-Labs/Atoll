@@ -77,7 +77,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
 
         for (var i = 1; i <= 10; i++)
-            await Append("shelly", NewRevisionContent("shelly", $"rev-{i}", $"commit {i}"), maxRevisions);
+            await AppendAsync("shelly", NewRevisionContent("shelly", $"rev-{i}", $"commit {i}"), maxRevisions);
 
         var head = await _repo.GetHeadAsync("shelly", CancellationToken.None);
 
@@ -94,7 +94,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task AppendRevisionAsync_unknown_package_throws_KeyNotFoundException()
     {
-        await Assert.ThrowsAsync<KeyNotFoundException>(async () => await Append(
+        await Assert.ThrowsAsync<KeyNotFoundException>(async () => await AppendAsync(
             "missing",
             NewRevisionContent("missing", "rev-1", "commit 1")));
     }
@@ -104,7 +104,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
-        await Append(
+        await AppendAsync(
             "shelly",
             NewRevisionContent("shelly", "rev-a", "commit a", PkgbuildFiles("shelly", "rev-a")));
 
@@ -127,7 +127,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
 
         for (var i = 1; i <= 3; i++)
-            await Append("shelly", NewRevisionContent("shelly", $"rev-{i}", $"commit {i}"));
+            await AppendAsync("shelly", NewRevisionContent("shelly", $"rev-{i}", $"commit {i}"));
 
         var history = await _repo.GetHistoryAsync("shelly", CancellationToken.None);
 
@@ -155,7 +155,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
             await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
         }
 
-        await Append("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")));
+        await AppendAsync("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")));
 
         var total = await _repo.CountAsync(CancellationToken.None);
         var firstPage = await _repo.ListIndexPageAsync(0, 2, CancellationToken.None);
@@ -210,7 +210,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
             await fake.InsertSeedAsync(doc, revision, CancellationToken.None);
         }
 
-        await Append("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")));
+        await AppendAsync("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")));
         await fake.AppendRevisionAsync("a-apple", NewRevisionContent("a-apple", "rev-a2", "second", PkgbuildFiles("a-apple", "rev-a2")), 10, TestContext.Current.CancellationToken);
 
         var names = new[] { "e-egg", "missing", "a-apple", "c-carrot" };
@@ -247,7 +247,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
 
         for (var i = 1; i <= 10; i++)
-            await Append(
+            await AppendAsync(
                 "shelly",
                 NewRevisionContent("shelly", $"rev-{i}", $"commit {i}", PkgbuildFiles("shelly", $"rev-{i}")),
                 maxRevisions);
@@ -285,11 +285,11 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         var (doc, revision) = NewSeed("pkg/shelly", "shelly", "rev-a");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
 
-        await Append("shelly", NewRevisionContent("shelly", "rev-b", "commit b"), maxRevisions);
-        await Append("shelly", NewRevisionContent("shelly", "rev-c", "commit c"), maxRevisions);
+        await AppendAsync("shelly", NewRevisionContent("shelly", "rev-b", "commit b"), maxRevisions);
+        await AppendAsync("shelly", NewRevisionContent("shelly", "rev-c", "commit c"), maxRevisions);
         // rev-a is now evicted; append rev-b again - content hashes legitimately reappear, so
         // the freshly upserted document must not be deleted by the eviction sweep.
-        await Append("shelly", NewRevisionContent("shelly", "rev-b", "commit b"), maxRevisions);
+        await AppendAsync("shelly", NewRevisionContent("shelly", "rev-b", "commit b"), maxRevisions);
 
         var revB = await _repo.GetRevisionAsync("shelly", "rev-b", CancellationToken.None);
         var revC = await _repo.GetRevisionAsync("shelly", "rev-c", CancellationToken.None);
@@ -310,7 +310,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
-        await Append(
+        await AppendAsync(
             "shelly",
             NewRevisionContent("shelly", "rev-1", "commit 1", PkgbuildFiles("shelly", "rev-1")));
 
@@ -353,7 +353,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         });
     }
 
-    private Task Append(string packageName, PackageRevisionContentDocument revision, int maxRevisions = 10)
+    private Task AppendAsync(string packageName, PackageRevisionContentDocument revision, int maxRevisions = 10)
     {
         return _repo.AppendRevisionAsync(packageName, revision, maxRevisions, CancellationToken.None);
     }

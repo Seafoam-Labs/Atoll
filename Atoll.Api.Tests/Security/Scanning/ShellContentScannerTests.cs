@@ -110,7 +110,7 @@ public class ShellContentScannerTests
     public void Eval_indirection_ignores_display_text_and_argument_mentions(string content)
     {
         var findings = Scan(content);
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "eval-indirection", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "eval-indirection", StringComparison.Ordinal)),
             $"Unexpected eval-indirection finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -172,7 +172,7 @@ public class ShellContentScannerTests
     public void Write_outside_build_root_ignores_relative_and_pkgdir_paths(string content)
     {
         var findings = Scan(content);
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal)),
             $"Unexpected write-outside-build-root finding. Got: {string.Join(", ", findings.Select(f => f.RuleId))}");
     }
 
@@ -200,7 +200,7 @@ public class ShellContentScannerTests
     {
         var findings = Scan(content);
         Assert.False(
-            findings.Any(f => f.RuleId.Equals("network-to-shell", StringComparison.Ordinal) ||
+            findings.Exists(f => f.RuleId.Equals("network-to-shell", StringComparison.Ordinal) ||
                               f.RuleId.Equals("network-execution", StringComparison.Ordinal) ||
                               f.RuleId.Equals("decode-to-shell", StringComparison.Ordinal)),
             $"Unexpected network rule finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
@@ -224,7 +224,7 @@ public class ShellContentScannerTests
     public void Network_execution_ignores_perl_inline_text_filters(string content)
     {
         var findings = Scan(content);
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "network-execution", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "network-execution", StringComparison.Ordinal)),
             $"Unexpected network-execution finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -259,7 +259,7 @@ public class ShellContentScannerTests
     public void Decode_to_shell_ignores_answer_feeding_into_local_scripts(string content)
     {
         var findings = Scan(content);
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "decode-to-shell", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "decode-to-shell", StringComparison.Ordinal)),
             $"Unexpected decode-to-shell finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -318,7 +318,7 @@ public class ShellContentScannerTests
     public void Privilege_escalation_rejects_tool_names_in_argument_position(string content)
     {
         var findings = Scan(content);
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
             $"Unexpected privilege-escalation finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -372,7 +372,7 @@ public class ShellContentScannerTests
     {
         var findings = Scan(content);
         Assert.False(
-            findings.Any(f => f.RuleId.Equals("risky-tool", StringComparison.Ordinal) ||
+            findings.Exists(f => f.RuleId.Equals("risky-tool", StringComparison.Ordinal) ||
                               f.RuleId.Equals("privilege-escalation", StringComparison.Ordinal)),
             $"Unexpected tool finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
@@ -404,7 +404,7 @@ public class ShellContentScannerTests
     {
         var findings = Scan(content, path);
         Assert.False(
-            findings.Any(f => f.RuleId.Equals("privilege-escalation", StringComparison.Ordinal) ||
+            findings.Exists(f => f.RuleId.Equals("privilege-escalation", StringComparison.Ordinal) ||
                               f.RuleId.Equals("risky-tool", StringComparison.Ordinal)),
             $"Unexpected findings. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
@@ -450,7 +450,7 @@ public class ShellContentScannerTests
     public void Eval_keyword_inside_array_data_is_not_flagged()
     {
         var findings = Scan("depends=(. $(cat deps.txt))");
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "eval-indirection", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "eval-indirection", StringComparison.Ordinal)),
             $"Unexpected eval-indirection finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -596,7 +596,7 @@ public class ShellContentScannerTests
     {
         // Complete CSI sequences are terminal styling - skipped even unquoted.
         var findings = Scan("echo \u001b[96m${blinking:blink=! blink:1}\r\u001b[0m");
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "hidden-character", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "hidden-character", StringComparison.Ordinal)),
             $"Unexpected hidden-character finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -604,7 +604,7 @@ public class ShellContentScannerTests
     public void Control_char_inside_quoted_display_text_is_not_flagged()
     {
         var findings = Scan("printf '%s\\n' \"python-poetry: support for Python packages using \u0016Poetry\"");
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "hidden-character", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "hidden-character", StringComparison.Ordinal)),
             $"Unexpected hidden-character finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -613,7 +613,7 @@ public class ShellContentScannerTests
     {
         // C1 bytes next to Latin-1 supplement characters are double-encoded UTF-8 file names.
         var findings = Scan("mv \"${pkgdir}/target/\"{\u00d1\u0082.cfg,\u0442.cfg}");
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "hidden-character", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "hidden-character", StringComparison.Ordinal)),
             $"Unexpected hidden-character finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -740,7 +740,7 @@ public class ShellContentScannerTests
     {
         var findings = Scan("\n\n   \n\nsudo whoami");
 
-        Assert.True(findings.All(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)));
+        Assert.True(findings.TrueForAll(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)));
         Assert.Single(findings);
     }
 
@@ -756,7 +756,7 @@ public class ShellContentScannerTests
     public void Command_substitution_inside_single_quotes_is_not_flagged(string content)
     {
         var findings = Scan(content);
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
             $"Unexpected command-substitution finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -778,7 +778,7 @@ public class ShellContentScannerTests
         // \$( never expands - the backslash is load-bearing, e.g. Makefile syntax in sed text.
         var findings = Scan("sed -i s/@X@/\\$(CFLAGS)/ Makefile");
 
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
             $"Unexpected command-substitution finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -801,7 +801,7 @@ public class ShellContentScannerTests
     public void Write_outside_build_root_inside_quotes_is_not_flagged(string content)
     {
         var findings = Scan(content);
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal)),
             $"Unexpected write-outside-build-root finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -878,7 +878,7 @@ public class ShellContentScannerTests
         // prevents execution), so the tool is display text, not an invocation.
         var findings = Scan("echo \"remove all: docker rmi \\$(docker images -q)\"");
 
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "risky-tool", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "risky-tool", StringComparison.Ordinal)),
             $"Unexpected risky-tool finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -887,7 +887,7 @@ public class ShellContentScannerTests
     {
         var findings = Scan("echo \"then run: \\$(sudo whoami)\"");
 
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
             $"Unexpected privilege-escalation finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -947,7 +947,7 @@ public class ShellContentScannerTests
         // normalization, so the quoted mask still hides the tool names.
         var findings = Scan("echo 'npm' \"curl\"");
 
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "risky-tool", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "risky-tool", StringComparison.Ordinal)),
             $"Unexpected risky-tool finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -956,7 +956,7 @@ public class ShellContentScannerTests
     {
         var findings = Scan("msg2 \"run 'sudo' to continue\"");
 
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
             $"Unexpected privilege-escalation finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 
@@ -991,9 +991,9 @@ public class ShellContentScannerTests
     {
         var findings = Scan("cat <<-'EOF'\n\t$(x)\n\tEOF\nsudo whoami\n");
 
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
             "body is suppressed");
-        Assert.True(findings.Any(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
+        Assert.True(findings.Exists(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
             "scanning resumes after the delimiter");
     }
 
@@ -1080,9 +1080,9 @@ public class ShellContentScannerTests
     {
         var findings = Scan("diff <<'A' <<'B'\n$(x)\nA\n$(y)\nB\nsudo whoami\n");
 
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
             "both bodies are literal");
-        Assert.True(findings.Any(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
+        Assert.True(findings.Exists(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
             "scanning resumes after both");
     }
 
@@ -1110,7 +1110,7 @@ public class ShellContentScannerTests
         // A '#' line is a shell comment in a live body and help text in a data body -
         // nothing on it ever runs as a command.
         var findings = Scan(content);
-        Assert.False(findings.Any(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
+        Assert.False(findings.Exists(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
             $"Unexpected privilege-escalation finding. Got: {string.Join(", ", findings.Select(f => $"{f.RuleId}/{f.Severity}"))}");
     }
 

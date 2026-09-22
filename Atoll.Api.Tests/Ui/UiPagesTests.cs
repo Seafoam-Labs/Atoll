@@ -7,7 +7,7 @@ using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Tests.Ui;
 
-public sealed class UiPagesTests : IDisposable
+public sealed partial class UiPagesTests : IDisposable
 {
     private readonly HttpClient _client;
     private readonly SecurityTestFactory _factory;
@@ -571,7 +571,7 @@ public sealed class UiPagesTests : IDisposable
 
         Assert.Multiple(() =>
         {
-            Assert.Single(Regex.Matches(body, "<title>"));
+            Assert.Single(TitleTag.Matches(body));
             Assert.Contains(expectedTitle, body, StringComparison.Ordinal);
         });
     }
@@ -621,4 +621,7 @@ public sealed class UiPagesTests : IDisposable
             });
         }
     }
+
+    [GeneratedRegex("<title>", RegexOptions.None, 250)]
+    private static partial Regex TitleTag { get; }
 }

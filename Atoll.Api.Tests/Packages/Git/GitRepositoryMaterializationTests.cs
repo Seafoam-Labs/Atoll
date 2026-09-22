@@ -26,7 +26,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset T1 = new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
 
-    private static async Task<bool> GitIsAvailable()
+    private static async Task<bool> GitIsAvailableAsync()
     {
         var (exitCode, _) = await GitClient.TryExecuteAsync(["--version"], CancellationToken.None);
         return exitCode == 0;
@@ -56,7 +56,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        Assert.SkipUnless(await GitIsAvailable(), "git binary is required for these tests");
+        Assert.SkipUnless(await GitIsAvailableAsync(), "git binary is required for these tests");
     }
 
     public ValueTask DisposeAsync()

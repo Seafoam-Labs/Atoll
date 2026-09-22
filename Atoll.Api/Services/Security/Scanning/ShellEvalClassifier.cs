@@ -78,7 +78,7 @@ internal static class ShellEvalClassifier
 
         if (operand.Equals("echo", StringComparison.Ordinal) ||
             operand.Equals("printf", StringComparison.Ordinal))
-            return ExtractSubstitutionCommands(argument).All(IsReviewableCommand);
+            return ExtractSubstitutionCommands(argument).TrueForAll(IsReviewableCommand);
 
         if (operand.Equals("$(", StringComparison.Ordinal) ||
             operand.Equals("`", StringComparison.Ordinal))

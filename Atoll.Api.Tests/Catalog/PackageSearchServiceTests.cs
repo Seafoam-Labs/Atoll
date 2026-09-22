@@ -14,8 +14,8 @@ public class PackageSearchServiceTests
         store.Replace(TestData.LoadSampleIndexes());
         var query = new PackageSearchService(store);
 
-        var byProvides = query.FindByProvides(["shelly"]);
-        var byWords = query.FindByWords(["handheld", "portable"]);
+        var byProvides = query.FindByProvides(new HashSet<string>(["shelly"], StringComparer.Ordinal));
+        var byWords = query.FindByWords(new HashSet<string>(["handheld", "portable"], StringComparer.Ordinal));
 
         Assert.Equal("shelly-bin", Assert.Single(byProvides).Name);
 
@@ -31,7 +31,7 @@ public class PackageSearchServiceTests
         store.Replace(TestData.LoadSampleIndexes());
         var query = new PackageSearchService(store);
 
-        var result = query.FindByNames(["portable-kit", "not-real"]);
+        var result = query.FindByNames(new HashSet<string>(["portable-kit", "not-real"], StringComparer.Ordinal));
 
         Assert.Equal("portable-kit", Assert.Single(result).Name);
     }

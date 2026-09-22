@@ -3,7 +3,7 @@ using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Catalog.Refresh;
 
-public sealed class UpstreamPackageReconciler(
+public sealed partial class UpstreamPackageReconciler(
     IPackageService packages,
     IOptions<AtollOptions> options,
     ILogger<UpstreamPackageReconciler> logger)
@@ -52,8 +52,7 @@ public sealed class UpstreamPackageReconciler(
         {
             ct.ThrowIfCancellationRequested();
             await packages.DeleteAsync(packageName, ct);
-            logger.LogInformation("Deleted package {PackageName} because it is no longer present in the AUR metadata snapshot.",
-                packageName);
+            LogDeletedPackage(logger, packageName);
         }
 
         if (deleted.Count > 0)
@@ -61,4 +60,10 @@ public sealed class UpstreamPackageReconciler(
 
         return deleted.Count;
     }
+
+    // Runs once per deleted package, so it uses the source-generated LoggerMessage form;
+    // the per-cycle call above stays on LoggerExtensions.
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Deleted package {PackageName} because it is no longer present in the AUR metadata snapshot.")]
+    private static partial void LogDeletedPackage(ILogger logger, string packageName);
 }

@@ -89,11 +89,11 @@ internal static partial class PkgBuildScriptReferences
         ShellSyntax.QuotePosition[] positions,
         int start)
     {
-        for (var match = ArrayAssignmentRegex().Match(line, start); match.Success; match = match.NextMatch())
+        for (var match = ArrayAssignmentRegex.Match(line, start); match.Success; match = match.NextMatch())
         {
             var openParen = match.Index + match.Length - 1;
             if (positions[openParen].Region == ShellSyntax.QuoteRegion.Normal &&
-                IsDataArray(match.Groups[1].Value))
+                IsDataArray(match.Groups["arrayName"].Value))
                 return openParen;
         }
 
@@ -157,7 +157,7 @@ internal static partial class PkgBuildScriptReferences
     // dynamically-computed destination stays conservative.
     private static bool IsPackageStaging(string command)
     {
-        if (!TransportCommandRegex().IsMatch(command))
+        if (!TransportCommandRegex.IsMatch(command))
             return false;
 
         var destination = command.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)
@@ -173,9 +173,11 @@ internal static partial class PkgBuildScriptReferences
         return destination[0] is not ('/' or '$' or '`');
     }
 
-    [GeneratedRegex(@"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)\+?=\(", RegexOptions.Compiled)]
-    private static partial Regex ArrayAssignmentRegex();
+    // The array name is read at the FindDataArrayAssignment call site, so it stays a named
+    // capture: ExplicitCapture would silently drop it.
+    [GeneratedRegex(@"(?<![A-Za-z0-9_])(?<arrayName>[A-Za-z_][A-Za-z0-9_]*)\+?=\(", RegexOptions.Compiled, 250)]
+    private static partial Regex ArrayAssignmentRegex { get; }
 
-    [GeneratedRegex(@"^(install|cp|mv|ln)\b", RegexOptions.Compiled)]
-    private static partial Regex TransportCommandRegex();
+    [GeneratedRegex(@"^(?:install|cp|mv|ln)\b", RegexOptions.Compiled, 250)]
+    private static partial Regex TransportCommandRegex { get; }
 }

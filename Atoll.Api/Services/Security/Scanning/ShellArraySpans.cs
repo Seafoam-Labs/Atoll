@@ -6,8 +6,8 @@ internal static partial class ShellArraySpans
 {
     // An array assignment 'name=( … )'. The '=' must sit in unquoted text, so the same
     // text inside a quoted help string never opens a value region.
-    [GeneratedRegex(@"(?<=^|[;&|)\s])[A-Za-z_][A-Za-z0-9_]*\+?=\(", RegexOptions.Compiled)]
-    private static partial Regex ArrayAssignmentIntroducer();
+    [GeneratedRegex(@"(?<=^|[;&|)\s])[A-Za-z_][A-Za-z0-9_]*\+?=\(", RegexOptions.Compiled, 250)]
+    private static partial Regex ArrayAssignmentIntroducer { get; }
 
     /// <summary>
     ///     Computes the character ranges of this line that lie inside an array-assignment
@@ -28,7 +28,7 @@ internal static partial class ShellArraySpans
         {
             if (!inside)
             {
-                var introducer = ArrayAssignmentIntroducer().Match(line, i);
+                var introducer = ArrayAssignmentIntroducer.Match(line, i);
                 if (!introducer.Success)
                     break;
 

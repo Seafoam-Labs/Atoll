@@ -50,7 +50,7 @@ public static class Endpoints
 
     private static void MapPackageRoutes(RouteGroupBuilder packages)
     {
-        packages.MapGet("", GetPackageIndex);
+        packages.MapGet("", GetPackageIndexAsync);
 
         packages.MapPost("/{name}/seed",
                 async Task<Results<Created, ProblemHttpResult>> (
@@ -84,17 +84,17 @@ public static class Endpoints
                 })
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
-        packages.MapGet("/{name}/security", SecurityStatus)
+        packages.MapGet("/{name}/security", SecurityStatusAsync)
             .WithName(GetPackageSecurityEndpoint)
             .ProducesJsonOneOf<PackageSecurityHistoryResponse, PackageSecurityRevisionResponse>();
-        packages.MapPost("/{name}/security/rescan", SecurityRescan)
+        packages.MapPost("/{name}/security/rescan", SecurityRescanAsync)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         // Snapshot downloads are a human review surface and stay ungated like the Files tab;
         // the security gate blocks the automated paths (REST content JSON and Git Smart HTTP).
         // FileContentHttpResult carries no OpenAPI response metadata of its own, so the 200 body
         // is declared here.
-        packages.MapGet("/{name}/tarball", Tarball)
+        packages.MapGet("/{name}/tarball", TarballAsync)
             .Produces<byte[]>(StatusCodes.Status200OK, "application/gzip");
 
         var secured = packages
@@ -112,7 +112,7 @@ public static class Endpoints
             TypedResults.Ok(await repo.GetAsync(name, sha)));
     }
 
-    private static async Task<Results<Ok<PackageIndexResponse>, ValidationProblem>> GetPackageIndex(
+    private static async Task<Results<Ok<PackageIndexResponse>, ValidationProblem>> GetPackageIndexAsync(
         [FromQuery(Name = "page")] int? page,
         [FromQuery(Name = "limit")] int? limit,
         [FromQuery(Name = "sortBy")] PackageIndexSortByQuery? sortBy,
@@ -138,7 +138,7 @@ public static class Endpoints
     }
 
     private static async
-        Task<Results<Ok<PackageSecurityHistoryResponse>, Ok<PackageSecurityRevisionResponse>, NotFound>> SecurityStatus(
+        Task<Results<Ok<PackageSecurityHistoryResponse>, Ok<PackageSecurityRevisionResponse>, NotFound>> SecurityStatusAsync(
             [FromRoute] string name,
             [FromQuery(Name = "revision")] string? revision,
             [FromServices] PackageSecurityStatusService security,
@@ -154,7 +154,7 @@ public static class Endpoints
         return revisionStatus is null ? TypedResults.NotFound() : TypedResults.Ok(revisionStatus);
     }
 
-    private static async Task<Results<Accepted, NotFound, ProblemHttpResult>> SecurityRescan(
+    private static async Task<Results<Accepted, NotFound, ProblemHttpResult>> SecurityRescanAsync(
         [FromRoute] string name,
         [FromQuery(Name = "revision")] string? revision,
         [FromServices] PackageSecurityStatusService security,
@@ -176,7 +176,7 @@ public static class Endpoints
             new { name, revision = revisionId }));
     }
 
-    private static async Task<Results<FileContentHttpResult, NotFound>> Tarball(
+    private static async Task<Results<FileContentHttpResult, NotFound>> TarballAsync(
         [FromRoute] string name,
         [FromQuery(Name = "rev")] string? revision,
         [FromServices] PackageTarballService tarballs,
@@ -210,11 +210,11 @@ public static class Endpoints
             .AddEndpointFilter<PackageSecurityFilter>()
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
-        secured.MapGet("/{name}.git/info/refs", GitInfoRefs);
-        secured.MapPost("/{name}.git/git-upload-pack", GitUploadPack);
+        secured.MapGet("/{name}.git/info/refs", GitInfoRefsAsync);
+        secured.MapPost("/{name}.git/git-upload-pack", GitUploadPackAsync);
     }
 
-    private static async Task<Results<EmptyHttpResult, NotFound, ProblemHttpResult>> GitInfoRefs(
+    private static async Task<Results<EmptyHttpResult, NotFound, ProblemHttpResult>> GitInfoRefsAsync(
         [FromRoute] string name,
         [FromQuery(Name = "service")] string? service,
         [FromServices] IGitTransferService git,
@@ -237,7 +237,7 @@ public static class Endpoints
         return TypedResults.NotFound();
     }
 
-    private static async Task<Results<EmptyHttpResult, NotFound>> GitUploadPack(
+    private static async Task<Results<EmptyHttpResult, NotFound>> GitUploadPackAsync(
         [FromRoute] string name,
         [FromServices] IGitTransferService git,
         HttpRequest request,

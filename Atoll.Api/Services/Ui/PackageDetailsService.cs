@@ -220,7 +220,7 @@ public sealed class PackageDetailsService(
             return (head.HeadRevisionId, false);
 
         // Membership in the retained revision list matches the /security/rescan validation.
-        return head.Revisions.Any(revision => string.Equals(revision.RevisionId, requested, StringComparison.Ordinal))
+        return head.Revisions.Exists(revision => string.Equals(revision.RevisionId, requested, StringComparison.Ordinal))
             ? (requested, false)
             : (head.HeadRevisionId, true);
     }

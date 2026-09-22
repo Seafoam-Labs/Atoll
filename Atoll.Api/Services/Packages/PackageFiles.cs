@@ -1,3 +1,3 @@
 namespace Atoll.Api.Services.Packages;
 
-public record PackageFiles(Dictionary<string, string> Files);
+public record PackageFiles(IReadOnlyDictionary<string, string> Files);

@@ -3,7 +3,7 @@ namespace Atoll.Api.Services.Security.Scanning;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-internal static class LocalSourceBinaryScanner
+internal static partial class LocalSourceBinaryScanner
 {
     // Certificate/signature data has no reliable magic bytes, so these inert kinds are
     // recognized by extension. ELF still takes precedence and stays Critical regardless.
@@ -12,7 +12,8 @@ internal static class LocalSourceBinaryScanner
     // Shared libraries are named by the linker convention (*.so, *.so.N[.N...]). e_type
     // cannot distinguish them - PIE executables are ET_DYN like libraries - so the file
     // name is the signal.
-    private static readonly Regex SharedLibraryName = new(@"\.so(\.\d+)*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    [GeneratedRegex(@"\.so(?:\.\d+)*$", RegexOptions.Compiled | RegexOptions.IgnoreCase, 250)]
+    private static partial Regex SharedLibraryName { get; }
 
     public static SecurityFinding? Scan(string content, string path)
     {

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace Atoll.Api.Services.Sync.Refresh;
 
-public sealed class PackageRefreshWorker(
+public sealed partial class PackageRefreshWorker(
     PackageIndexStore indexStore,
     IPackageRepository repo,
     IPackageService packageService,
@@ -325,7 +325,7 @@ public sealed class PackageRefreshWorker(
                         if (changed)
                         {
                             Interlocked.Increment(ref updated);
-                            logger.LogTrace("Refreshed package {PackageName} from upstream.", packageName);
+                            LogRefreshedPackage(logger, packageName);
                         }
                         else
                         {
@@ -373,6 +373,11 @@ public sealed class PackageRefreshWorker(
         IReadOnlyList<CandidatePackageBase> Batch,
         BulkFetchResult? Result,
         Exception? Failure);
+
+    // Runs once per refreshed package, so it uses the source-generated LoggerMessage form;
+    // the per-cycle calls above stay on LoggerExtensions.
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Refreshed package {PackageName} from upstream.")]
+    private static partial void LogRefreshedPackage(ILogger logger, string packageName);
 }
 
 internal enum RefreshCycleOutcome

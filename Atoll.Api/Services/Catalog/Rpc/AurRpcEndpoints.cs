@@ -13,7 +13,7 @@ public static class AurRpcEndpoints
 
     public static void MapAurRpcEndpoints(this WebApplication app)
     {
-        app.MapMethods("/rpc", ["GET", "POST"], LegacyRpc)
+        app.MapMethods("/rpc", ["GET", "POST"], LegacyRpcAsync)
             .DisableAntiforgery();
         app.MapGet("/rpc/v5/info", PathInfo);
         app.MapGet("/rpc/v5/info/{arg}", PathInfoWithArg);
@@ -23,7 +23,7 @@ public static class AurRpcEndpoints
         app.MapGet("/rpc/v5/suggest-pkgbase/{arg}", PathSuggestPackageBase);
     }
 
-    private static async Task<Results<Ok<AurRpcResponse>, Ok<IReadOnlyList<string>>>> LegacyRpc(HttpRequest request, AurRpcService rpc)
+    private static async Task<Results<Ok<AurRpcResponse>, Ok<IReadOnlyList<string>>>> LegacyRpcAsync(HttpRequest request, AurRpcService rpc)
     {
         var form = request.HasFormContentType
             ? await request.ReadFormAsync(request.HttpContext.RequestAborted)

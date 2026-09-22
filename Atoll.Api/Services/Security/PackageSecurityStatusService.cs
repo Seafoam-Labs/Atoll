@@ -54,7 +54,7 @@ public sealed class PackageSecurityStatusService(
         var scan = await security.GetAsync(packageName, revisionId, ct);
         if (scan is null &&
             !string.Equals(revisionId, package.HeadRevisionId, StringComparison.Ordinal) &&
-            package.Revisions.All(r => !string.Equals(r.RevisionId, revisionId, StringComparison.Ordinal)))
+            package.Revisions.TrueForAll(r => !string.Equals(r.RevisionId, revisionId, StringComparison.Ordinal)))
             return null;
 
         return new PackageSecurityRevisionResponse(
@@ -80,7 +80,7 @@ public sealed class PackageSecurityStatusService(
             return null;
 
         var revision = string.IsNullOrEmpty(revisionId) ? package.HeadRevisionId : revisionId;
-        if (package.Revisions.All(r => !string.Equals(r.RevisionId, revision, StringComparison.Ordinal)))
+        if (package.Revisions.TrueForAll(r => !string.Equals(r.RevisionId, revision, StringComparison.Ordinal)))
             return null;
 
         var isHead = string.Equals(revision, package.HeadRevisionId, StringComparison.Ordinal);

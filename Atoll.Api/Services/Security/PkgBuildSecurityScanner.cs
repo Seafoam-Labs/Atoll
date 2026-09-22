@@ -32,7 +32,7 @@ public sealed class PkgBuildSecurityScanner : IPackageSecurityScanner
             }
         }
 
-        var status = findings.Any(f => f.Severity is FindingSeverity.Critical or FindingSeverity.High)
+        var status = findings.Exists(f => f.Severity is FindingSeverity.Critical or FindingSeverity.High)
             ? SecurityStatus.Flagged
             : SecurityStatus.Verified;
 

@@ -111,9 +111,9 @@ internal static class ShellContentScanner
             yield break;
 
         var hidden = HiddenCharacters.FindHiddenCharacters(line);
-        if (hidden.Any(h => !HiddenCharacters.IsBenignHiddenCharacter(line, h, positions)))
+        if (hidden.Exists(h => !HiddenCharacters.IsBenignHiddenCharacter(line, h, positions)))
             yield return Finding(SecurityFindingRules.HiddenCharacter, rawLine, path);
-        else if (hidden.Any(h => HiddenCharacters.IsZeroWidthCharacter(h.CodePoint)))
+        else if (hidden.Exists(h => HiddenCharacters.IsZeroWidthCharacter(h.CodePoint)))
             yield return Finding(SecurityFindingRules.HiddenCharacterZeroWidth, rawLine, path);
 
         var (normalized, sourceIndices) = ShellSyntax.NormalizeForMatching(line);
@@ -347,6 +347,6 @@ internal static class ShellContentScanner
 
     internal sealed record Rule(SecurityFindingRule Definition, string Pattern, RegexOptions Options = RegexOptions.IgnoreCase)
     {
-        public Regex Regex { get; } = new(Pattern, Options | RegexOptions.Compiled);
+        public Regex Regex { get; } = new(Pattern, Options | RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
     }
 }
