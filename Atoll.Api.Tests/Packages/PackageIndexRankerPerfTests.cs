@@ -176,7 +176,7 @@ public class PackageIndexRankerPerfTests
 
         // 3. Warm page: cached sort slice plus one name-filtered repository read, the steady state.
         var warm = await MeasureAsync(
-            () => service.GetIndexPageAsync(1, PageLimit, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc));
+            () => service.GetIndexPageAsync(1, PageLimit, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, TestContext.Current.CancellationToken));
 
         _output.WriteLine(
             $"warm page (votes desc)  median={warm.MedianMs,7:F2} ms  min={warm.MinMs,7:F2} ms  " +

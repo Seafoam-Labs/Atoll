@@ -3,6 +3,7 @@ using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security.Persistence;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using Xunit;
 
 namespace Atoll.Api.Tests.Support;
 
@@ -44,7 +45,7 @@ internal static class MongoRepositoryFactory
 
     public static async Task DropDatabaseAsync(IMongoClient client, string database)
     {
-        await client.DropDatabaseAsync(database);
+        await client.DropDatabaseAsync(database, TestContext.Current.CancellationToken);
     }
 
     public static string NewDatabaseName()

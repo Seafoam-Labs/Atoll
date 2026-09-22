@@ -278,7 +278,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
                     }
                 ]
             },
-            RevisionContent("rev-seed", "seed", DateTimeOffset.UtcNow, Files("pkgname=seed\n")));
+            RevisionContent("rev-seed", "seed", DateTimeOffset.UtcNow, Files("pkgname=seed\n")), TestContext.Current.CancellationToken);
     }
 
     /// <summary>Appends a revision on top of the seed document (mirrors the append-then-promote flow).</summary>
@@ -287,8 +287,8 @@ public class PackageDetailsServiceTests : IAsyncLifetime
         await _repository.AppendRevisionAsync(
             Name,
             RevisionContent(sha, "appended", createdAt, Files($"pkgname={sha}\n")),
-            maxRevisions: 10_000);
-        await _securityRepository.PromoteHeadAsync(Name, sha);
+            maxRevisions: 10_000, ct: TestContext.Current.CancellationToken);
+        await _securityRepository.PromoteHeadAsync(Name, sha, TestContext.Current.CancellationToken);
     }
 
     private async Task SeedRevisionAsync(
@@ -299,7 +299,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
     {
         files ??= Files($"pkgname={sha}\n");
 
-        var exists = await _repository.GetHeadAsync(Name);
+        var exists = await _repository.GetHeadAsync(Name, TestContext.Current.CancellationToken);
         if (exists is null)
         {
             await InsertDocWithRevisionAsync(sha, message, files);
@@ -309,18 +309,14 @@ public class PackageDetailsServiceTests : IAsyncLifetime
             await _repository.AppendRevisionAsync(
                 Name,
                 RevisionContent(sha, message, DateTimeOffset.UtcNow, files),
-                maxRevisions: 10);
-            await _securityRepository.PromoteHeadAsync(Name, sha);
+                maxRevisions: 10, ct: TestContext.Current.CancellationToken);
+            await _securityRepository.PromoteHeadAsync(Name, sha, TestContext.Current.CancellationToken);
         }
 
         if (status is null)
             return;
 
-        await _securityRepository.MarkPendingAsync(Name, sha, isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        var claim = await _securityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _securityRepository.CompleteScanAsync(
-            Name, sha, claim!.LeaseOwner!, new ScanResult(status.Value, []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _securityRepository.ScanRevisionAsync(Name, sha, status.Value);
     }
 
     private async Task InsertDocWithRevisionAsync(string sha, string message, Dictionary<string, PackageFile> files)
@@ -335,7 +331,7 @@ public class PackageDetailsServiceTests : IAsyncLifetime
                 HeadRevisionId = sha,
                 Revisions = [RevisionEntry(sha, message, DateTimeOffset.UtcNow)]
             },
-            RevisionContent(sha, message, DateTimeOffset.UtcNow, files));
+            RevisionContent(sha, message, DateTimeOffset.UtcNow, files), TestContext.Current.CancellationToken);
     }
 
     private static PackageRevisionDocument RevisionEntry(string sha, string message, DateTimeOffset createdAt)

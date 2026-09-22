@@ -126,10 +126,8 @@ public class PackageRefreshWorkerTests
         await SeedAsync(service, "shelly", BaseFiles);
 
         var originalHead = (await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken))!.HeadRevisionId;
-        await security.MarkPendingAsync("shelly", originalHead, true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
         // Simulate the old head being scanned clean.
-        await security.TryClaimPendingScanAsync("scanner", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        await security.CompleteScanAsync("shelly", originalHead, "scanner", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await security.ScanRevisionAsync("shelly", originalHead, SecurityStatus.Verified);
 
         var mirror = new FakeRefreshMirror
         {

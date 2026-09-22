@@ -57,7 +57,9 @@ public class PackageSecurityRepositoryMongoTests : PackageSecurityRepositoryCont
 
     private async Task<string[]> IndexNamesAsync()
     {
-        var indexes = await Scans.Indexes.List().ToListAsync();
+        var ct = TestContext.Current.CancellationToken;
+        using var cursor = await Scans.Indexes.ListAsync(ct);
+        var indexes = await cursor.ToListAsync(ct);
         return indexes.Select(index => index["name"].AsString).ToArray();
     }
 

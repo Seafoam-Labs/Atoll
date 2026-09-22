@@ -130,10 +130,8 @@ public class PackageTarballEndpointsTests : IDisposable
 
     private async Task SeedAsync(SecurityStatus status)
     {
-        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
-        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        if (status != SecurityStatus.Pending)
-            await _factory.SecurityRepository.CompleteScanAsync("pkg", status);
+        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"), TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.ScanRevisionAsync("pkg", "rev-1", status);
     }
 
     private async Task SeedTwoRevisionsAsync(SecurityStatus verified, SecurityStatus flagged)
@@ -152,10 +150,10 @@ public class PackageTarballEndpointsTests : IDisposable
             }
         };
 
-        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
-        await _factory.Repository.AppendRevisionAsync("pkg", rev2, 10);
-        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"), TestContext.Current.CancellationToken);
+        await _factory.Repository.AppendRevisionAsync("pkg", rev2, 10, TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-2", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
         await _factory.SecurityRepository.CompleteScanAsync("pkg", verified);
         await _factory.SecurityRepository.CompleteScanAsync("pkg", flagged);
     }
@@ -203,16 +201,16 @@ public class PackageTarballEndpointsTests : IDisposable
 
     private static async Task<List<TarEntryData>> ReadTarballAsync(HttpResponseMessage response)
     {
-        var bytes = await response.Content.ReadAsByteArrayAsync();
+        var bytes = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
         using var gzip = new GZipStream(new MemoryStream(bytes), CompressionMode.Decompress);
         using var tar = new TarReader(gzip);
 
         var entries = new List<TarEntryData>();
-        while (await tar.GetNextEntryAsync() is { } entry)
+        while (await tar.GetNextEntryAsync(cancellationToken: TestContext.Current.CancellationToken) is { } entry)
         {
             if (entry.DataStream is not { } data) continue;
             using var reader = new StreamReader(data);
-            entries.Add(new TarEntryData(entry.Name, entry.Mode, entry.EntryType, await reader.ReadToEndAsync()));
+            entries.Add(new TarEntryData(entry.Name, entry.Mode, entry.EntryType, await reader.ReadToEndAsync(TestContext.Current.CancellationToken)));
         }
 
         return entries;

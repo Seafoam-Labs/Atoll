@@ -25,7 +25,9 @@ public sealed class MongoFixture : IAsyncLifetime
                 .WithEnvironment("GLIBC_TUNABLES", "glibc.pthread.rseq=1") // https://jira.mongodb.org/browse/SERVER-121912
                 .Build();
 
-            await Container.StartAsync();
+            // An assembly fixture starts outside any test, so there is no TestContext token to
+            // forward; the start is not cancellable by design.
+            await Container.StartAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {

@@ -121,9 +121,9 @@ public class AurRpcEndpointsTests : IDisposable
 
     private async Task<JsonElement> Json(string path)
     {
-        var response = await _client.GetAsync(path);
+        var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         return document.RootElement.Clone();
     }
 }

@@ -59,12 +59,12 @@ public class PackageSecurityStatusServiceTests
                 {
                     ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
                 }
-            });
+            }, TestContext.Current.CancellationToken);
     }
 
     private async Task QueueAsync(string package, string revision, bool isHead)
     {
-        await _security.MarkPendingAsync(package, revision, isHead, _policyVersion);
+        await _security.MarkPendingAsync(package, revision, isHead, _policyVersion, TestContext.Current.CancellationToken);
     }
 
     [Fact]

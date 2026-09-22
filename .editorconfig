@@ -26,8 +26,12 @@ dotnet_diagnostic.CA1310.severity = error
 dotnet_diagnostic.CA1311.severity = error
 dotnet_diagnostic.CA1862.severity = error
 
-# Async/cancellation, including the fire-and-forget check VSTHRD110.
+# Async/cancellation, including the fire-and-forget check VSTHRD110. MA0040 forwards the caller's
+# token (tests use Xunit.TestContext.Current.CancellationToken); VSTHRD103 keeps the async overload
+# inside async methods and has one per-file exemption at the bottom of this file.
 dotnet_diagnostic.CA2016.severity = error
+dotnet_diagnostic.MA0040.severity = error
+dotnet_diagnostic.VSTHRD103.severity = error
 dotnet_diagnostic.VSTHRD110.severity = error
 
 # Collections/LINQ hygiene and logging message templates.
@@ -38,6 +42,7 @@ dotnet_diagnostic.CA2254.severity = error
 # Redundant constructs that the declaration or the API signature already expresses.
 dotnet_diagnostic.CA1805.severity = error
 dotnet_diagnostic.CA2263.severity = error
+dotnet_diagnostic.MA0089.severity = error
 dotnet_diagnostic.MA0160.severity = error
 dotnet_diagnostic.MA0194.severity = error
 
@@ -55,14 +60,10 @@ dotnet_diagnostic.MA0194.severity = error
 # the test project still carries findings for it.
 [Atoll.Api/**.cs]
 
-# Test findings remaining for each rule below: MA0040 58, MA0089 1, VSTHRD103 4.
-dotnet_diagnostic.MA0040.severity = error
-dotnet_diagnostic.MA0089.severity = error
-dotnet_diagnostic.VSTHRD103.severity = error
-
-# --- Per-file exemption: the last matching section wins, so this must stay below the promotion.
-# The parameterless Aggregate() only builds a pipeline and cannot block; the AggregateAsync
-# VSTHRD103 compares it to takes a rendered pipeline, which the fluent stages here cannot express.
+# --- Per-file exemption: the last matching section wins, so this must stay below the `[*.cs]`
+# promotion. The parameterless Aggregate() only builds a pipeline and cannot block; the
+# AggregateAsync VSTHRD103 compares it to takes a rendered pipeline, which the fluent stages here
+# cannot express.
 [Atoll.Api/Services/Security/Persistence/MongoPackageSecurityRepository.cs]
 dotnet_diagnostic.VSTHRD103.severity = suggestion
 

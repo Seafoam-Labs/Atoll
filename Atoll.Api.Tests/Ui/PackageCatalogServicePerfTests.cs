@@ -136,7 +136,7 @@ public class PackageCatalogServicePerfTests
         CatalogResult? last = null;
 
         var measurement = await MeasureAsync(async () =>
-            last = await _service.SearchAsync(query, seededFilter, securityFilter, mode, sort, page));
+            last = await _service.SearchAsync(query, seededFilter, securityFilter, mode, sort, page, TestContext.Current.CancellationToken));
 
         _output.WriteLine(
             $"{label,-44} matches={last!.TotalMatches,6}  rows={last.Rows.Count,3}  " +

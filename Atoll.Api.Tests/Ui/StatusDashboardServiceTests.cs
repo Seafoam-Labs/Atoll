@@ -225,7 +225,7 @@ public class StatusDashboardServiceTests
     {
         var service = CreateService(IndexWithPackages(Meta("one")));
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => service.GetAsync(cts.Token));
     }

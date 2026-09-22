@@ -28,7 +28,7 @@ public class PackageSecurityAccessTests
                 PackageName = "pkg",
                 RevisionId = "rev-1",
                 CreatedAt = now
-            });
+            }, TestContext.Current.CancellationToken);
     }
 
     private static PackageSecurityAccess Create(
@@ -50,13 +50,7 @@ public class PackageSecurityAccessTests
         var packages = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
         await SeedPackageAsync(packages);
-        await security.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        if (status != SecurityStatus.Pending)
-        {
-            var result = new ScanResult(status, []);
-            _ = await security.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-            await security.CompleteScanAsync("pkg", "rev-1", "test", result, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        }
+        await security.ScanRevisionAsync("pkg", "rev-1", status);
 
         var access = Create(packages, security);
         var result1 = await access.CheckAsync("pkg", ct: TestContext.Current.CancellationToken);

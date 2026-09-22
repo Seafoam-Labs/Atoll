@@ -63,18 +63,10 @@ public class UiPagesTests : IDisposable
         };
     }
 
-    private async Task SeedAsync(string name, SecurityStatus status, IReadOnlyList<SecurityFinding>? findings = null)
+    private async Task SeedAsync(string name, SecurityStatus status, params SecurityFinding[] findings)
     {
-        await _factory.Repository.InsertSeedAsync(Doc(name), SeedRevision(name));
-        await _factory.SecurityRepository.MarkPendingAsync(name, "rev-1", true,
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        if (status == SecurityStatus.Pending) return;
-
-        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SecurityRepository.CompleteScanAsync(
-            name, "rev-1", "test", new ScanResult(status, findings ?? []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+        await _factory.Repository.InsertSeedAsync(Doc(name), SeedRevision(name), TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.ScanRevisionAsync(name, "rev-1", status, findings);
     }
 
     /// <summary>
@@ -89,29 +81,18 @@ public class UiPagesTests : IDisposable
     {
         await _factory.Repository.InsertSeedAsync(
             Doc(name),
-            RevisionContent(name, "rev-1", "seeded from AUR", "pkgname=old\n"));
-        await CompleteScanAsync(name, "rev-1", oldStatus, oldFindings);
+            RevisionContent(name, "rev-1", "seeded from AUR", "pkgname=old\n"),
+            TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.ScanRevisionAsync(
+            name, "rev-1", oldStatus, findings: oldFindings?.ToArray() ?? []);
 
         await _factory.Repository.AppendRevisionAsync(
             name,
             RevisionContent(name, "rev-2", "sync from upstream", "pkgname=new\n"),
-            maxRevisions: 10);
-        await _factory.SecurityRepository.PromoteHeadAsync(name, "rev-2");
-        await CompleteScanAsync(name, "rev-2", headStatus);
-    }
-
-    private async Task CompleteScanAsync(
-        string name, string sha, SecurityStatus status, IReadOnlyList<SecurityFinding>? findings = null)
-    {
-        await _factory.SecurityRepository.MarkPendingAsync(name, sha, true,
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        if (status == SecurityStatus.Pending) return;
-
-        await _factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
-        await _factory.SecurityRepository.CompleteScanAsync(
-            name, sha, "test", new ScanResult(status, findings ?? []),
-            PkgBuildSecurityScanner.CurrentPolicyVersion);
+            maxRevisions: 10,
+            ct: TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.PromoteHeadAsync(name, "rev-2", TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.ScanRevisionAsync(name, "rev-2", headStatus);
     }
 
     private static PackageRevisionContentDocument RevisionContent(
@@ -271,9 +252,7 @@ public class UiPagesTests : IDisposable
         using var client = disabled.CreateClient();
 
         await disabled.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
-        await disabled.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        await disabled.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        await disabled.SecurityRepository.CompleteScanAsync("shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await disabled.SecurityRepository.ScanRevisionAsync("shelly-bin", "rev-1", SecurityStatus.Verified);
 
         var response = await client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -316,9 +295,7 @@ public class UiPagesTests : IDisposable
         using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
         using var client = factory.CreateClient();
         await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
-        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        await factory.SecurityRepository.CompleteScanAsync("shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await factory.SecurityRepository.ScanRevisionAsync("shelly-bin", "rev-1", SecurityStatus.Verified);
 
         var response = await client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -337,9 +314,7 @@ public class UiPagesTests : IDisposable
         using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
         using var client = factory.CreateClient();
         await factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
-        await factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        await factory.SecurityRepository.TryClaimPendingScanAsync("test", TimeSpan.FromMinutes(1), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
-        await factory.SecurityRepository.CompleteScanAsync("shelly-bin", "rev-1", "test", new ScanResult(SecurityStatus.Verified, []), PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
+        await factory.SecurityRepository.ScanRevisionAsync("shelly-bin", "rev-1", SecurityStatus.Verified);
 
         var response = await client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -577,8 +552,8 @@ public class UiPagesTests : IDisposable
 
     private async Task<string> GetBodyAsync(string path)
     {
-        var response = await _client.GetAsync(path);
-        return await response.Content.ReadAsStringAsync();
+        var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
+        return await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
     }
 
     [Theory]

@@ -73,9 +73,9 @@ public class PackageSecurityWorkerTests
                     Message = revision.Message
                 }
             ]
-        }, revision);
+        }, revision, TestContext.Current.CancellationToken);
         await securityRepo.MarkPendingAsync(name, revision.RevisionId, true,
-            requiredPolicyVersion ?? PkgBuildSecurityScanner.CurrentPolicyVersion);
+            requiredPolicyVersion ?? PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -340,13 +340,13 @@ public class PackageSecurityWorkerTests
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
-            var scan = await securityRepo.GetAsync(packageName, "rev-1");
+            var scan = await securityRepo.GetAsync(packageName, "rev-1", TestContext.Current.CancellationToken);
             if (scan?.Status is SecurityStatus.Verified or SecurityStatus.Flagged or SecurityStatus.Error
                 && (expectedPolicyVersion is null || scan.PolicyVersion == expectedPolicyVersion))
             {
                 return scan;
             }
-            await Task.Delay(20);
+            await Task.Delay(20, TestContext.Current.CancellationToken);
         }
 
         Assert.Fail($"Package '{packageName}' was not scanned within {timeoutMs} ms.");

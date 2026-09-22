@@ -65,10 +65,8 @@ public class SecurityGatingEndpointsTests : IDisposable
 
     private async Task SeedAsync(SecurityStatus status)
     {
-        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"));
-        await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        if (status != SecurityStatus.Pending)
-            await _factory.SecurityRepository.CompleteScanAsync("pkg", status);
+        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg"), TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.ScanRevisionAsync("pkg", "rev-1", status);
     }
 
     [Fact]

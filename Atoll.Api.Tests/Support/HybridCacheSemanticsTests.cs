@@ -106,7 +106,7 @@ public class HybridCacheSemanticsTests
         var waiterA = cache.GetOrCreateAsync("rank.names", Factory, LongLived, cancellationToken: aborting.Token).AsTask();
         await started.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
         var waiterB = cache.GetOrCreateAsync("rank.names", Factory, LongLived, cancellationToken: Ct).AsTask();
-        aborting.Cancel();
+        await aborting.CancelAsync();
 
         // Await the abort before releasing the factory. The aborted join cancels on its own token, so
         // this pins that it leaves while the rebuild is still blocked; releasing first races the

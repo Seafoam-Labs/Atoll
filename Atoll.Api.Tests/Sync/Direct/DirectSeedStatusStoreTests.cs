@@ -67,7 +67,7 @@ public class DirectSeedStatusStoreTests
         {
             for (var i = 0; i < 1000; i++)
                 store.RecordSeeded();
-        }));
+        }, TestContext.Current.CancellationToken));
 
         await Task.WhenAll(tasks);
         store.EndCycle();

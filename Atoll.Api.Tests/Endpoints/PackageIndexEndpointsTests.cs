@@ -328,7 +328,7 @@ public class PackageIndexEndpointsTests : IDisposable
                 {
                     ["PKGBUILD"] = new() { Content = $"pkgname={name}\n", Size = 8 + name.Length, Hash = revisionId }
                 }
-            });
+            }, TestContext.Current.CancellationToken);
     }
 
     private async Task AppendAsync(string name, string revisionId)
@@ -349,6 +349,6 @@ public class PackageIndexEndpointsTests : IDisposable
                     ["PKGBUILD"] = new() { Content = $"pkgname={name}\n# {revisionId}\n", Size = 10 + name.Length, Hash = revisionId }
                 }
             },
-            10);
+            10, TestContext.Current.CancellationToken);
     }
 }

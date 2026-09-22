@@ -147,22 +147,15 @@ public class GitCommitFixtureTests : IAsyncLifetime
                     }
                 ]
             },
-            Content("rev-1", T1, WeirdAuthor, "seed from AUR", Rev1Files));
+            Content("rev-1", T1, WeirdAuthor, "seed from AUR", Rev1Files), TestContext.Current.CancellationToken);
 
         await repo.AppendRevisionAsync(
             "fixture",
             Content("rev-2", T2, "aur", "refresh from AUR", Rev2Files),
-            10);
+            10, TestContext.Current.CancellationToken);
 
-        await VerifyAsync(security, "rev-1");
-        await VerifyAsync(security, "rev-2");
-    }
-
-    private static async Task VerifyAsync(InMemoryPackageSecurityRepository security, string revisionId)
-    {
-        await security.MarkPendingAsync("fixture", revisionId, true, PkgBuildSecurityScanner.CurrentPolicyVersion);
-        // Claims the just-marked pending scan and completes it Verified, like the scan worker.
-        await security.CompleteScanAsync("fixture", SecurityStatus.Verified);
+        await security.ScanRevisionAsync("fixture", "rev-1", SecurityStatus.Verified);
+        await security.ScanRevisionAsync("fixture", "rev-2", SecurityStatus.Verified);
     }
 
     private static PackageRevisionContentDocument Content(

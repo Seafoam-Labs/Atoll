@@ -39,7 +39,7 @@ public class PackageServiceTests
     private static async Task<SearchIndexData> LoadIndexAsync(string packagesJson)
     {
         var path = Path.Combine(Path.GetTempPath(), $"atoll-sort-test-{Guid.NewGuid():N}.json");
-        await File.WriteAllTextAsync(path, packagesJson);
+        await File.WriteAllTextAsync(path, packagesJson, TestContext.Current.CancellationToken);
         try
         {
             return await PackageIndexBuilder.LoadAsync(path, CancellationToken.None);

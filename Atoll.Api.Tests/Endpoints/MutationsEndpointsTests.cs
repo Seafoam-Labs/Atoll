@@ -64,7 +64,7 @@ public class MutationsEndpointsTests : IDisposable
 
     private async Task SeedPackageAsync(string name = "pkg")
     {
-        await _factory.Repository.InsertSeedAsync(Doc(name), SeedRevision(name));
+        await _factory.Repository.InsertSeedAsync(Doc(name), SeedRevision(name), TestContext.Current.CancellationToken);
     }
 
     [Fact]

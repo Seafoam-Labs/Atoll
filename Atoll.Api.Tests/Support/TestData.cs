@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Catalog.Indexing;
+using Xunit;
 
 namespace Atoll.Api.Tests.Support;
 
@@ -45,7 +46,7 @@ internal static class TestData
     internal static async Task<string> WriteSamplePackagesAsync()
     {
         var path = Path.Combine(Path.GetTempPath(), $"atoll-test-{Guid.NewGuid():N}.json");
-        await File.WriteAllTextAsync(path, SamplePackagesJson);
+        await File.WriteAllTextAsync(path, SamplePackagesJson, TestContext.Current.CancellationToken);
         return path;
     }
 

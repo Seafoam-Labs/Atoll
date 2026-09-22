@@ -190,7 +190,7 @@ public class PackageIndexUpdaterTests
     {
         var entries = Enumerable.Range(1, count)
             .Select(i => $"{{\"ID\":{i},\"Name\":\"p{i}\",\"PackageBase\":\"p{i}\",\"Version\":\"1.0-1\"}}");
-        return $"[{string.Join(",", entries)}]";
+        return $"[{string.Join(',', entries)}]";
     }
 
     private static HttpResponseMessage Ok(string json, string etag)

@@ -62,16 +62,16 @@ public class DirectSeedWorkerTests
 
         public CancellationTokenSource? CancelDuringFetch { get; set; }
 
-        public Task<IReadOnlyDictionary<string, string>> FetchFilesAsync(
+        public async Task<IReadOnlyDictionary<string, string>> FetchFilesAsync(
             string packageBase, CancellationToken ct = default)
         {
             if (CancelDuringFetch is not null)
-                CancelDuringFetch.Cancel();
+                await CancelDuringFetch.CancelAsync();
 
-            return FailFor.Contains(packageBase)
-                ? Task.FromException<IReadOnlyDictionary<string, string>>(new InvalidOperationException("boom"))
-                : Task.FromResult<IReadOnlyDictionary<string, string>>(
-                    new Dictionary<string, string> { ["PKGBUILD"] = "pkgname=x\n" });
+            if (FailFor.Contains(packageBase))
+                throw new InvalidOperationException("boom");
+
+            return new Dictionary<string, string> { ["PKGBUILD"] = "pkgname=x\n" };
         }
     }
 
