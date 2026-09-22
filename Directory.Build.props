@@ -3,8 +3,8 @@
     <!--
         Shared analyzer composition for every project in the solution.
         Rule severities are curated in .editorconfig, not here: this file only turns the
-        engines on and pins the third-party analyzer packages. Nothing is promoted to
-        error; the build stays green and findings surface for triage.
+        engines on and pins the third-party analyzer packages. Promoted rules are errors
+        there, so a finding fails the build; everything else stays a suggestion for triage.
     -->
     <PropertyGroup>
         <EnableNETAnalyzers>true</EnableNETAnalyzers>

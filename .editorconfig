@@ -1,34 +1,70 @@
 root = true
 
+# Severities are split by project: `[*.cs]` reaches Atoll.Api and Atoll.Api.Tests alike, but
+# most rules are clean in one column and noisy in the other, so the sections at the bottom of
+# this file promote a rule only where it is actually enforced.
+#
+# The glob form is load-bearing. EditorConfig auto-expands a slash-free pattern (`*.cs` means
+# `**/*.cs`) yet anchors a pattern holding a mid-string slash as written, so
+# `[Atoll.Api/**/*.cs]` does not match the project-root files that `[Atoll.Api/**.cs]` does,
+# and the override is silently skipped in both directions. Keep the `**.cs` form.
 [*.cs]
-# Starter posture: nothing new fails the build. Every analyzer diagnostic defaults to
-# suggestion (surfaced in the IDE), and rules Atoll wants enforced are promoted to warning
-# below. Promote a rule by name once its findings are resolved; set it to none to opt out.
+# Every analyzer diagnostic defaults to suggestion (surfaced in the IDE). Promote a rule by
+# name once its findings are resolved; set it to none to opt out.
 dotnet_analyzer_diagnostic.severity = suggestion
 
 # ConfigureAwait is not needed: ASP.NET Core has no synchronization context.
 dotnet_diagnostic.CA2007.severity = none
 
-# --- Promoted to warning: verified to emit zero findings on the current tree.
-# These lock in existing discipline rather than asking for new work.
+# --- Promoted to error: a finding breaks the build, so these lock in existing discipline
+# rather than asking for new work. Each is verified clean in both projects by a forced Rebuild.
 
 # Comparison/globalization (names and keys use StringComparer.Ordinal by design;
 # culture-sensitive ToString/Parse/Format pass CultureInfo.InvariantCulture).
-dotnet_diagnostic.CA1305.severity = warning
-dotnet_diagnostic.CA1310.severity = warning
-dotnet_diagnostic.CA1311.severity = warning
-dotnet_diagnostic.CA1862.severity = warning
+dotnet_diagnostic.CA1305.severity = error
+dotnet_diagnostic.CA1310.severity = error
+dotnet_diagnostic.CA1311.severity = error
+dotnet_diagnostic.CA1862.severity = error
 
 # Async/cancellation, including the fire-and-forget check VSTHRD110.
-dotnet_diagnostic.CA2016.severity = warning
-dotnet_diagnostic.VSTHRD110.severity = warning
+dotnet_diagnostic.CA2016.severity = error
+dotnet_diagnostic.VSTHRD110.severity = error
 
 # Collections/LINQ hygiene and logging message templates.
-dotnet_diagnostic.CA1841.severity = warning
-dotnet_diagnostic.CA1860.severity = warning
-dotnet_diagnostic.CA2254.severity = warning
+dotnet_diagnostic.CA1841.severity = error
+dotnet_diagnostic.CA1860.severity = error
+dotnet_diagnostic.CA2254.severity = error
 
-# --- Left at suggestion on purpose (counts measured on the current tree): active and useful,
-# but high-count and mostly test-only, so they would flood rather than guide. Promote per rule
-# after triage: CA1861 (~130, tests), CA2000 (~102, ~98 tests), CA1063 (~48, tests; API clean),
-# VSTHRD002 (~10, test fixtures that block synchronously).
+# Redundant constructs that the declaration or the API signature already expresses.
+dotnet_diagnostic.CA1805.severity = error
+dotnet_diagnostic.CA2263.severity = error
+dotnet_diagnostic.MA0160.severity = error
+dotnet_diagnostic.MA0194.severity = error
+
+# --- Left at suggestion on purpose: active and useful, but high-count, so they would flood
+# rather than guide. Count a rule's findings with a forced Rebuild; an incremental build
+# reports a false clean and every warning prints twice in the log.
+# CA1861, CA1816, VSTHRD002, IDISP001, MA0002.
+# The global default above only reaches rules that ship enabled by default: CA2000, CA1063,
+# CA1307, CA1031, CA1062 and CA1002 are invisible here and need their own dotnet_diagnostic
+# entry to run at all.
+# A rule that is clean in one project and noisy in the other belongs in the scoped sections
+# below, not here.
+
+# --- Production scope: promote a rule as soon as its Atoll.Api column is clean, even while
+# the test project still carries findings for it.
+[Atoll.Api/**.cs]
+
+# Test findings remaining for each rule below: MA0040 58, MA0089 1, VSTHRD103 4.
+dotnet_diagnostic.MA0040.severity = error
+dotnet_diagnostic.MA0089.severity = error
+dotnet_diagnostic.VSTHRD103.severity = error
+
+# --- Per-file exemption: the last matching section wins, so this must stay below the promotion.
+# The parameterless Aggregate() only builds a pipeline and cannot block; the AggregateAsync
+# VSTHRD103 compares it to takes a rendered pipeline, which the fluent stages here cannot express.
+[Atoll.Api/Services/Security/Persistence/MongoPackageSecurityRepository.cs]
+dotnet_diagnostic.VSTHRD103.severity = suggestion
+
+# --- Test scope: conventions that are a deliberate choice only inside tests.
+[Atoll.Api.Tests/**.cs]

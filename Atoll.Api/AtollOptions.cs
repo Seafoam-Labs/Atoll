@@ -54,7 +54,7 @@ public sealed class BulkSeedOptions
 
     [Range(1, 128)] public int Parallelism { get; init; } = 4;
 
-    public bool AurFallbackForNotOnMirror { get; init; } = false;
+    public bool AurFallbackForNotOnMirror { get; init; }
 }
 
 public sealed class GitOptions
@@ -94,7 +94,7 @@ public sealed class DataSourceOptions
 
     [Range(1, 670)] public int RefreshIntervalMinutes { get; init; } = 5;
 
-    public bool PruneDeletedPackages { get; init; } = false;
+    public bool PruneDeletedPackages { get; init; }
 }
 
 public sealed class RefreshOptions

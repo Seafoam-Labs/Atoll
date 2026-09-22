@@ -113,7 +113,7 @@ public sealed class PackageDetailsService(
 
     public async Task<RevisionListResult?> GetRevisionsAsync(string name, CancellationToken ct = default)
     {
-        if (!indexStore.Current.ByNames.TryGetValue(name, out _))
+        if (!indexStore.Current.ByNames.ContainsKey(name))
             return null;
 
         var head = await packageRepository.GetHeadAsync(name, ct);
@@ -149,7 +149,7 @@ public sealed class PackageDetailsService(
         string? path,
         CancellationToken ct = default)
     {
-        if (!indexStore.Current.ByNames.TryGetValue(name, out _))
+        if (!indexStore.Current.ByNames.ContainsKey(name))
             return null;
 
         var head = await packageRepository.GetHeadAsync(name, ct);

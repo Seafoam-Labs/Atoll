@@ -82,7 +82,7 @@ internal static class HomographScanner
                 if (elements.Count == 0)
                     return null;
 
-                return (field, string.Join(" ", elements));
+                return (field, string.Join(' ', elements));
             }
 
             return (field, ExtractScalar(rhs));
@@ -197,7 +197,7 @@ internal static class HomographScanner
         var mixed = CollectMixedScripts(value);
         if (mixed is not null)
             return Message(value, field,
-                $"mixes Latin with {string.Join("/", mixed)} characters - possible homograph spoofing (skeleton '{Skeleton(value)}')");
+                $"mixes Latin with {string.Join('/', mixed)} characters - possible homograph spoofing (skeleton '{Skeleton(value)}')");
 
         if (CodePoints(value).Any(cp => cp is >= 0xFF01 and <= 0xFF5E))
             return Message(value, field,
@@ -246,8 +246,7 @@ internal static class HomographScanner
 
     private static bool IsInvisibleCodePoint(string text, int index, int codePoint)
     {
-        if (codePoint is not '\t' and not '\n' and not '\r' &&
-            codePoint is < 0x20 or >= 0x7F and <= 0x9F)
+        if (codePoint is not ('\t' or '\n' or '\r') and (< 0x20 or >= 0x7F and <= 0x9F))
             return true;
 
         return char.GetUnicodeCategory(text, index) is UnicodeCategory.Format

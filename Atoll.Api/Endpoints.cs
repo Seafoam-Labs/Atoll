@@ -63,7 +63,7 @@ public static class Endpoints
                     if (!options.Value.Mutations.Enabled)
                         return MutationsDisabled();
 
-                    await seeder.SeedAsync(name);
+                    await seeder.SeedAsync(name, context.RequestAborted);
                     return TypedResults.Created(GetRequiredPath(links, context, GetPackageEndpoint, new { name }));
                 })
             .ProducesProblem(StatusCodes.Status403Forbidden);
@@ -95,7 +95,7 @@ public static class Endpoints
         // FileContentHttpResult carries no OpenAPI response metadata of its own, so the 200 body
         // is declared here.
         packages.MapGet("/{name}/tarball", Tarball)
-            .Produces(StatusCodes.Status200OK, typeof(byte[]), "application/gzip");
+            .Produces<byte[]>(StatusCodes.Status200OK, "application/gzip");
 
         var secured = packages
             .MapGroup("")
