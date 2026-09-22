@@ -36,7 +36,7 @@ public sealed class OpenApiEndpointsTests : IDisposable
         Assert.Multiple(() =>
         {
             Assert.True(root.TryGetProperty("openapi", out var version));
-            Assert.StartsWith("3.", version.GetString());
+            Assert.StartsWith("3.", version.GetString(), StringComparison.Ordinal);
 
             var paths = root.GetProperty("paths");
             Assert.True(paths.TryGetProperty("/v1/search", out _));
@@ -106,9 +106,9 @@ public sealed class OpenApiEndpointsTests : IDisposable
             Assert.True(schemas.TryGetProperty("PackageIndexResponse", out _));
             Assert.True(schemas.TryGetProperty("PackageIndexEntry", out var indexEntrySchema));
             Assert.Superset(
-                new HashSet<string> { "name", "description", "version", "numVotes", "popularity", "outOfDate" },
+                new HashSet<string>(StringComparer.Ordinal) { "name", "description", "version", "numVotes", "popularity", "outOfDate" },
                 new HashSet<string>(
-                    indexEntrySchema.GetProperty("properties").EnumerateObject().Select(property => property.Name)));
+                    indexEntrySchema.GetProperty("properties").EnumerateObject().Select(property => property.Name), StringComparer.Ordinal));
             Assert.True(schemas.TryGetProperty("PackageSecurityHistoryResponse", out _));
             Assert.True(schemas.TryGetProperty("PackageSecurityRevisionResponse", out _));
         });

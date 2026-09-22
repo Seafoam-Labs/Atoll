@@ -48,7 +48,7 @@ internal static class ShellContentScanner
             {
                 var bodyLine = rawLine.TrimEnd('\r');
                 var candidate = activeHeredoc.StripTabs ? bodyLine.TrimStart('\t') : bodyLine;
-                if (candidate == activeHeredoc.Delimiter)
+                if (string.Equals(candidate, activeHeredoc.Delimiter, StringComparison.Ordinal))
                 {
                     activeHeredoc = pendingHeredocs.Count > 0 ? pendingHeredocs.Dequeue() : null;
                     continue;
@@ -126,7 +126,7 @@ internal static class ShellContentScanner
             if (IsInertQuotedMatch(rule, match, positions, sourceIndices))
                 continue;
 
-            if (rule.Definition.Id == SecurityFindingRules.EvalIndirection.Id)
+            if (string.Equals(rule.Definition.Id, SecurityFindingRules.EvalIndirection.Id, StringComparison.Ordinal))
             {
                 // 'eval'/'source'/'.' must be an actual invocation in command position;
                 // display text and argument mentions ("open source EchoLink") are inert.
@@ -145,7 +145,7 @@ internal static class ShellContentScanner
                 continue;
             }
 
-            if (rule.Definition.Id == SecurityFindingRules.WriteOutsideBuildRoot.Id)
+            if (string.Equals(rule.Definition.Id, SecurityFindingRules.WriteOutsideBuildRoot.Id, StringComparison.Ordinal))
             {
                 // A '#' line in a heredoc body is a comment or documentation text - a
                 // redirect on it can never run, in a live body as much as in a data body.
@@ -192,10 +192,11 @@ internal static class ShellContentScanner
             // Obfuscated matches skip the exemptions and keep their escalation below.
             if (rule.Regex.IsMatch(line))
             {
-                if (rule.Definition.Id == SecurityFindingRules.NetworkExecution.Id && NetworkRuleExemptions.IsPerlTextFilter(match, normalized))
+                if (string.Equals(rule.Definition.Id, SecurityFindingRules.NetworkExecution.Id, StringComparison.Ordinal) &&
+                    NetworkRuleExemptions.IsPerlTextFilter(match, normalized))
                     continue;
 
-                if (rule.Definition.Id == SecurityFindingRules.DecodeToShell.Id &&
+                if (string.Equals(rule.Definition.Id, SecurityFindingRules.DecodeToShell.Id, StringComparison.Ordinal) &&
                     NetworkRuleExemptions.HasShellScriptFileArgument(normalized, match.Groups[2]))
                     continue;
             }
@@ -300,7 +301,7 @@ internal static class ShellContentScanner
         int[] sourceIndices)
     {
         var ruleId = rule.Definition.Id;
-        if (ruleId == SecurityFindingRules.WriteOutsideBuildRoot.Id)
+        if (string.Equals(ruleId, SecurityFindingRules.WriteOutsideBuildRoot.Id, StringComparison.Ordinal))
         {
             var redirect = match.Groups[2];
             var position = positions[sourceIndices[redirect.Index]];
@@ -311,16 +312,16 @@ internal static class ShellContentScanner
             return position.Escaped && !redirect.Value.Equals("tee", StringComparison.OrdinalIgnoreCase);
         }
 
-        if (ruleId == SecurityFindingRules.CommandSubstitution.Id ||
-            ruleId == SecurityFindingRules.VariableIndirection.Id)
+        if (string.Equals(ruleId, SecurityFindingRules.CommandSubstitution.Id, StringComparison.Ordinal) ||
+            string.Equals(ruleId, SecurityFindingRules.VariableIndirection.Id, StringComparison.Ordinal))
         {
             var position = positions[sourceIndices[match.Index]];
             return position.Region == ShellSyntax.QuoteRegion.SingleQuoted || position.Escaped;
         }
 
-        if (ruleId == SecurityFindingRules.NetworkToShell.Id ||
-            ruleId == SecurityFindingRules.DecodeToShell.Id ||
-            ruleId == SecurityFindingRules.NetworkExecution.Id)
+        if (string.Equals(ruleId, SecurityFindingRules.NetworkToShell.Id, StringComparison.Ordinal) ||
+            string.Equals(ruleId, SecurityFindingRules.DecodeToShell.Id, StringComparison.Ordinal) ||
+            string.Equals(ruleId, SecurityFindingRules.NetworkExecution.Id, StringComparison.Ordinal))
         {
             // The construct only runs when the connector actually pipes: a '|' inside quoted
             // display text (help and usage strings, optdepends notes) is printed, not fed to

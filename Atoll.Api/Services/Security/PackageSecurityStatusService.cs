@@ -52,14 +52,16 @@ public sealed class PackageSecurityStatusService(
             return null;
 
         var scan = await security.GetAsync(packageName, revisionId, ct);
-        if (scan is null && revisionId != package.HeadRevisionId && package.Revisions.All(r => r.RevisionId != revisionId))
+        if (scan is null &&
+            !string.Equals(revisionId, package.HeadRevisionId, StringComparison.Ordinal) &&
+            package.Revisions.All(r => !string.Equals(r.RevisionId, revisionId, StringComparison.Ordinal)))
             return null;
 
         return new PackageSecurityRevisionResponse(
             packageName,
             revisionId,
             (scan?.Status ?? SecurityStatus.Pending).ToString(),
-            revisionId == package.HeadRevisionId,
+            string.Equals(revisionId, package.HeadRevisionId, StringComparison.Ordinal),
             scan?.ScannedAt,
             scan?.Findings.Count ?? 0);
     }
@@ -78,10 +80,10 @@ public sealed class PackageSecurityStatusService(
             return null;
 
         var revision = string.IsNullOrEmpty(revisionId) ? package.HeadRevisionId : revisionId;
-        if (package.Revisions.All(r => r.RevisionId != revision))
+        if (package.Revisions.All(r => !string.Equals(r.RevisionId, revision, StringComparison.Ordinal)))
             return null;
 
-        var isHead = revision == package.HeadRevisionId;
+        var isHead = string.Equals(revision, package.HeadRevisionId, StringComparison.Ordinal);
         await security.MarkPendingAsync(packageName, revision, isHead, scanner.PolicyVersion, ct);
         if (isHead)
             await cache.RemoveByTagAsync(AtollCacheKeys.TagHeadStatus, ct);

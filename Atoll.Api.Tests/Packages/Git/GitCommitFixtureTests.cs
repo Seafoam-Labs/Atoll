@@ -29,7 +29,7 @@ public sealed class GitCommitFixtureTests : IAsyncLifetime
     private static readonly DateTimeOffset T2 = new(2026, 1, 2, 12, 0, 0, TimeSpan.Zero);
 
     private static IReadOnlyDictionary<string, string> Rev1Files =>
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=fixture\npkgver=1.0\n",
             ["README.md"] = "# fixture\n",
@@ -38,7 +38,7 @@ public sealed class GitCommitFixtureTests : IAsyncLifetime
         };
 
     private static IReadOnlyDictionary<string, string> Rev2Files =>
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=fixture\npkgver=2.0\n",
             ["README.md"] = "# fixture v2\n",
@@ -175,7 +175,7 @@ public sealed class GitCommitFixtureTests : IAsyncLifetime
             Message = message,
             Files = files.ToDictionary(
                 kv => kv.Key,
-                kv => new PackageFile { Content = kv.Value, Size = 0, Hash = "unused" })
+                kv => new PackageFile { Content = kv.Value, Size = 0, Hash = "unused" }, StringComparer.Ordinal)
         };
     }
 

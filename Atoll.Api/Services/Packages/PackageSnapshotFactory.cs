@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Atoll.Api.Services.Packages.Persistence;
@@ -55,14 +56,15 @@ internal static class PackageSnapshotFactory
         IReadOnlyDictionary<string, string> files,
         int maxFileBytes)
     {
-        var result = new Dictionary<string, PackageFile>(files.Count);
+        var result = new Dictionary<string, PackageFile>(files.Count, StringComparer.Ordinal);
 
         foreach (var (name, content) in files)
         {
             var bytes = Encoding.UTF8.GetBytes(content);
             if (bytes.Length > maxFileBytes)
                 throw new InvalidOperationException(
-                    $"File '{name}' is {bytes.Length} bytes which exceeds the per-file limit of {maxFileBytes} bytes.");
+                    $"File '{name}' is {bytes.Length.ToString(CultureInfo.InvariantCulture)} bytes " +
+                    $"which exceeds the per-file limit of {maxFileBytes.ToString(CultureInfo.InvariantCulture)} bytes.");
 
             var hash = SHA256.HashData(bytes);
             result[name] = new PackageFile

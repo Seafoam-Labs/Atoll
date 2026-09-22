@@ -21,7 +21,7 @@ public sealed class GitRepositoryCache(
     ILogger<GitRepositoryCache> logger) : IGitRepositoryCache
 {
     private const string MaterializationVersion = "git-v3";
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new();
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new(StringComparer.Ordinal);
     private readonly AtollOptions _options = options.Value;
 
     public string? GetRepositoryPath(string packageName)
@@ -193,7 +193,7 @@ public sealed class GitRepositoryCache(
         return Directory.Exists(path)
                && File.Exists(Path.Combine(path, "HEAD"))
                && File.Exists(marker)
-               && File.ReadAllText(marker) == headMarker;
+               && string.Equals(File.ReadAllText(marker), headMarker, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -235,7 +235,7 @@ public sealed class GitRepositoryCache(
         CancellationToken ct)
     {
         using var tempIndex = new TempFile();
-        var env = new Dictionary<string, string> { ["GIT_INDEX_FILE"] = tempIndex.Path };
+        var env = new Dictionary<string, string>(StringComparer.Ordinal) { ["GIT_INDEX_FILE"] = tempIndex.Path };
 
         await GitClient.ExecuteAsync(repoPath, ["read-tree", "--empty"], null, env, ct);
 
@@ -274,7 +274,7 @@ public sealed class GitRepositoryCache(
             ? ["commit-tree", treeSha, "-F", messageFile.Path]
             : ["commit-tree", treeSha, "-p", parent, "-F", messageFile.Path];
 
-        var env = new Dictionary<string, string>
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["GIT_AUTHOR_NAME"] = SanitizeIdent(revision.Author),
             ["GIT_AUTHOR_EMAIL"] = $"{SanitizeIdent(revision.Author)}@atoll.local",

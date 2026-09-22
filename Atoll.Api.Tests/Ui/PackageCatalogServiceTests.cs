@@ -50,7 +50,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var result = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["portable-kit", "portable-pro", "shelly-bin"],
-            result.Rows.Select(row => row.Package.Name));
+            result.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         Assert.Equal(3, result.TotalMatches);
         Assert.Equal(1, result.Page);
         Assert.Equal(1, result.TotalPages);
@@ -65,9 +65,9 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var byDescription = await service.SearchAsync("emulator", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["portable-kit", "portable-pro"],
-            byName.Rows.Select(row => row.Package.Name));
+            byName.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         Assert.Equal(["portable-pro"],
-            byDescription.Rows.Select(row => row.Package.Name));
+            byDescription.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -79,9 +79,9 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var combined = await service.SearchAsync("handheld emulator", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Words, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
-            single.Rows.Select(row => row.Package.Name));
+            single.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         Assert.Equal(["portable-pro"],
-            combined.Rows.Select(row => row.Package.Name));
+            combined.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var miss = await service.SearchAsync("kit", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Provides, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
-            hit.Rows.Select(row => row.Package.Name));
+            hit.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         Assert.Empty(miss.Rows);
     }
 
@@ -107,10 +107,10 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var indexOnly = await service.SearchAsync(null, CatalogSeededFilter.IndexOnly, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
-            seeded.Rows.Select(row => row.Package.Name));
+            seeded.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         Assert.True(seeded.Rows.Single().IsSeeded);
         Assert.Equal(["portable-kit", "portable-pro"],
-            indexOnly.Rows.Select(row => row.Package.Name));
+            indexOnly.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         Assert.True(indexOnly.Rows.All(row => !row.IsSeeded));
     }
 
@@ -124,7 +124,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var verifiedBefore = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
-            pending.Rows.Select(row => row.Package.Name));
+            pending.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         Assert.Equal(SecurityStatus.Pending, pending.Rows.Single().Head!.Status);
         Assert.Empty(verifiedBefore.Rows);
 
@@ -134,7 +134,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var verifiedAfter = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Verified, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
-            verifiedAfter.Rows.Select(row => row.Package.Name));
+            verifiedAfter.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var result = await CreateService().SearchAsync(null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Pending, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["shelly-bin"],
-            result.Rows.Select(row => row.Package.Name));
+            result.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         Assert.Equal(SecurityStatus.Pending, result.Rows.Single().Head!.Status);
     }
 
@@ -181,7 +181,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         // The snapshot is built once per window, not once per search.
         Assert.Equal(1, repo.ListCalls);
 
-        await packageService.SeedFilesAsync("shelly-bin", new Dictionary<string, string>
+        await packageService.SeedFilesAsync("shelly-bin", new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly-bin\n"
@@ -191,7 +191,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(["shelly-bin"], seeded.Rows.Select(row => row.Package.Name));
+            Assert.Equal(["shelly-bin"], seeded.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
             Assert.True(seeded.Rows.Single().IsSeeded);
             Assert.Equal(2, repo.ListCalls);
         });
@@ -229,7 +229,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var status = new PackageSecurityStatusService(repo, security, scanner, cache);
 
         var ct = TestContext.Current.CancellationToken;
-        await packageService.SeedFilesAsync("shelly-bin", new Dictionary<string, string>
+        await packageService.SeedFilesAsync("shelly-bin", new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly-bin\n"
@@ -252,7 +252,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         Assert.Multiple(() =>
         {
             Assert.Equal(2, repo.ListCalls);
-            Assert.Equal(["shelly-bin"], stillWarm.Items.Select(item => item.Name));
+            Assert.Equal(["shelly-bin"], stillWarm.Items.Select(item => item.Name), StringComparer.Ordinal);
         });
 
         var rebuilt = await SearchSeededAsync(catalog, ct);
@@ -269,7 +269,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var result = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(["portable-pro", "shelly-bin", "portable-kit"],
-            result.Rows.Select(row => row.Package.Name));
+            result.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -297,9 +297,9 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         Assert.Multiple(() =>
         {
             Assert.Equal(ExpectedNames(0, PackageCatalogService.PageSize),
-                page1.Rows.Select(row => row.Package.Name));
+                page1.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
             Assert.Equal(ExpectedNames(PackageCatalogService.PageSize, 1),
-                page2.Rows.Select(row => row.Package.Name));
+                page2.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         });
     }
 
@@ -331,15 +331,15 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
             Assert.Equal(3, page1.TotalPages);
             Assert.Equal(1, page1.Page);
             Assert.Equal(ExpectedNames(0, PackageCatalogService.PageSize),
-                page1.Rows.Select(row => row.Package.Name));
+                page1.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
             Assert.Equal(ExpectedNames(PackageCatalogService.PageSize, PackageCatalogService.PageSize),
-                page2.Rows.Select(row => row.Package.Name));
+                page2.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
             Assert.Equal(ExpectedNames(PackageCatalogService.PageSize * 2, 1),
-                page3.Rows.Select(row => row.Package.Name));
+                page3.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
             // Pages past the end clamp to the last page so stale deep links land on real content.
             Assert.Equal(3, page4.Page);
             Assert.Equal(ExpectedNames(PackageCatalogService.PageSize * 2, 1),
-                page4.Rows.Select(row => row.Package.Name));
+                page4.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         });
     }
 
@@ -376,13 +376,13 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
             Options.Create(new AtollOptions()));
 
         var before = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
-        Assert.Equal(["pkg-a"], before.Rows.Select(row => row.Package.Name));
+        Assert.Equal(["pkg-a"], before.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
 
         names["pkg-b"] = CreateMetadata("pkg-b");
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var after = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
-        Assert.Equal(["pkg-a", "pkg-b"], after.Rows.Select(row => row.Package.Name));
+        Assert.Equal(["pkg-a", "pkg-b"], after.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
     }
 
     private static string[] ExpectedNames(int start, int count)

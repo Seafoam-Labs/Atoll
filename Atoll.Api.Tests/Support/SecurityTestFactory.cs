@@ -38,7 +38,7 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
 
-        var config = new Dictionary<string, string?>
+        var config = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["Atoll:Git:RepositoriesPath"] = RepositoriesRoot,
             ["Atoll:Security:Enabled"] = SecurityEnabled ? "true" : "false",

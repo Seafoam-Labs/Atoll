@@ -51,7 +51,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
             CreatedAt = now,
             Author = "test",
             Message = "seed",
-            Files = new Dictionary<string, PackageFile>
+            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = "pkgname=atoll-test\n", Size = 18, Hash = "h" }
             }
@@ -111,7 +111,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
                 CreatedAt = now,
                 Author = "test",
                 Message = "seed",
-                Files = new Dictionary<string, PackageFile>
+                Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = new() { Content = $"pkgname={name}\n", Size = 8 + name.Length, Hash = "h" }
                 }
@@ -155,7 +155,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
             CreatedAt = now,
             Author = "test",
             Message = "seed",
-            Files = new Dictionary<string, PackageFile>
+            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = "pkgname=to-delete\n", Size = 18, Hash = "h" }
             }

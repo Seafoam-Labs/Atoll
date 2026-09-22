@@ -47,7 +47,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
         var result = await _service.GetRevisionsAsync(Name, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal(["rev-2", "rev-1"], result!.Rows.Select(row => row.Sha));
+        Assert.Equal(["rev-2", "rev-1"], result!.Rows.Select(row => row.Sha), StringComparer.Ordinal);
         Assert.Equal(2, result.TotalRevisions);
         Assert.False(result.IsTruncated);
         Assert.Equal("rev-2", result.HeadRevisionId);
@@ -99,7 +99,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     [Fact]
     public async Task GetFilesAsyncReturnsTreeEntriesSortedDirectoriesFirst()
     {
-        await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>
+        await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = File("pkgname=test\n"),
             [".SRCINFO"] = File("pkgname = test\n"),
@@ -112,7 +112,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
 
         Assert.True(view!.Access.Allowed);
         Assert.Equal(["sub/deep/notes.txt", "sub/hook.sh", ".SRCINFO", "PKGBUILD", "zzz.txt"],
-            view.Entries.Select(entry => entry.Path));
+            view.Entries.Select(entry => entry.Path), StringComparer.Ordinal);
         Assert.True(view.IsHead);
         Assert.Null(view.SelectedPath);
         Assert.False(view.EntriesTruncated);
@@ -153,7 +153,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
 
         Assert.False(blocked!.Access.Allowed);
         Assert.Equal(SecurityAccessReasonCodes.Flagged, blocked.Access.ReasonCode);
-        Assert.Equal(["PKGBUILD"], blocked.Entries.Select(entry => entry.Path));
+        Assert.Equal(["PKGBUILD"], blocked.Entries.Select(entry => entry.Path), StringComparer.Ordinal);
         Assert.Equal("pkgname=old\n", blocked.Content);
 
         var allowed = await _service.GetFilesAsync(Name, "rev-2", "PKGBUILD", TestContext.Current.CancellationToken);
@@ -184,7 +184,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     [Fact]
     public async Task GetFilesAsyncDetectsBinaryFiles()
     {
-        await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>
+        await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
             ["blob.bin"] = new() { Content = "abc\0def", Size = 7, Hash = "h" }
         });
@@ -200,7 +200,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     {
         var large = new string('a', PackageDetailsService.ContentRenderChars + 1000);
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified,
-            files: new Dictionary<string, PackageFile> { ["big.txt"] = new() { Content = large, Size = large.Length, Hash = "h" } });
+            files: new Dictionary<string, PackageFile>(StringComparer.Ordinal) { ["big.txt"] = new() { Content = large, Size = large.Length, Hash = "h" } });
 
         var view = await _service.GetFilesAsync(Name, null, "big.txt", TestContext.Current.CancellationToken);
 
@@ -251,7 +251,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
 
     private static Dictionary<string, PackageFile> Files(string pkgbuild)
     {
-        return new Dictionary<string, PackageFile> { ["PKGBUILD"] = File(pkgbuild) };
+        return new Dictionary<string, PackageFile>(StringComparer.Ordinal) { ["PKGBUILD"] = File(pkgbuild) };
     }
 
     private static PackageFile File(string content)

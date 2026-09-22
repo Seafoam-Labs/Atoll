@@ -182,7 +182,7 @@ public sealed class PackageService(
         if (current is null)
             throw new KeyNotFoundException($"Package '{packageName}' not found.");
 
-        if (snapshot.RevisionId == current.HeadRevisionId)
+        if (string.Equals(snapshot.RevisionId, current.HeadRevisionId, StringComparison.Ordinal))
             return false;
 
         PackageDocumentSizeValidator.Validate(packageName, snapshot.Content);
@@ -197,6 +197,6 @@ public sealed class PackageService(
 
     private static PackageFiles ToPackageFiles(IReadOnlyDictionary<string, PackageFile> files)
     {
-        return new PackageFiles(files.ToDictionary(kv => kv.Key, kv => kv.Value.Content));
+        return new PackageFiles(files.ToDictionary(kv => kv.Key, kv => kv.Value.Content, StringComparer.Ordinal));
     }
 }

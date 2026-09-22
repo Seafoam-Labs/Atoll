@@ -14,7 +14,7 @@ public class PackageSnapshotFactoryTests
         var name = "ünïcode.txt";
 
         var snapshot = PackageSnapshotFactory.Create(
-            "pkg", new Dictionary<string, string> { [name] = content }, 5_242_880, "aur", "seed from AUR");
+            "pkg", new Dictionary<string, string>(StringComparer.Ordinal) { [name] = content }, 5_242_880, "aur", "seed from AUR");
 
         var bytes = Encoding.UTF8.GetBytes(content);
         var file = snapshot.Content.Files[name];
@@ -32,9 +32,9 @@ public class PackageSnapshotFactoryTests
     [Fact]
     public void Create_revision_id_is_deterministic_and_order_independent()
     {
-        var first = new Dictionary<string, string> { ["a.txt"] = "one", ["b.txt"] = "two", ["c.txt"] = "three" };
-        var reordered = new Dictionary<string, string> { ["c.txt"] = "three", ["a.txt"] = "one", ["b.txt"] = "two" };
-        var changed = new Dictionary<string, string> { ["a.txt"] = "one", ["b.txt"] = "two", ["c.txt"] = "changed" };
+        var first = new Dictionary<string, string>(StringComparer.Ordinal) { ["a.txt"] = "one", ["b.txt"] = "two", ["c.txt"] = "three" };
+        var reordered = new Dictionary<string, string>(StringComparer.Ordinal) { ["c.txt"] = "three", ["a.txt"] = "one", ["b.txt"] = "two" };
+        var changed = new Dictionary<string, string>(StringComparer.Ordinal) { ["a.txt"] = "one", ["b.txt"] = "two", ["c.txt"] = "changed" };
 
         var snapshot1 = PackageSnapshotFactory.Create("pkg", first, 5_242_880, "aur", "seed from AUR");
         var snapshot2 = PackageSnapshotFactory.Create("pkg", reordered, 5_242_880, "aur", "seed from AUR");
@@ -43,7 +43,7 @@ public class PackageSnapshotFactoryTests
         Assert.Multiple(() =>
         {
             Assert.Equal(snapshot1.RevisionId, snapshot2.RevisionId);
-            Assert.NotEqual(snapshot1.RevisionId, snapshot3.RevisionId);
+            Assert.NotEqual(snapshot1.RevisionId, snapshot3.RevisionId, StringComparer.Ordinal);
             Assert.Matches("^[0-9a-f]{64}$", snapshot1.RevisionId);
         });
     }
@@ -52,7 +52,7 @@ public class PackageSnapshotFactoryTests
     public void Create_populates_content_and_metadata_documents()
     {
         var snapshot = PackageSnapshotFactory.Create(
-            "shelly", new Dictionary<string, string> { ["PKGBUILD"] = "pkgname=shelly\n" }, 5_242_880, "aur", "seed from AUR");
+            "shelly", new Dictionary<string, string>(StringComparer.Ordinal) { ["PKGBUILD"] = "pkgname=shelly\n" }, 5_242_880, "aur", "seed from AUR");
 
         Assert.Multiple(() =>
         {
@@ -75,7 +75,7 @@ public class PackageSnapshotFactoryTests
     public void Create_accepts_file_exactly_at_per_file_limit()
     {
         var snapshot = PackageSnapshotFactory.Create(
-            "pkg", new Dictionary<string, string> { ["a.txt"] = new string('a', 10) }, 10, "aur", "seed from AUR");
+            "pkg", new Dictionary<string, string>(StringComparer.Ordinal) { ["a.txt"] = new string('a', 10) }, 10, "aur", "seed from AUR");
 
         Assert.Equal(10, snapshot.Content.Files["a.txt"].Size);
     }
@@ -84,7 +84,7 @@ public class PackageSnapshotFactoryTests
     public void Create_rejects_file_exceeding_per_file_limit()
     {
         var ex = Assert.Throws<InvalidOperationException>(() => PackageSnapshotFactory.Create(
-            "pkg", new Dictionary<string, string> { ["big.txt"] = new string('a', 11) }, 10, "aur", "seed from AUR"));
+            "pkg", new Dictionary<string, string>(StringComparer.Ordinal) { ["big.txt"] = new string('a', 11) }, 10, "aur", "seed from AUR"));
 
         Assert.Equal(
             "File 'big.txt' is 11 bytes which exceeds the per-file limit of 10 bytes.",
@@ -97,7 +97,7 @@ public class PackageSnapshotFactoryTests
         var sixCharacters = "🌍🌍";
 
         var ex = Assert.Throws<InvalidOperationException>(() => PackageSnapshotFactory.Create(
-            "pkg", new Dictionary<string, string> { ["a.txt"] = sixCharacters }, 7, "aur", "seed from AUR"));
+            "pkg", new Dictionary<string, string>(StringComparer.Ordinal) { ["a.txt"] = sixCharacters }, 7, "aur", "seed from AUR"));
 
         Assert.Equal(
             "File 'a.txt' is 8 bytes which exceeds the per-file limit of 7 bytes.",

@@ -14,7 +14,7 @@ namespace Atoll.Api.Tests.Catalog.Refresh;
 public class UpstreamPackageReconcilerTests
 {
     private static readonly IReadOnlyDictionary<string, string> Files =
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = demo\n"

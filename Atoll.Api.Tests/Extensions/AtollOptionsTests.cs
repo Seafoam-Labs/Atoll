@@ -22,7 +22,7 @@ public class AtollOptionsTests
     [Fact]
     public void Unconfigured_options_fall_back_to_valid_defaults()
     {
-        var options = Resolve(new Dictionary<string, string?>());
+        var options = Resolve(new Dictionary<string, string?>(StringComparer.Ordinal));
 
         Assert.Multiple(() =>
         {
@@ -47,7 +47,7 @@ public class AtollOptionsTests
     [InlineData("Atoll:Caching:DashboardTtlSeconds", "0")]
     public void Nested_annotations_are_enforced(string key, string value)
     {
-        Assert.Throws<OptionsValidationException>(() => Resolve(new Dictionary<string, string?> { [key] = value }));
+        Assert.Throws<OptionsValidationException>(() => Resolve(new Dictionary<string, string?>(StringComparer.Ordinal) { [key] = value }));
     }
 
     [Theory]
@@ -57,7 +57,7 @@ public class AtollOptionsTests
     public void Nested_failure_names_the_qualifying_path(string key, string value, string sectionPath, string memberName)
     {
         var exception = Assert.Throws<OptionsValidationException>(
-            () => Resolve(new Dictionary<string, string?> { [key] = value }));
+            () => Resolve(new Dictionary<string, string?>(StringComparer.Ordinal) { [key] = value }));
 
         Assert.Multiple(() =>
         {

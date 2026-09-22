@@ -36,7 +36,7 @@ public sealed class PackageTarballService(IPackageRepository repository)
             return null;
 
         var resolved = string.IsNullOrEmpty(revisionId) ? head.HeadRevisionId : revisionId;
-        if (head.Revisions.All(r => r.RevisionId != resolved))
+        if (head.Revisions.All(r => !string.Equals(r.RevisionId, resolved, StringComparison.Ordinal)))
             return null;
 
         var revision = await repository.GetRevisionAsync(packageName, resolved, ct);
@@ -50,7 +50,7 @@ public sealed class PackageTarballService(IPackageRepository repository)
     // hence the shared heuristic with git materialization.
     private static byte[] Encode(string packageName, PackageRevisionContentDocument revision)
     {
-        var output = new MemoryStream();
+        using var output = new MemoryStream();
         using (var gzip = new GZipStream(output, CompressionLevel.Fastest, leaveOpen: true))
         using (var tar = new TarWriter(gzip, TarEntryFormat.Pax))
         {

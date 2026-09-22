@@ -56,7 +56,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = "seed",
-            Files = new Dictionary<string, PackageFile>
+            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
             }
@@ -88,7 +88,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("security_status_pending", body);
+        Assert.Contains("security_status_pending", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("security_status_flagged", body);
+        Assert.Contains("security_status_flagged", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = "update",
-            Files = new Dictionary<string, PackageFile>
+            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = "pkgname=test2\n", Size = 13, Hash = "h2" }
             }
@@ -213,6 +213,6 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("Flagged", body);
+        Assert.Contains("Flagged", body, StringComparison.Ordinal);
     }
 }

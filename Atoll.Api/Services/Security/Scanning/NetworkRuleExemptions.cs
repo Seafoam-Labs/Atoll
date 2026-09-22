@@ -10,10 +10,10 @@ internal static class NetworkRuleExemptions
     /// </summary>
     internal static int FindNetworkConnectorIndex(ShellContentScanner.Rule rule, Match match)
     {
-        if (rule.Definition.Id == SecurityFindingRules.NetworkExecution.Id)
+        if (string.Equals(rule.Definition.Id, SecurityFindingRules.NetworkExecution.Id, StringComparison.Ordinal))
             return match.Groups[3].Index;
 
-        var sourceEnd = rule.Definition.Id == SecurityFindingRules.NetworkToShell.Id
+        var sourceEnd = string.Equals(rule.Definition.Id, SecurityFindingRules.NetworkToShell.Id, StringComparison.Ordinal)
             ? match.Groups[2].Index + match.Groups[2].Length
             : match.Groups[1].Index + match.Groups[1].Length;
         return match.Index + match.Value.IndexOf('|', sourceEnd - match.Index);

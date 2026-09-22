@@ -10,7 +10,7 @@ public class AurMirror : IAurMirror
     private const string RemoteName = "origin";
     private const string LocalRefNamespace = "refs/atoll/";
 
-    private static readonly IReadOnlyDictionary<string, string?> NoPromptEnv = new Dictionary<string, string?>
+    private static readonly IReadOnlyDictionary<string, string?> NoPromptEnv = new Dictionary<string, string?>(StringComparer.Ordinal)
     {
         ["GIT_TERMINAL_PROMPT"] = "0",
         ["GIT_ASKPASS"] = "/bin/true"
@@ -138,7 +138,7 @@ public class AurMirror : IAurMirror
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             // Format: "<sha>\trefs/heads/<pkgbase>"
-            var tab = line.IndexOf('\t');
+            var tab = line.IndexOf('\t', StringComparison.Ordinal);
             if (tab < 0 || tab + 1 >= line.Length) continue;
 
             var sha = line.AsSpan(0, tab).ToString();

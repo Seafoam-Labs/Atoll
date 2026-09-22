@@ -18,7 +18,7 @@ namespace Atoll.Api.Tests.Packages.Git;
 public sealed class GitTransferServiceTests : IAsyncLifetime
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly\n"
@@ -110,9 +110,9 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
             using var reader = new StreamReader(output, leaveOpen: false);
             var body = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
 
-            Assert.StartsWith("001e# service=git-upload-pack\n", body);
-            Assert.Contains("HEAD", body);
-            Assert.Contains("refs/heads/main", body);
+            Assert.StartsWith("001e# service=git-upload-pack\n", body, StringComparison.Ordinal);
+            Assert.Contains("HEAD", body, StringComparison.Ordinal);
+            Assert.Contains("refs/heads/main", body, StringComparison.Ordinal);
         }
         finally
         {

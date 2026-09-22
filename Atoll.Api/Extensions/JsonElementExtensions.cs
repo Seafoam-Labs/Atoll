@@ -90,10 +90,10 @@ public static class JsonElementExtensions
             if (!element.TryGetProperty(property, out var propertyElement) ||
                 propertyElement.ValueKind != JsonValueKind.Array) return [];
 
+            using var array = propertyElement.EnumerateArray();
             return
             [
-                .. propertyElement
-                    .EnumerateArray()
+                .. array
                     .Where(item => item.ValueKind == JsonValueKind.String)
                     .Select(item => item.GetString())
                     .Where(value => !string.IsNullOrWhiteSpace(value))

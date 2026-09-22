@@ -41,7 +41,7 @@ public class PackageSecurityWorkerTests
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = "seed",
-            Files = new Dictionary<string, PackageFile>
+            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = content, Size = content.Length, Hash = "h" }
             }

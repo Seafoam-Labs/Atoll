@@ -28,7 +28,8 @@ public static class PackageIndexBuilder
         if (root.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("AUR package dump is not a JSON array.");
 
-        var packages = root.EnumerateArray()
+        using var array = root.EnumerateArray();
+        var packages = array
             .Where(element => element.TryGetProperty("Name", out var nameElement) &&
                               nameElement.ValueKind == JsonValueKind.String &&
                               !string.IsNullOrEmpty(nameElement.GetString()))

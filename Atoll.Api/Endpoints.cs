@@ -36,7 +36,7 @@ public static class Endpoints
         [FromQuery(Name = "query")] SearchQuery? query,
         [FromQuery(Name = "by")] ByQuery? by)
     {
-        var queryValues = query?.Query.ToHashSet() ?? [];
+        var queryValues = query?.Query.ToHashSet(StringComparer.Ordinal) ?? [];
         var byValue = by?.By ?? By.Name;
 
         return byValue switch

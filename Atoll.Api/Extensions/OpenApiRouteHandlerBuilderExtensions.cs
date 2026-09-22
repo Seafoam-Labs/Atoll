@@ -45,7 +45,7 @@ public static class OpenApiRouteHandlerBuilderExtensions
         if (!type.IsGenericType)
             return type.Name;
 
-        var name = type.Name[..type.Name.IndexOf('`')];
+        var name = type.Name[..type.Name.IndexOf('`', StringComparison.Ordinal)];
         return $"{name}Of{string.Concat(type.GetGenericArguments().Select(SchemaId))}";
     }
 }

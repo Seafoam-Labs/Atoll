@@ -13,7 +13,7 @@ internal sealed class InMemorySeedExclusionRepository : ISeedExclusionRepository
         {
             IReadOnlySet<string> result = new HashSet<string>(
                 _exclusions.Values
-                    .Where(x => x.Reason == SeedExclusionReasons.DocumentTooLarge)
+                    .Where(x => string.Equals(x.Reason, SeedExclusionReasons.DocumentTooLarge, StringComparison.Ordinal))
                     .Select(x => x.PackageBase),
                 StringComparer.Ordinal);
 

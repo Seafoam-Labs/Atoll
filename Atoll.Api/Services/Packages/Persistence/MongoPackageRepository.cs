@@ -262,7 +262,7 @@ public sealed class MongoPackageRepository : IPackageRepository
         var evictedDocIds = previousRevisions
             .Select(r => r.RevisionId)
             .Where(revisionId => !retained.Contains(revisionId))
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .Select(revisionId => PackageSchema.RevisionDocumentId(packageName, revisionId))
             .ToList();
 

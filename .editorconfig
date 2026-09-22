@@ -16,16 +16,35 @@ dotnet_analyzer_diagnostic.severity = suggestion
 # ConfigureAwait is not needed: ASP.NET Core has no synchronization context.
 dotnet_diagnostic.CA2007.severity = none
 
+# Opt-outs, each a stated decision rather than debt. CA1031: catching every exception and
+# logging it is the intended posture of the background workers (seed/refresh/scan loops must
+# survive one bad package); narrowing the catches would trade a logged failure for a dead loop.
+# CA1062 targets library API surface; every site here is a DI-resolved internal or a
+# framework-supplied argument (WebApplication, EndpointFilterInvocationContext) where null
+# cannot arrive. CA1002's three sites are BSON document properties whose List<T> shape the
+# MongoDB serializer and init-only construction need; they are persistence types, not API.
+dotnet_diagnostic.CA1002.severity = none
+dotnet_diagnostic.CA1031.severity = none
+dotnet_diagnostic.CA1062.severity = none
+
 # --- Promoted to error: a finding breaks the build, so these lock in existing discipline
 # rather than asking for new work. Each is verified clean in both projects by a forced Rebuild.
 
 # Comparison/globalization (names and keys use StringComparer.Ordinal by design;
-# culture-sensitive ToString/Parse/Format pass CultureInfo.InvariantCulture).
+# culture-sensitive ToString/Parse/Format pass CultureInfo.InvariantCulture). The string
+# family (MA0001, MA0002, MA0006, MA0127 and the overlapping CA1307, which ships disabled
+# and is turned on by its entry) pins the comparison or comparer at every call site, so the
+# intent stays explicit in the code that gates untrusted content.
 dotnet_diagnostic.CA1305.severity = error
+dotnet_diagnostic.CA1307.severity = error
 dotnet_diagnostic.CA1310.severity = error
 dotnet_diagnostic.CA1311.severity = error
 dotnet_diagnostic.CA1862.severity = error
+dotnet_diagnostic.MA0001.severity = error
+dotnet_diagnostic.MA0002.severity = error
+dotnet_diagnostic.MA0006.severity = error
 dotnet_diagnostic.MA0074.severity = error
+dotnet_diagnostic.MA0127.severity = error
 
 # Async/cancellation, including the fire-and-forget check VSTHRD110. MA0040 forwards the caller's
 # token (tests use Xunit.TestContext.Current.CancellationToken); VSTHRD103 keeps the async overload
@@ -47,8 +66,12 @@ dotnet_diagnostic.CA2254.severity = error
 dotnet_diagnostic.MA0159.severity = error
 
 # Ownership of disposables: a class that owns one either seals itself or offers a virtual dispose
-# core, and an IHttpClientFactory double hands out a single client.
+# core, an IHttpClientFactory double hands out a single client, and a created disposable is
+# either disposed or passed on (IDISP001/IDISP004; the test project opts out below because its
+# findings are fixture lifetimes owned by the test host).
 dotnet_diagnostic.CA1816.severity = error
+dotnet_diagnostic.IDISP001.severity = error
+dotnet_diagnostic.IDISP004.severity = error
 dotnet_diagnostic.IDISP014.severity = error
 dotnet_diagnostic.IDISP025.severity = error
 dotnet_diagnostic.IDISP026.severity = error
@@ -100,10 +123,8 @@ dotnet_diagnostic.CA5351.severity = error
 # --- Left at suggestion on purpose: active and useful, but high-count, so they would flood
 # rather than guide. Count a rule's findings with a forced Rebuild; an incremental build
 # reports a false clean and every warning prints twice in the log.
-# IDISP001, MA0002.
-# The global default above only reaches rules that ship enabled by default: CA2000, CA1063,
-# CA1307, CA1031, CA1062 and CA1002 are invisible here and need their own dotnet_diagnostic
-# entry to run at all.
+# The global default above only reaches rules that ship enabled by default: CA2000 and CA1063
+# are invisible here and need their own dotnet_diagnostic entry to run at all.
 # A rule that is clean in one project and noisy in the other belongs in the scoped sections
 # below, not here.
 
@@ -120,6 +141,10 @@ dotnet_diagnostic.CA1861.severity = error
 dotnet_diagnostic.IDISP007.severity = error
 dotnet_diagnostic.MA0136.severity = error
 dotnet_diagnostic.VSTHRD002.severity = error
+# MA0076 (interpolation holes take no format provider, so the value needs an explicit
+# ToString(..., CultureInfo.InvariantCulture)) is production-clean; its 58 test findings are
+# assertion messages and fixture text with no culture-sensitive output contract.
+dotnet_diagnostic.MA0076.severity = error
 
 # --- Per-file exemption: the last matching section wins, so this must stay below the `[*.cs]`
 # promotion. The parameterless Aggregate() only builds a pipeline and cannot block; the
@@ -137,3 +162,9 @@ dotnet_diagnostic.VSTHRD103.severity = suggestion
 dotnet_diagnostic.xUnit2024.severity = error
 dotnet_diagnostic.xUnit2032.severity = error
 dotnet_diagnostic.xUnit2033.severity = error
+# Fixture lifetimes: disposable test infrastructure (WebApplicationFactory hosts, Mongo
+# containers, streams handed to the code under test) is owned by the test host or asserted on
+# after the fact, not disposed at each creation site, so the repo-wide IDISP001/IDISP004
+# promotion does not apply here.
+dotnet_diagnostic.IDISP001.severity = none
+dotnet_diagnostic.IDISP004.severity = none

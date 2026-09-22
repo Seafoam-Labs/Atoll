@@ -49,15 +49,15 @@ public sealed class DirectPackageSeederCloneCleanupTests : IAsyncLifetime
         // atoll-{packageName}-{guid}; the unique probe makes any leftover attributable to this run.
         var probe = $"cleanup probe {Guid.NewGuid():N}";
         var pattern = "atoll-cleanup probe *";
-        var before = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet();
+        var before = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet(StringComparer.Ordinal);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await seeder.SeedAsync(probe, TestContext.Current.CancellationToken));
 
-        var after = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet();
+        var after = Directory.EnumerateDirectories(Path.GetTempPath(), pattern).ToHashSet(StringComparer.Ordinal);
         var packagePersisted = await repo.ExistsAsync(probe, TestContext.Current.CancellationToken);
         Assert.Multiple(() =>
         {
-            Assert.Empty(after.Except(before));
+            Assert.Empty(after.Except(before, StringComparer.Ordinal));
             Assert.False(packagePersisted, "a failed seed must not persist the package");
         });
     }

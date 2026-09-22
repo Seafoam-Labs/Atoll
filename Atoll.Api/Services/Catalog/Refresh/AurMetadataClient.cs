@@ -25,7 +25,7 @@ public sealed class AurMetadataClient(
     {
         logger.LogDebug("Fetching updated package data from AUR.");
 
-        var client = httpClientFactory.CreateClient();
+        using var client = httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, options.Value.DataSource.DataFileUrl);
         if (etag is not null)
             request.Headers.IfNoneMatch.Add(etag);
@@ -62,7 +62,8 @@ public sealed class AurMetadataClient(
             throw new InvalidDataException("AUR package dump is not a JSON array.");
 
         var packages = new List<AurPackageMetadata>();
-        foreach (var element in doc.RootElement.EnumerateArray())
+        using var array = doc.RootElement.EnumerateArray();
+        foreach (var element in array)
         {
             if (!element.TryGetProperty("Name", out var nameElement) ||
                 nameElement.ValueKind != JsonValueKind.String) continue;

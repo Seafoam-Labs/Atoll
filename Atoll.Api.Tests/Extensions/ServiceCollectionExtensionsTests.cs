@@ -58,7 +58,7 @@ public class ServiceCollectionExtensionsTests
         string seedMode,
         bool refreshEnabled)
     {
-        using var factory = new HostingProbeFactory(new Dictionary<string, string?>
+        using var factory = new HostingProbeFactory(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["Atoll:Seed:Mode"] = seedMode,
             ["Atoll:Refresh:Enabled"] = refreshEnabled ? "true" : "false"
@@ -72,10 +72,10 @@ public class ServiceCollectionExtensionsTests
             Assert.Contains(typeof(PackageSecurityWorker), hosted);
             Assert.Contains(typeof(PackageIndexWorker), hosted);
 
-            if (seedMode == "Off")
+            if (string.Equals(seedMode, "Off", StringComparison.Ordinal))
                 Assert.DoesNotContain(typeof(DirectSeedWorker), hosted);
             else
-                Assert.Contains(seedMode == "Bulk" ? typeof(PackageBulkSeedWorker) : typeof(DirectSeedWorker), hosted);
+                Assert.Contains(string.Equals(seedMode, "Bulk", StringComparison.Ordinal) ? typeof(PackageBulkSeedWorker) : typeof(DirectSeedWorker), hosted);
 
             if (refreshEnabled)
                 Assert.Contains(typeof(PackageRefreshWorker), hosted);
@@ -83,7 +83,7 @@ public class ServiceCollectionExtensionsTests
                 Assert.DoesNotContain(typeof(PackageRefreshWorker), hosted);
         });
 
-        var expectMirror = seedMode == "Bulk" || refreshEnabled;
+        var expectMirror = string.Equals(seedMode, "Bulk", StringComparison.Ordinal) || refreshEnabled;
         Assert.Equal(expectMirror ? 1 : 0, factory.MirrorRegistrations);
 
         var bulkEnabled = factory.Services.GetRequiredService<BulkSeedStatusStore>().GetSnapshot().Enabled;
@@ -91,8 +91,8 @@ public class ServiceCollectionExtensionsTests
         var refreshSnapshotEnabled = factory.Services.GetRequiredService<RefreshStatusStore>().GetSnapshot().Enabled;
         Assert.Multiple(() =>
         {
-            Assert.Equal(seedMode == "Bulk", bulkEnabled);
-            Assert.Equal(seedMode == "Direct", directEnabled);
+            Assert.Equal(string.Equals(seedMode, "Bulk", StringComparison.Ordinal), bulkEnabled);
+            Assert.Equal(string.Equals(seedMode, "Direct", StringComparison.Ordinal), directEnabled);
             Assert.Equal(refreshEnabled, refreshSnapshotEnabled);
         });
 

@@ -324,7 +324,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
                 CreatedAt = now,
                 Author = "test",
                 Message = "seed",
-                Files = new Dictionary<string, PackageFile>
+                Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = new() { Content = $"pkgname={name}\n", Size = 8 + name.Length, Hash = revisionId }
                 }
@@ -344,7 +344,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
                 CreatedAt = now,
                 Author = "test",
                 Message = "append",
-                Files = new Dictionary<string, PackageFile>
+                Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = new() { Content = $"pkgname={name}\n# {revisionId}\n", Size = 10 + name.Length, Hash = revisionId }
                 }

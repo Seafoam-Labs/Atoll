@@ -97,8 +97,8 @@ public class HomographScannerTests
         var findings = Scan("depends=('ok' '\u0430bc' 'def\u0435')");
 
         var finding = Assert.Single(findings);
-        Assert.Contains("[U+0430]bc", finding.Message);
-        Assert.Contains("def[U+0435]", finding.Message);
+        Assert.Contains("[U+0430]bc", finding.Message, StringComparison.Ordinal);
+        Assert.Contains("def[U+0435]", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class HomographScannerTests
         var findings = Scan("source=('local file with \u0430 spaces.tar.gz')");
 
         var finding = Assert.Single(findings);
-        Assert.Contains("local file with [U+0430] spaces.tar.gz", finding.Message);
+        Assert.Contains("local file with [U+0430] spaces.tar.gz", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class HomographScannerTests
     public void Zero_width_and_bidi_characters_are_flagged(string content)
     {
         var finding = SingleFinding(content);
-        Assert.Contains("hidden or invisible character", finding.Message);
+        Assert.Contains("hidden or invisible character", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -143,8 +143,8 @@ public class HomographScannerTests
         // the scheme in poweriso-gui. NFC normalization cannot compose it away.
         var finding = SingleFinding("url=\"\u0670http://www.poweriso.com/download.htm\"");
 
-        Assert.Contains("U+0670", finding.Message);
-        Assert.Contains("hidden or invisible character", finding.Message);
+        Assert.Contains("U+0670", finding.Message, StringComparison.Ordinal);
+        Assert.Contains("hidden or invisible character", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class HomographScannerTests
     {
         var finding = SingleFinding("url=\"https://example.com/\u200Bx\"");
 
-        Assert.Contains("U+200B", finding.Message);
+        Assert.Contains("U+200B", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public class HomographScannerTests
         // The value also mixes Latin with Cyrillic, but the hidden check fires first.
         var finding = SingleFinding("url=\"https://\u200Bg\u0456thub.com\"");
 
-        Assert.Contains("hidden or invisible character", finding.Message);
+        Assert.Contains("hidden or invisible character", finding.Message, StringComparison.Ordinal);
     }
 
     // ===== check 2: mixed scripts =====
@@ -177,8 +177,8 @@ public class HomographScannerTests
     {
         var finding = SingleFinding(content);
 
-        Assert.Contains("mixes Latin with", finding.Message);
-        Assert.Contains(scriptName, finding.Message);
+        Assert.Contains("mixes Latin with", finding.Message, StringComparison.Ordinal);
+        Assert.Contains(scriptName, finding.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -200,8 +200,8 @@ public class HomographScannerTests
         // accepted mixed-script detection: Greek is an ASCII-lookalike-prone script.
         var finding = SingleFinding("url=\"https://\u03C0.duncano.de/x\"");
 
-        Assert.Contains("mixes Latin with", finding.Message);
-        Assert.Contains("Greek", finding.Message);
+        Assert.Contains("mixes Latin with", finding.Message, StringComparison.Ordinal);
+        Assert.Contains("Greek", finding.Message, StringComparison.Ordinal);
     }
 
     // ===== check 3: fullwidth characters =====
@@ -216,7 +216,7 @@ public class HomographScannerTests
     public void Fullwidth_ascii_lookalikes_are_flagged(string content)
     {
         var finding = SingleFinding(content);
-        Assert.Contains("fullwidth", finding.Message);
+        Assert.Contains("fullwidth", finding.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -247,8 +247,8 @@ public class HomographScannerTests
     {
         var finding = SingleFinding(content);
 
-        Assert.Contains("resemble ASCII", finding.Message);
-        Assert.Contains($"skeleton '{skeleton}'", finding.Message);
+        Assert.Contains("resemble ASCII", finding.Message, StringComparison.Ordinal);
+        Assert.Contains($"skeleton '{skeleton}'", finding.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -277,8 +277,8 @@ public class HomographScannerTests
     {
         var finding = SingleFinding("url=\"https://g\u0456thub.com/x\"");
 
-        Assert.Contains("g[U+0456]thub.com", finding.Message);
-        Assert.Contains("in url", finding.Message);
+        Assert.Contains("g[U+0456]thub.com", finding.Message, StringComparison.Ordinal);
+        Assert.Contains("in url", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]

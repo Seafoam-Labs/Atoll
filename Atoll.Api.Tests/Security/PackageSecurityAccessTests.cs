@@ -96,7 +96,7 @@ public class PackageSecurityAccessTests
                 PackageName = "pkg",
                 RevisionId = "rev-2",
                 CreatedAt = DateTimeOffset.UtcNow,
-                Files = new Dictionary<string, PackageFile>()
+                Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             }, 10, TestContext.Current.CancellationToken);
 
         await security.MarkPendingAsync("pkg", "rev-1", false, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);

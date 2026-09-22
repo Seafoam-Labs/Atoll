@@ -9,9 +9,11 @@ using Atoll.Api.Services.Security;
 
 namespace Atoll.Api.Services.Metrics;
 
-public sealed class AtollMetrics
+public sealed class AtollMetrics : IDisposable
 {
     public const string MeterName = "Atoll.Api";
+
+    private readonly Meter meter;
 
     public string ScopeName { get; }
 
@@ -30,7 +32,7 @@ public sealed class AtollMetrics
         // the stable "Atoll.Api".
         ScopeName = environment.IsEnvironment("Testing") ? $"{MeterName}.{Guid.NewGuid():N}" : MeterName;
 
-        var meter = meterFactory.Create(ScopeName, "1.0.0");
+        meter = meterFactory.Create(ScopeName, "1.0.0");
 
         var uptime = Stopwatch.StartNew();
         meter.CreateObservableGauge(
@@ -161,4 +163,6 @@ public sealed class AtollMetrics
                 : Array.Empty<Measurement<long>>(),
             description: description);
     }
+
+    public void Dispose() => meter.Dispose();
 }

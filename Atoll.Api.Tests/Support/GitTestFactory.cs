@@ -25,7 +25,7 @@ internal sealed class GitTestFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Testing");
 
         builder.UseConfiguration(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["Atoll:Git:RepositoriesPath"] = RepositoriesRoot,
                 // These tests check Git transfer mechanics, not security.

@@ -24,7 +24,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
     {
         lock (_gate)
         {
-            return Task.FromResult(_scans.Values.FirstOrDefault(s => s.PackageName == packageName && s.IsHead));
+            return Task.FromResult(_scans.Values.FirstOrDefault(s => string.Equals(s.PackageName, packageName, StringComparison.Ordinal) && s.IsHead));
         }
     }
 
@@ -35,7 +35,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         lock (_gate)
         {
             IReadOnlyCollection<PackageSecurityScanDocument> result =
-                [.. _scans.Values.Where(s => s.PackageName == packageName)];
+                [.. _scans.Values.Where(s => string.Equals(s.PackageName, packageName, StringComparison.Ordinal))];
             return Task.FromResult(result);
         }
     }
@@ -49,7 +49,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
             IReadOnlyList<RevisionScanStatus> result =
             [
                 .. _scans.Values
-                    .Where(s => s.PackageName == packageName)
+                    .Where(s => string.Equals(s.PackageName, packageName, StringComparison.Ordinal))
                     .Select(s => new RevisionScanStatus(s.RevisionId, s.Status))
             ];
             return Task.FromResult(result);
@@ -60,7 +60,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
     {
         lock (_gate)
         {
-            IReadOnlyCollection<string> result = [.. _scans.Values.Select(s => s.PackageName).Distinct()];
+            IReadOnlyCollection<string> result = [.. _scans.Values.Select(s => s.PackageName).Distinct(StringComparer.Ordinal)];
             return Task.FromResult(result);
         }
     }
@@ -273,7 +273,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
     private static bool IsClaimedBy(PackageSecurityScanDocument scan, string owner, int policyVersion)
     {
         return scan.Status == SecurityStatus.Pending
-            && scan.LeaseOwner == owner
+            && string.Equals(scan.LeaseOwner, owner, StringComparison.Ordinal)
             && (scan.RequiredPolicyVersion is null || scan.RequiredPolicyVersion <= policyVersion);
     }
 
@@ -286,7 +286,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         lock (_gate)
         {
             var id = PackageSecurityScanDocument.ComposeId(packageName, revisionId);
-            if (_scans.TryGetValue(id, out var scan) && scan.LeaseOwner == owner)
+            if (_scans.TryGetValue(id, out var scan) && string.Equals(scan.LeaseOwner, owner, StringComparison.Ordinal))
                 _scans[id] = scan with { LeaseUntil = null, LeaseOwner = null };
 
             return Task.CompletedTask;
@@ -299,10 +299,10 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         {
             foreach (var (id, scan) in _scans.ToList())
             {
-                if (scan.PackageName != packageName)
+                if (!string.Equals(scan.PackageName, packageName, StringComparison.Ordinal))
                     continue;
 
-                var isHead = scan.RevisionId == newHeadRevisionId;
+                var isHead = string.Equals(scan.RevisionId, newHeadRevisionId, StringComparison.Ordinal);
                 if (scan.IsHead != isHead)
                     _scans[id] = scan with { IsHead = isHead };
             }
@@ -325,7 +325,7 @@ internal sealed class InMemoryPackageSecurityRepository : IPackageSecurityReposi
         lock (_gate)
         {
             foreach (var id in _scans
-                         .Where(pair => pair.Value.PackageName == packageName)
+                         .Where(pair => string.Equals(pair.Value.PackageName, packageName, StringComparison.Ordinal))
                          .Select(pair => pair.Key)
                          .ToList())
                 _scans.Remove(id);

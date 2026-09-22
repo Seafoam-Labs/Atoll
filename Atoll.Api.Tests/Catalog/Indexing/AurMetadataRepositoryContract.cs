@@ -42,7 +42,7 @@ public abstract class AurMetadataRepositoryContract
             Assert.True(exists);
             Assert.Equal(packages.Count, count);
             Assert.Equal(packages.Count, loaded.Count);
-            Assert.Equivalent(packages.Select(p => p.Name).Order(), loaded.Select(p => p.Name).Order(), strict: true);
+            Assert.Equivalent(packages.Select(p => p.Name).Order(StringComparer.Ordinal), loaded.Select(p => p.Name).Order(StringComparer.Ordinal), strict: true);
         });
     }
 
@@ -59,7 +59,7 @@ public abstract class AurMetadataRepositoryContract
         await repo.SaveAsync(secondBatch, CancellationToken.None);
 
         var loaded = await repo.LoadAsync(CancellationToken.None);
-        var loadedNames = loaded.Select(p => p.Name).ToHashSet();
+        var loadedNames = loaded.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
         var activeCount = await repo.CountAsync(CancellationToken.None);
 
         Assert.Multiple(() =>

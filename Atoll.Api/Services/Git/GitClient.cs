@@ -60,10 +60,11 @@ public static class GitClient
     {
         var output = new StringBuilder();
 
-        var result = await Cli.Wrap("git")
+        using var commandTask = Cli.Wrap("git")
             .WithArguments(arguments)
             .WithStandardOutputPipe(PipeTarget.ToStringBuilder(output))
             .ExecuteAsync(cancellationToken);
+        var result = await commandTask.Task;
 
         return (result.ExitCode, output.ToString());
     }

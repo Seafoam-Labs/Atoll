@@ -80,8 +80,8 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
         }
 
         Assert.Superset(
-            new HashSet<string> { "packageName_1", "isHead_1_status_1" },
-            new HashSet<string>(await IndexNamesAsync()));
+            new HashSet<string>(StringComparer.Ordinal) { "packageName_1", "isHead_1_status_1" },
+            new HashSet<string>(await IndexNamesAsync(), StringComparer.Ordinal));
 
         NewRepository();
 
@@ -136,7 +136,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
 
         Assert.Multiple(() =>
         {
-            Assert.Contains("PROJECTION_COVERED", stages);
+            Assert.Contains("PROJECTION_COVERED", stages, StringComparer.Ordinal);
             Assert.Equal(0, docsExamined);
         });
     }
@@ -149,7 +149,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
             {
                 foreach (var element in document)
                 {
-                    if (element.Name == name) yield return element.Value;
+                    if (string.Equals(element.Name, name, StringComparison.Ordinal)) yield return element.Value;
                     foreach (var nested in ValuesNamed(element.Value, name)) yield return nested;
                 }
 

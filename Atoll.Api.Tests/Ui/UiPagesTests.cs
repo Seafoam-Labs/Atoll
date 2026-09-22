@@ -56,7 +56,7 @@ public sealed class UiPagesTests : IDisposable
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = "seed",
-            Files = new Dictionary<string, PackageFile>
+            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
             }
@@ -106,7 +106,7 @@ public sealed class UiPagesTests : IDisposable
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = message,
-            Files = new Dictionary<string, PackageFile>
+            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = pkgbuild, Size = pkgbuild.Length, Hash = "h" },
                 [".SRCINFO"] = new() { Content = "pkgname = test\n", Size = 15, Hash = "h" }
@@ -124,12 +124,12 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
         Assert.Multiple(() =>
         {
-            Assert.Contains("3 packages", body);
-            Assert.Contains("href=\"/package/portable-kit\"", body);
-            Assert.Contains("shelly-bin", body);
-            Assert.Contains("portable-pro", body);
-            Assert.Contains("type=\"submit\"", body);
-            Assert.Contains(">Search</button>", body);
+            Assert.Contains("3 packages", body, StringComparison.Ordinal);
+            Assert.Contains("href=\"/package/portable-kit\"", body, StringComparison.Ordinal);
+            Assert.Contains("shelly-bin", body, StringComparison.Ordinal);
+            Assert.Contains("portable-pro", body, StringComparison.Ordinal);
+            Assert.Contains("type=\"submit\"", body, StringComparison.Ordinal);
+            Assert.Contains(">Search</button>", body, StringComparison.Ordinal);
         });
     }
 
@@ -146,13 +146,13 @@ public sealed class UiPagesTests : IDisposable
         // early submit runs a search instead of resetting to an empty catalog.
         Assert.Multiple(() =>
         {
-            Assert.Contains("<form class=\"flex min-w-0 gap-2 w-full lg:flex-1 lg:max-w-135\" action=\"\"", body);
+            Assert.Contains("<form class=\"flex min-w-0 gap-2 w-full lg:flex-1 lg:max-w-135\" action=\"\"", body, StringComparison.Ordinal);
             var formStart = body.IndexOf("<form", StringComparison.Ordinal);
             var form = body[formStart..body.IndexOf("</form>", StringComparison.Ordinal)];
-            Assert.Contains("name=\"q\"", form);
+            Assert.Contains("name=\"q\"", form, StringComparison.Ordinal);
             // The embedded reset control has to stay type="button", and Search has to remain the
             // form's only submit control, or clicking it would navigate for real as well.
-            Assert.Contains("<button type=\"button\"", form);
+            Assert.Contains("<button type=\"button\"", form, StringComparison.Ordinal);
             Assert.Equal(2, form.Split("type=\"submit\"", StringSplitOptions.None).Length);
         });
     }
@@ -162,13 +162,13 @@ public sealed class UiPagesTests : IDisposable
     {
         var body = await (await _client.GetAsync("/", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
-        Assert.Contains("Page 1 of 1", body);
-        Assert.Contains("showing 1-3 of 3", body);
-        Assert.Contains("aria-label=\"Pagination\"", body);
+        Assert.Contains("Page 1 of 1", body, StringComparison.Ordinal);
+        Assert.Contains("showing 1-3 of 3", body, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Pagination\"", body, StringComparison.Ordinal);
         // A single-page result disables both pagination buttons in the prerendered HTML.
-        Assert.Contains("<button type=\"button\" class=\"btn\" disabled", body);
+        Assert.Contains("<button type=\"button\" class=\"btn\" disabled", body, StringComparison.Ordinal);
         // The page-number strip marks the active page for assistive tech.
-        Assert.Contains("aria-current=\"page\"", body);
+        Assert.Contains("aria-current=\"page\"", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public sealed class UiPagesTests : IDisposable
         using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("gzip", response.Content.Headers.ContentEncoding);
+        Assert.Contains("gzip", response.Content.Headers.ContentEncoding, StringComparer.Ordinal);
     }
 
     [Fact]
@@ -192,7 +192,7 @@ public sealed class UiPagesTests : IDisposable
         using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("br", response.Content.Headers.ContentEncoding);
+        Assert.Contains("br", response.Content.Headers.ContentEncoding, StringComparer.Ordinal);
     }
 
     [Fact]
@@ -206,11 +206,11 @@ public sealed class UiPagesTests : IDisposable
         Assert.Multiple(() =>
         {
             // Unseeded catalog rows are index-only.
-            Assert.Contains("badge-pending", body);
-            Assert.Contains("Index-only", body);
+            Assert.Contains("badge-pending", body, StringComparison.Ordinal);
+            Assert.Contains("Index-only", body, StringComparison.Ordinal);
             // A non-verified head status is surfaced; a verified seeded row stays clean.
-            Assert.Contains("badge-flagged", body);
-            Assert.DoesNotContain("badge-verified", body);
+            Assert.Contains("badge-flagged", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("badge-verified", body, StringComparison.Ordinal);
         });
     }
 
@@ -223,10 +223,10 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("Handheld gaming toolkit 1337 i3", body);
-            Assert.Contains("Metadata", body);
-            Assert.Contains("not seeded yet", body);
-            Assert.Contains("Seed from AUR", body);
+            Assert.Contains("Handheld gaming toolkit 1337 i3", body, StringComparison.Ordinal);
+            Assert.Contains("Metadata", body, StringComparison.Ordinal);
+            Assert.Contains("not seeded yet", body, StringComparison.Ordinal);
+            Assert.Contains("Seed from AUR", body, StringComparison.Ordinal);
         });
     }
 
@@ -240,9 +240,9 @@ public sealed class UiPagesTests : IDisposable
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.DoesNotContain("Seed from AUR", body);
+        Assert.DoesNotContain("Seed from AUR", body, StringComparison.Ordinal);
         // The read-only AUR link remains available.
-        Assert.Contains("href=\"https://aur.archlinux.org/packages/portable-kit\"", body);
+        Assert.Contains("href=\"https://aur.archlinux.org/packages/portable-kit\"", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -258,10 +258,10 @@ public sealed class UiPagesTests : IDisposable
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("badge-seeded", body);
-        Assert.DoesNotContain("Rescan", body);
+        Assert.Contains("badge-seeded", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Rescan", body, StringComparison.Ordinal);
         // Content is still served when verified; only the mutation button is hidden.
-        Assert.Contains("git clone", body);
+        Assert.Contains("git clone", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -280,12 +280,12 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("shelly install aur shelly-bin --aur-url http://localhost:5290", body);
-            Assert.Contains("git clone http://localhost:5290/packages/shelly-bin.git", body);
-            Assert.Contains("https://www.seafoam-labs.org/shelly-alpm/docs/config/", body);
-            Assert.Contains("badge-verified", body);
-            Assert.Contains("long-line", body);
-            Assert.Contains("Rescan", body);
+            Assert.Contains("shelly install aur shelly-bin --aur-url http://localhost:5290", body, StringComparison.Ordinal);
+            Assert.Contains("git clone http://localhost:5290/packages/shelly-bin.git", body, StringComparison.Ordinal);
+            Assert.Contains("https://www.seafoam-labs.org/shelly-alpm/docs/config/", body, StringComparison.Ordinal);
+            Assert.Contains("badge-verified", body, StringComparison.Ordinal);
+            Assert.Contains("long-line", body, StringComparison.Ordinal);
+            Assert.Contains("Rescan", body, StringComparison.Ordinal);
         });
     }
 
@@ -303,8 +303,8 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("shelly install aur shelly-bin --aur-url https://atoll.example.com", body);
-            Assert.Contains("git clone https://atoll.example.com/packages/shelly-bin.git", body);
+            Assert.Contains("shelly install aur shelly-bin --aur-url https://atoll.example.com", body, StringComparison.Ordinal);
+            Assert.Contains("git clone https://atoll.example.com/packages/shelly-bin.git", body, StringComparison.Ordinal);
         });
     }
 
@@ -322,9 +322,9 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("shelly install aur shelly-bin --aur-url https://atoll.example.com", body);
-            Assert.Contains("git clone https://atoll.example.com/packages/shelly-bin.git", body);
-            Assert.DoesNotContain("//packages", body);
+            Assert.Contains("shelly install aur shelly-bin --aur-url https://atoll.example.com", body, StringComparison.Ordinal);
+            Assert.Contains("git clone https://atoll.example.com/packages/shelly-bin.git", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("//packages", body, StringComparison.Ordinal);
         });
     }
 
@@ -339,10 +339,10 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("Flagged", body);
-            Assert.Contains("gated", body);
-            Assert.DoesNotContain("/packages/shelly-bin.git", body);
-            Assert.DoesNotContain("shelly install aur", body);
+            Assert.Contains("Flagged", body, StringComparison.Ordinal);
+            Assert.Contains("gated", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("/packages/shelly-bin.git", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("shelly install aur", body, StringComparison.Ordinal);
         });
     }
 
@@ -371,9 +371,9 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("href=\"/package/portable-kit/revisions\"", body);
-            Assert.Contains("href=\"/package/portable-kit/files\"", body);
-            Assert.Contains("tab-count", body);
+            Assert.Contains("href=\"/package/portable-kit/revisions\"", body, StringComparison.Ordinal);
+            Assert.Contains("href=\"/package/portable-kit/files\"", body, StringComparison.Ordinal);
+            Assert.Contains("tab-count", body, StringComparison.Ordinal);
         });
     }
 
@@ -388,14 +388,14 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("rev-list", body);
-            Assert.Contains("sync from upstream", body);
-            Assert.Contains(">seed</p>", body);
-            Assert.Contains("badge-verified", body);
-            Assert.Contains("badge-flagged", body);
-            Assert.Contains(">head</span>", body);
-            Assert.Contains("href=\"/package/shelly-bin?rev=rev-1\"", body);
-            Assert.Contains("href=\"/package/shelly-bin/files?rev=rev-2\"", body);
+            Assert.Contains("rev-list", body, StringComparison.Ordinal);
+            Assert.Contains("sync from upstream", body, StringComparison.Ordinal);
+            Assert.Contains(">seed</p>", body, StringComparison.Ordinal);
+            Assert.Contains("badge-verified", body, StringComparison.Ordinal);
+            Assert.Contains("badge-flagged", body, StringComparison.Ordinal);
+            Assert.Contains(">head</span>", body, StringComparison.Ordinal);
+            Assert.Contains("href=\"/package/shelly-bin?rev=rev-1\"", body, StringComparison.Ordinal);
+            Assert.Contains("href=\"/package/shelly-bin/files?rev=rev-2\"", body, StringComparison.Ordinal);
         });
     }
 
@@ -406,7 +406,7 @@ public sealed class UiPagesTests : IDisposable
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("not seeded", body);
+        Assert.Contains("not seeded", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -420,10 +420,10 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("Flagged", body);
-            Assert.Contains("remain blocked", body);
-            Assert.Contains("file-tree", body);
-            Assert.Contains("PKGBUILD", body);
+            Assert.Contains("Flagged", body, StringComparison.Ordinal);
+            Assert.Contains("remain blocked", body, StringComparison.Ordinal);
+            Assert.Contains("file-tree", body, StringComparison.Ordinal);
+            Assert.Contains("PKGBUILD", body, StringComparison.Ordinal);
         });
     }
 
@@ -438,13 +438,13 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("file-tree", body);
-            Assert.Contains("rev=rev-2&amp;path=PKGBUILD", body);
-            Assert.Contains("rev=rev-2&amp;path=.SRCINFO", body);
+            Assert.Contains("file-tree", body, StringComparison.Ordinal);
+            Assert.Contains("rev=rev-2&amp;path=PKGBUILD", body, StringComparison.Ordinal);
+            Assert.Contains("rev=rev-2&amp;path=.SRCINFO", body, StringComparison.Ordinal);
             // Directory-free sample keeps the root order ordinal: .SRCINFO before PKGBUILD.
             Assert.True(body.IndexOf("path=.SRCINFO", StringComparison.Ordinal)
                 < body.IndexOf("path=PKGBUILD", StringComparison.Ordinal));
-            Assert.Contains("Pick a file to preview", body);
+            Assert.Contains("Pick a file to preview", body, StringComparison.Ordinal);
         });
     }
 
@@ -459,17 +459,17 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, head.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("code-view", headBody);
-            Assert.Contains("language-pkgbuild", headBody);
-            Assert.Contains("pkgname=new", headBody);
-            Assert.Contains("PKGBUILD", headBody);
+            Assert.Contains("code-view", headBody, StringComparison.Ordinal);
+            Assert.Contains("language-pkgbuild", headBody, StringComparison.Ordinal);
+            Assert.Contains("pkgname=new", headBody, StringComparison.Ordinal);
+            Assert.Contains("PKGBUILD", headBody, StringComparison.Ordinal);
         });
 
         var pinned = await _client.GetAsync("/package/shelly-bin/files?rev=rev-1&path=PKGBUILD", TestContext.Current.CancellationToken);
         var pinnedBody = await pinned.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, pinned.StatusCode);
-        Assert.Contains("pkgname=old", pinnedBody);
+        Assert.Contains("pkgname=old", pinnedBody, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -483,8 +483,8 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("Revision not found", body);
-            Assert.Contains("PKGBUILD", body);
+            Assert.Contains("Revision not found", body, StringComparison.Ordinal);
+            Assert.Contains("PKGBUILD", body, StringComparison.Ordinal);
         });
     }
 
@@ -497,7 +497,7 @@ public sealed class UiPagesTests : IDisposable
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("File not found", body);
+        Assert.Contains("File not found", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -516,11 +516,11 @@ public sealed class UiPagesTests : IDisposable
         Assert.Multiple(() =>
         {
             // Head is verified, so the page renders; the pinned revision's own scan and findings show instead.
-            Assert.Contains("evil-curl", body);
-            Assert.Contains("(not head)", body);
-            Assert.Contains("Revision findings", body);
-            Assert.Contains("href=\"/package/shelly-bin/files?rev=rev-1\"", body);
-            Assert.Contains("back to head", body);
+            Assert.Contains("evil-curl", body, StringComparison.Ordinal);
+            Assert.Contains("(not head)", body, StringComparison.Ordinal);
+            Assert.Contains("Revision findings", body, StringComparison.Ordinal);
+            Assert.Contains("href=\"/package/shelly-bin/files?rev=rev-1\"", body, StringComparison.Ordinal);
+            Assert.Contains("back to head", body, StringComparison.Ordinal);
         });
     }
 
@@ -535,8 +535,8 @@ public sealed class UiPagesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Multiple(() =>
         {
-            Assert.Contains("Revision not found", body);
-            Assert.Contains("Metadata", body);
+            Assert.Contains("Revision not found", body, StringComparison.Ordinal);
+            Assert.Contains("Metadata", body, StringComparison.Ordinal);
         });
     }
 
@@ -572,7 +572,7 @@ public sealed class UiPagesTests : IDisposable
         Assert.Multiple(() =>
         {
             Assert.Single(Regex.Matches(body, "<title>"));
-            Assert.Contains(expectedTitle, body);
+            Assert.Contains(expectedTitle, body, StringComparison.Ordinal);
         });
     }
 
@@ -589,8 +589,8 @@ public sealed class UiPagesTests : IDisposable
 
         Assert.Multiple(() =>
         {
-            Assert.Contains("name=\"description\"", body);
-            Assert.Contains(expectedDescription, body);
+            Assert.Contains("name=\"description\"", body, StringComparison.Ordinal);
+            Assert.Contains(expectedDescription, body, StringComparison.Ordinal);
         });
     }
 
@@ -614,10 +614,10 @@ public sealed class UiPagesTests : IDisposable
             var canonical = $"https://atoll.example.com{path}";
             Assert.Multiple(() =>
             {
-                Assert.Contains("property=\"og:title\"", body);
-                Assert.Contains("property=\"og:description\"", body);
-                Assert.Contains($"property=\"og:url\" content=\"{canonical}\"", body);
-                Assert.Contains($"rel=\"canonical\" href=\"{canonical}\"", body);
+                Assert.Contains("property=\"og:title\"", body, StringComparison.Ordinal);
+                Assert.Contains("property=\"og:description\"", body, StringComparison.Ordinal);
+                Assert.Contains($"property=\"og:url\" content=\"{canonical}\"", body, StringComparison.Ordinal);
+                Assert.Contains($"rel=\"canonical\" href=\"{canonical}\"", body, StringComparison.Ordinal);
             });
         }
     }

@@ -280,7 +280,7 @@ public class ShellSyntaxTests
         var positions = ShellSyntax.ComputeQuotePositions(original);
         var (normalized, sourceIndices) = ShellSyntax.NormalizeForMatching(original);
 
-        Assert.StartsWith("sudo", normalized);
+        Assert.StartsWith("sudo", normalized, StringComparison.Ordinal);
         Assert.False(ShellSyntax.IsEntirelyInQuotes(positions, sourceIndices, 0, 4));
     }
 

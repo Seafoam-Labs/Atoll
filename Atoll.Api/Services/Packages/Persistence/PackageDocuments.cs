@@ -90,7 +90,7 @@ public sealed class PackageRevisionContentDocument
 
     [BsonElement("schemaVersion")] public int SchemaVersion { get; init; } = PackageSchema.CurrentVersion;
 
-    [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new();
+    [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>Lean listing row for the package index endpoint; never carries the embedded revisions array.</summary>

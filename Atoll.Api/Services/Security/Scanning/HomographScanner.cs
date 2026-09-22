@@ -204,7 +204,7 @@ internal static class HomographScanner
                 "uses fullwidth characters that resemble ASCII - possible homograph spoofing");
 
         var skeleton = Skeleton(value);
-        if (skeleton != value && IsPlainAscii(skeleton))
+        if (!string.Equals(skeleton, value, StringComparison.Ordinal) && IsPlainAscii(skeleton))
             return Message(value, field,
                 $"contains non-ASCII characters that resemble ASCII (skeleton '{skeleton}') - possible homograph spoofing");
 

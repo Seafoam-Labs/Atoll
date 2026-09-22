@@ -17,7 +17,7 @@ namespace Atoll.Api.Tests.Packages;
 public class PackageServiceTests
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly\n"
@@ -140,14 +140,14 @@ public class PackageServiceTests
         });
         var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), new PackageIndexStore());
 
-        var big = new Dictionary<string, string>
+        var big = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["big.bin"] = new('x', 2_048)
         };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await service.SeedFilesAsync("big-pkg", big));
 
-        Assert.Contains("big.bin", ex.Message);
+        Assert.Contains("big.bin", ex.Message, StringComparison.Ordinal);
         Assert.False(await repo.ExistsAsync("big-pkg", TestContext.Current.CancellationToken));
     }
 
@@ -160,7 +160,7 @@ public class PackageServiceTests
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
         var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), new PackageIndexStore());
-        var files = new Dictionary<string, string>
+        var files = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["large-1.txt"] = new('x', 9_000_000),
             ["large-2.txt"] = new('x', 9_000_000)
@@ -189,7 +189,7 @@ public class PackageServiceTests
         await service.SeedFilesAsync("pkg", SampleFiles);
         var history = await service.GetHistoryAsync("pkg");
         var originalHead = history[0].Sha;
-        var oversizedFiles = new Dictionary<string, string>
+        var oversizedFiles = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["large-1.txt"] = new('x', 9_000_000),
             ["large-2.txt"] = new('x', 9_000_000)
@@ -276,8 +276,8 @@ public class PackageServiceTests
         Assert.Multiple(() =>
         {
             // Ascending is the uniform default; packages absent from the catalog rank as zero votes.
-            Assert.Equal(new[] { "v-missing", "v-a" }, firstPage.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "v-b", "v-c" }, secondPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "v-missing", "v-a" }, firstPage.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "v-b", "v-c" }, secondPage.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Equal(4, secondPage.TotalItems);
             Assert.Equal(2, secondPage.TotalPages);
         });
@@ -305,8 +305,8 @@ public class PackageServiceTests
         Assert.Multiple(() =>
         {
             // Equal votes tie-break on name; packages absent from the catalog rank as zero votes.
-            Assert.Equal(new[] { "v-b", "v-c" }, firstPage.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "v-a", "v-missing" }, secondPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "v-b", "v-c" }, firstPage.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "v-a", "v-missing" }, secondPage.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Null(secondPage.Items[1].NumVotes);
         });
     }
@@ -332,9 +332,9 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(new[] { "p-b", "p-a" }, firstPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "p-b", "p-a" }, firstPage.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Equal(10.5, firstPage.Items[0].Popularity);
-            Assert.Equal(new[] { "p-c" }, secondPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "p-c" }, secondPage.Items.Select(item => item.Name), StringComparer.Ordinal);
         });
     }
 
@@ -361,8 +361,8 @@ public class PackageServiceTests
         {
             // Version strings compare ordinally, so "2.0.0-1" outranks "10.0.0-1"; a package
             // absent from the catalog has no version and sorts last.
-            Assert.Equal(new[] { "ver-a", "ver-c" }, firstPage.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "ver-b", "ver-missing" }, secondPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "ver-a", "ver-c" }, firstPage.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "ver-b", "ver-missing" }, secondPage.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Null(secondPage.Items[1].Version);
         });
     }
@@ -381,8 +381,8 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(new[] { "n-c", "n-b" }, firstPage.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "n-a" }, secondPage.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "n-c", "n-b" }, firstPage.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "n-a" }, secondPage.Items.Select(item => item.Name), StringComparer.Ordinal);
         });
     }
 
@@ -408,7 +408,7 @@ public class PackageServiceTests
         {
             // Absent from the catalog ranks as a null version, which sorts first ascending.
             Assert.Equal(new[] { "ver-missing", "ver-b", "ver-a", "ver-c" },
-                page.Items.Select(item => item.Name));
+                page.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Null(page.Items[0].Version);
         });
     }
@@ -445,13 +445,13 @@ public class PackageServiceTests
         {
             Assert.Equal(
                 corpus.OrderByDescending(entry => entry.NumVotes).ThenBy(entry => entry.Name, StringComparer.Ordinal).Select(entry => entry.Name),
-                votesDesc.Items.Select(item => item.Name));
+                votesDesc.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Equal(
                 corpus.OrderBy(entry => entry.NumVotes).ThenBy(entry => entry.Name, StringComparer.Ordinal).Select(entry => entry.Name),
-                votesAsc.Items.Select(item => item.Name));
+                votesAsc.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Equal(
                 corpus.OrderByDescending(entry => entry.Popularity).ThenBy(entry => entry.Name, StringComparer.Ordinal).Select(entry => entry.Name),
-                popularity.Items.Select(item => item.Name));
+                popularity.Items.Select(item => item.Name), StringComparer.Ordinal);
         });
     }
 
@@ -490,9 +490,9 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(new[] { "s-b", "s-a" }, before.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "s-b", "s-a" }, stale.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "s-a", "s-b", "s-c" }, healed.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "s-b", "s-a" }, before.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "s-b", "s-a" }, stale.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "s-a", "s-b", "s-c" }, healed.Items.Select(item => item.Name), StringComparer.Ordinal);
         });
     }
 
@@ -513,10 +513,10 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(new[] { "m-a" }, initial.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "m-a", "m-b" }, afterSeed.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "m-a" }, initial.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "m-a", "m-b" }, afterSeed.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Equal(2, afterSeed.TotalItems);
-            Assert.Equal(new[] { "m-b" }, afterDelete.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "m-b" }, afterDelete.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Equal(1, afterDelete.TotalItems);
         });
     }
@@ -553,9 +553,9 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(new[] { "r-a" }, stale.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "r-a" }, staleNext.Items.Select(item => item.Name));
-            Assert.Equal(new[] { "r-a", "r-b", "r-c" }, healed.Items.Select(item => item.Name));
+            Assert.Equal(new[] { "r-a" }, stale.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "r-a" }, staleNext.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "r-a", "r-b", "r-c" }, healed.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Equal(3, healed.TotalItems);
         });
     }
@@ -589,7 +589,7 @@ public class PackageServiceTests
         }
 
         // Every page is a slice of the same tied-key ranking: name ascending on the tie-break.
-        Assert.Equal(new[] { "t-a", "t-b", "t-c", "t-d", "t-e", "t-f", "t-g" }, names);
+        Assert.Equal(new[] { "t-a", "t-b", "t-c", "t-d", "t-e", "t-f", "t-g" }, names, StringComparer.Ordinal);
     }
 
     [Fact]
@@ -626,7 +626,7 @@ public class PackageServiceTests
             Mongo = new MongoOptions { MaxFileBytes = 10_485_760, MaxRevisions = 10 }
         });
         var service = new PackageService(repo, options, new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance), TestHybridCache.New(), new PackageIndexStore());
-        var files = new Dictionary<string, string>
+        var files = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["large-1.txt"] = new('x', perFile),
             ["large-2.txt"] = new('x', perFile)

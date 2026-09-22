@@ -39,7 +39,7 @@ public sealed class PackageSecurityFilter(
             return TypedResults.Problem(
                 "This package is unavailable until it passes security checks.",
                 statusCode: StatusCodes.Status403Forbidden,
-                extensions: new Dictionary<string, object?> { ["reason"] = access.ReasonCode });
+                extensions: new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = access.ReasonCode });
 
         return await next(context);
     }

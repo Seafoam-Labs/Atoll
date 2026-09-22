@@ -67,7 +67,7 @@ public class PackageDocumentSizeValidatorTests
             Id = PackageSchema.RevisionDocumentId("shelly", "rev"),
             PackageName = "shelly",
             RevisionId = "rev",
-            Files = files.ToDictionary(f => f.Name, f => new PackageFile { Content = f.Content, Size = f.Size })
+            Files = files.ToDictionary(f => f.Name, f => new PackageFile { Content = f.Content, Size = f.Size }, StringComparer.Ordinal)
         };
     }
 }

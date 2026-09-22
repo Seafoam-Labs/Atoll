@@ -55,7 +55,7 @@ public class PackageSecurityStatusServiceTests
                 CreatedAt = DateTimeOffset.UtcNow,
                 Author = "test",
                 Message = "seed",
-                Files = new Dictionary<string, PackageFile>
+                Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
                 }

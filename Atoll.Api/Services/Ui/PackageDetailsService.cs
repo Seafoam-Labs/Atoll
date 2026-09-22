@@ -21,9 +21,9 @@ public sealed record PackageDetails(
     /// <summary>Scan of the revision the page is pinned to - head unless ?rev= names another revision.</summary>
     public PackageSecurityScanDocument? SelectedScan => Head is null
         ? null
-        : SelectedRevisionId == Head.HeadRevisionId
+        : string.Equals(SelectedRevisionId, Head.HeadRevisionId, StringComparison.Ordinal)
             ? HeadScan
-            : Scans.FirstOrDefault(scan => scan.RevisionId == SelectedRevisionId);
+            : Scans.FirstOrDefault(scan => string.Equals(scan.RevisionId, SelectedRevisionId, StringComparison.Ordinal));
 }
 
 public sealed record RevisionRow(
@@ -216,11 +216,11 @@ public sealed class PackageDetailsService(
 
     private static (string RevisionId, bool FellBack) ResolveRevision(PackageDocument head, string? requested)
     {
-        if (string.IsNullOrEmpty(requested) || requested == head.HeadRevisionId)
+        if (string.IsNullOrEmpty(requested) || string.Equals(requested, head.HeadRevisionId, StringComparison.Ordinal))
             return (head.HeadRevisionId, false);
 
         // Membership in the retained revision list matches the /security/rescan validation.
-        return head.Revisions.Any(revision => revision.RevisionId == requested)
+        return head.Revisions.Any(revision => string.Equals(revision.RevisionId, requested, StringComparison.Ordinal))
             ? (requested, false)
             : (head.HeadRevisionId, true);
     }

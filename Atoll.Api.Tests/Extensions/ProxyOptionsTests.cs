@@ -27,7 +27,7 @@ public class ProxyOptionsTests
     [Fact]
     public void Without_proxy_configuration_framework_loopback_defaults_apply()
     {
-        var forwarded = BuildForwardedHeaders(new Dictionary<string, string?>());
+        var forwarded = BuildForwardedHeaders(new Dictionary<string, string?>(StringComparer.Ordinal));
 
         Assert.Multiple(() =>
         {
@@ -44,7 +44,7 @@ public class ProxyOptionsTests
     [Fact]
     public void Configured_networks_proxies_and_headers_replace_the_defaults()
     {
-        var forwarded = BuildForwardedHeaders(new Dictionary<string, string?>
+        var forwarded = BuildForwardedHeaders(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["Atoll:Proxy:KnownNetworks"] = "172.31.0.0/16,10.0.0.0/8",
             ["Atoll:Proxy:KnownProxies"] = "192.0.2.10",
@@ -67,7 +67,7 @@ public class ProxyOptionsTests
     public async Task Two_hop_chain_restores_original_scheme_and_client_ip()
     {
         var services = new ServiceCollection();
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["Atoll:Proxy:KnownNetworks"] = "172.31.0.0/16",
             ["Atoll:Proxy:ForwardedProtoHeaderName"] = "CloudFront-Forwarded-Proto",
@@ -110,7 +110,7 @@ public class ProxyOptionsTests
     public void Invalid_networks_fail_options_validation(string knownNetworks)
     {
         var services = new ServiceCollection();
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["Atoll:Proxy:KnownNetworks"] = knownNetworks
         }).Build();
@@ -125,7 +125,7 @@ public class ProxyOptionsTests
     public void Invalid_forward_limit_fails_options_validation()
     {
         var services = new ServiceCollection();
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["Atoll:Proxy:ForwardLimit"] = "0"
         }).Build();

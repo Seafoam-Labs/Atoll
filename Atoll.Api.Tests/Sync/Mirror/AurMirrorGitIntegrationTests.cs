@@ -59,8 +59,8 @@ public sealed class AurMirrorGitIntegrationTests : IDisposable
         Assert.Multiple(() =>
         {
             Assert.Equivalent(new[] { "PKGBUILD", ".SRCINFO" }, files.Keys, strict: true);
-            Assert.Contains("pkgname=alpha", files["PKGBUILD"]);
-            Assert.Contains("pkgbase", files[".SRCINFO"]);
+            Assert.Contains("pkgname=alpha", files["PKGBUILD"], StringComparison.Ordinal);
+            Assert.Contains("pkgbase", files[".SRCINFO"], StringComparison.Ordinal);
         });
     }
 

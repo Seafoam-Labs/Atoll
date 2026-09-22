@@ -15,7 +15,7 @@ namespace Atoll.Api.Tests.Sync.Direct;
 public class DirectPackageSeederTests
 {
     private static readonly IReadOnlyDictionary<string, string> BaseFiles =
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = demo\n"
@@ -79,7 +79,7 @@ public class DirectPackageSeederTests
         var persisted = await repo.GetRevisionAsync("libfoo", (await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken))!.HeadRevisionId, TestContext.Current.CancellationToken);
         Assert.Multiple(() =>
         {
-            Assert.Equal(new[] { "foo" }, source.FetchedBases);
+            Assert.Equal(new[] { "foo" }, source.FetchedBases, StringComparer.Ordinal);
             Assert.Equivalent(BaseFiles.Keys, persisted!.Files.Keys, strict: true);
         });
     }
@@ -95,7 +95,7 @@ public class DirectPackageSeederTests
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(new[] { "shelly" }, source.FetchedBases);
+            Assert.Equal(new[] { "shelly" }, source.FetchedBases, StringComparer.Ordinal);
             Assert.Equal(1, packageCount);
         });
     }

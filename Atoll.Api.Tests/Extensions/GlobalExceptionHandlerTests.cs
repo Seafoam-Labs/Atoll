@@ -27,7 +27,7 @@ public class GlobalExceptionHandlerTests
         {
             Assert.Equal(LogLevel.Debug, entry.Level);
             Assert.Null(entry.Exception);
-            Assert.Contains("shelly", entry.Message);
+            Assert.Contains("shelly", entry.Message, StringComparison.Ordinal);
         });
     }
 

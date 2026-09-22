@@ -14,7 +14,7 @@ namespace Atoll.Api.Tests.Packages.Git;
 public sealed class GitSmartHttpEndpointsTests : IDisposable
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly\n"
@@ -77,8 +77,8 @@ public sealed class GitSmartHttpEndpointsTests : IDisposable
 
         var body = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
         var text = Encoding.ASCII.GetString(body);
-        Assert.StartsWith("001e# service=git-upload-pack\n", text);
-        Assert.Contains("refs/heads/main", text);
+        Assert.StartsWith("001e# service=git-upload-pack\n", text, StringComparison.Ordinal);
+        Assert.Contains("refs/heads/main", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class GitSmartHttpEndpointsTests : IDisposable
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = Encoding.ASCII.GetString(await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
-        Assert.Contains("refs/heads/main", body);
+        Assert.Contains("refs/heads/main", body, StringComparison.Ordinal);
     }
 
     [Fact]

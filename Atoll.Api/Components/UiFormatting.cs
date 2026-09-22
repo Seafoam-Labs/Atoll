@@ -116,9 +116,9 @@ public static class UiFormatting
     {
         return bytes switch
         {
-            < 1024 => $"{bytes} B",
-            < 1024 * 1024 => $"{bytes / 1024.0:0.#} kB",
-            _ => $"{bytes / (1024.0 * 1024.0):0.#} MB"
+            < 1024 => $"{bytes.ToString(CultureInfo.InvariantCulture)} B",
+            < 1024 * 1024 => $"{(bytes / 1024.0).ToString("0.#", CultureInfo.InvariantCulture)} kB",
+            _ => $"{(bytes / (1024.0 * 1024.0)).ToString("0.#", CultureInfo.InvariantCulture)} MB"
         };
     }
 

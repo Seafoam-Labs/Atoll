@@ -18,7 +18,7 @@ namespace Atoll.Api.Tests.Sync.Bulk;
 public class PackageBulkSeedWorkerTests
 {
     private static readonly IReadOnlyDictionary<string, string> BaseFiles =
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = demo\n"

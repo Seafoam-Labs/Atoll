@@ -24,7 +24,7 @@ public class PkgBuildSourceUrlScannerTests
 
         var finding = Assert.Single(findings);
         Assert.Equal("suspicious-source-url", finding.RuleId);
-        Assert.Contains("https://payload.exe", finding.Snippet);
+        Assert.Contains("https://payload.exe", finding.Snippet, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -65,7 +65,7 @@ public class PkgBuildSourceUrlScannerTests
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal("subdir/PKGBUILD", finding.File);
         Assert.Equal("suspicious-source-url", finding.RuleId);
-        Assert.Contains("https://host.exe", finding.Message);
+        Assert.Contains("https://host.exe", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]

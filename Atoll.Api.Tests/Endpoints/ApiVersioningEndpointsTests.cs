@@ -29,7 +29,7 @@ public sealed class ApiVersioningEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(
             response.Headers.TryGetValues("api-supported-versions", out var versions) &&
-            versions.SequenceEqual(["1.0"]),
+            versions.SequenceEqual(["1.0"], StringComparer.Ordinal),
             "Expected api-supported-versions: 1.0");
     }
 

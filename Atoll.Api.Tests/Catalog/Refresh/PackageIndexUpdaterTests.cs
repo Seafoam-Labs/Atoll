@@ -235,7 +235,7 @@ public class PackageIndexUpdaterTests
             _requests++;
             if (_requests > 1)
             {
-                SawConditionalRequest = request.Headers.IfNoneMatch.Any(tag => tag.Tag == "\"dump-1\"")
+                SawConditionalRequest = request.Headers.IfNoneMatch.Any(tag => string.Equals(tag.Tag, "\"dump-1\"", StringComparison.Ordinal))
                                         && request.Headers.IfModifiedSince is not null;
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotModified));
             }

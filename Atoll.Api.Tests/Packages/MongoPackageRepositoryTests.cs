@@ -131,7 +131,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
 
         var history = await _repo.GetHistoryAsync("shelly", CancellationToken.None);
 
-        Assert.Equal(["rev-3", "rev-2", "rev-1", "rev-0"], history.Select(v => v.Sha));
+        Assert.Equal(["rev-3", "rev-2", "rev-1", "rev-0"], history.Select(v => v.Sha), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -165,11 +165,11 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         Assert.Multiple(() =>
         {
             Assert.Equal(5, total);
-            Assert.Equal(["a-apple", "b-banana"], firstPage.Select(p => p.Name));
-            Assert.Equal(["c-carrot", "d-date"], secondPage.Select(p => p.Name));
-            Assert.Equal(["e-egg"], lastRow.Select(p => p.Name));
+            Assert.Equal(["a-apple", "b-banana"], firstPage.Select(p => p.Name), StringComparer.Ordinal);
+            Assert.Equal(["c-carrot", "d-date"], secondPage.Select(p => p.Name), StringComparer.Ordinal);
+            Assert.Equal(["e-egg"], lastRow.Select(p => p.Name), StringComparer.Ordinal);
 
-            var apple = firstPage.Single(p => p.Name == "a-apple");
+            var apple = firstPage.Single(p => string.Equals(p.Name, "a-apple", StringComparison.Ordinal));
             Assert.Equal("rev-a2", apple.HeadRevisionId);
             Assert.Equal(2, apple.RevisionCount);
             Assert.True(apple.CreatedAt > DateTimeOffset.MinValue);
@@ -227,7 +227,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
                     .Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount, p.UpstreamPackageBase)));
             Assert.Equal(3, fromMongo.Count);
 
-            var apple = fromMongo.Single(p => p.Name == "a-apple");
+            var apple = fromMongo.Single(p => string.Equals(p.Name, "a-apple", StringComparison.Ordinal));
             Assert.Equal("rev-a2", apple.HeadRevisionId);
             Assert.Equal(2, apple.RevisionCount);
             Assert.True(apple.CreatedAt > DateTimeOffset.MinValue);
@@ -270,7 +270,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
             Assert.Equal(maxRevisions, head!.Revisions.Count);
             Assert.Equal(
                 ["rev-10", "rev-9", "rev-8", "rev-7", "rev-6"],
-                head.Revisions.Select(r => r.RevisionId));
+                head.Revisions.Select(r => r.RevisionId), StringComparer.Ordinal);
             Assert.Equal(maxRevisions, revisionDocCount);
             Assert.All(retained, item => Assert.NotNull(item));
             Assert.All(evicted, item => Assert.Null(item));
@@ -301,7 +301,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
             Assert.NotNull(revB);
             Assert.NotNull(revC);
             Assert.Null(revA);
-            Assert.Equal(["rev-b", "rev-c"], history.Select(v => v.Sha));
+            Assert.Equal(["rev-b", "rev-c"], history.Select(v => v.Sha), StringComparer.Ordinal);
         });
     }
 
@@ -415,14 +415,14 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = message,
-            Files = files ?? new Dictionary<string, PackageFile>()
+            Files = files ?? new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         };
     }
 
     private static Dictionary<string, PackageFile> PkgbuildFiles(string packageName, string revisionId)
     {
         var content = $"pkgname={packageName}\n# {revisionId}\n";
-        return new Dictionary<string, PackageFile>
+        return new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = new() { Content = content, Size = content.Length, Hash = revisionId }
         };

@@ -105,7 +105,9 @@ internal static partial class PkgBuildScriptReferences
     private static bool IsDataArray(string name)
     {
         var stem = name.Split('_')[0];
-        return stem is "source" or "noextract" or "validpgpkeys" ||
+        return stem.Equals("source", StringComparison.Ordinal) ||
+               stem.Equals("noextract", StringComparison.Ordinal) ||
+               stem.Equals("validpgpkeys", StringComparison.Ordinal) ||
                stem.EndsWith("sums", StringComparison.Ordinal);
     }
 

@@ -135,7 +135,7 @@ public class LocalSourceBinaryScannerTests
         var finding = LocalSourceBinaryScanner.Scan(new string('\0', 64) + "SCRM", "data.bin");
 
         Assert.Equal(FindingSeverity.Medium, finding!.Severity);
-        Assert.Contains("binary data", finding.Message);
+        Assert.Contains("binary data", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public class LocalSourceBinaryScannerTests
         var finding = LocalSourceBinaryScanner.Scan(elf, "picture.png");
 
         Assert.Equal(FindingSeverity.Critical, finding!.Severity);
-        Assert.Contains("ELF executable", finding.Message);
+        Assert.Contains("ELF executable", finding.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -174,7 +174,7 @@ public class LocalSourceBinaryScannerTests
         var finding = LocalSourceBinaryScanner.Scan(elf, path);
 
         Assert.Equal(FindingSeverity.Medium, finding!.Severity);
-        Assert.Contains("shared library", finding.Message);
+        Assert.Contains("shared library", finding.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -198,7 +198,7 @@ public class LocalSourceBinaryScannerTests
         var finding = LocalSourceBinaryScanner.Scan(exe, "icon.png");
 
         Assert.Equal(FindingSeverity.Critical, finding!.Severity);
-        Assert.Contains("Windows executable", finding.Message);
+        Assert.Contains("Windows executable", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -245,7 +245,7 @@ public class LocalSourceBinaryScannerTests
         var finding = LocalSourceBinaryScanner.Scan(Bytes(header), "files.tar");
 
         Assert.Equal(FindingSeverity.Medium, finding!.Severity);
-        Assert.Contains("binary archive", finding.Message);
+        Assert.Contains("binary archive", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -256,7 +256,7 @@ public class LocalSourceBinaryScannerTests
         var finding = LocalSourceBinaryScanner.Scan(gzip, "payload.bin");
 
         Assert.Equal(FindingSeverity.Medium, finding!.Severity);
-        Assert.Contains("binary archive", finding.Message);
+        Assert.Contains("binary archive", finding.Message, StringComparison.Ordinal);
     }
 
     // ===== Certificates and signatures: extension-based Medium =====
@@ -296,7 +296,7 @@ public class LocalSourceBinaryScannerTests
         var finding = LocalSourceBinaryScanner.Scan(legacy, "PKGBUILD");
 
         Assert.Equal(FindingSeverity.Medium, finding!.Severity);
-        Assert.Contains("unrecognized encoding", finding.Message);
+        Assert.Contains("unrecognized encoding", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -305,7 +305,7 @@ public class LocalSourceBinaryScannerTests
         var finding = LocalSourceBinaryScanner.Scan("abc\0def", "data.bin");
 
         Assert.Equal(FindingSeverity.Medium, finding!.Severity);
-        Assert.Contains("binary data", finding.Message);
+        Assert.Contains("binary data", finding.Message, StringComparison.Ordinal);
     }
 
     [Fact]

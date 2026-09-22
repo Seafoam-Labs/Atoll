@@ -92,8 +92,8 @@ public sealed class MinimalApiEndpointsTests : IDisposable
             Assert.Matches("""atoll_index_size\{[^}]*index="words"[^}]*\} [1-9]""", body);
 
             // Uptime gauge plus ASP.NET Core request metrics from instrumentation.
-            Assert.Contains("atoll_process_uptime_seconds", body);
-            Assert.Contains("http_server_request_duration_seconds", body);
+            Assert.Contains("atoll_process_uptime_seconds", body, StringComparison.Ordinal);
+            Assert.Contains("http_server_request_duration_seconds", body, StringComparison.Ordinal);
         });
     }
 }

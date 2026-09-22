@@ -18,7 +18,7 @@ public class MetricsScopeIsolationTests
 
         var hostScope = host.Services.GetRequiredService<AtollMetrics>().ScopeName;
         var otherScope = other.Services.GetRequiredService<AtollMetrics>().ScopeName;
-        Assert.NotEqual(hostScope, otherScope);
+        Assert.NotEqual(hostScope, otherScope, StringComparer.Ordinal);
 
         var client = host.CreateClient();
         await client.GetAsync("/v1/search?query=portable-kit", TestContext.Current.CancellationToken);

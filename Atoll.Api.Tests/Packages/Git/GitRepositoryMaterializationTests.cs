@@ -17,7 +17,7 @@ namespace Atoll.Api.Tests.Packages.Git;
 public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
 {
     private static readonly IReadOnlyDictionary<string, string> SampleFiles =
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly\n"
@@ -200,7 +200,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
 
             // A revision append changes the marker, so the next request re-materializes the
             // whole chain over an already-packed object store.
-            var revision2 = new Dictionary<string, string>
+            var revision2 = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
@@ -260,7 +260,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             await security.MarkHeadVerifiedAsync("shelly");
 
             // Revision 2 (new head): scan completes Flagged.
-            var revision2 = new Dictionary<string, string>
+            var revision2 = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\nsource=(\"https://example.com/install.sh\")\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
@@ -274,7 +274,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             Assert.Multiple(() =>
             {
                 Assert.Equal(1, commits);
-                Assert.Contains("pkgver=1.0", pkgbuild);
+                Assert.Contains("pkgver=1.0", pkgbuild, StringComparison.Ordinal);
             });
 
             // Rescan the flagged head to Verified; the marker must change and the lazy
@@ -288,7 +288,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             Assert.Multiple(() =>
             {
                 Assert.Equal(2, commits);
-                Assert.Contains("pkgver=2.0", pkgbuild);
+                Assert.Contains("pkgver=2.0", pkgbuild, StringComparison.Ordinal);
             });
         }
         finally
@@ -311,7 +311,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
                 new SecurityFinding("network-download", FindingSeverity.Critical, "test", "curl | sh", "PKGBUILD"));
 
             // Revision 2 (new head): clean and verified.
-            var revision2 = new Dictionary<string, string>
+            var revision2 = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
@@ -324,7 +324,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             Assert.Multiple(() =>
             {
                 Assert.Equal(1, commits);
-                Assert.Contains("pkgver=2.0", pkgbuild);
+                Assert.Contains("pkgver=2.0", pkgbuild, StringComparison.Ordinal);
             });
         }
         finally
@@ -439,7 +439,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
                     PackageName = "pkg",
                     RevisionId = "rev-1",
                     CreatedAt = T0,
-                    Files = new Dictionary<string, PackageFile>
+                    Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                     {
                         ["PKGBUILD"] = new() { Content = "pkgname=pkg\npkgver=1.0\n", Size = 0, Hash = "unused" }
                     }
@@ -450,7 +450,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
                 PackageName = "pkg",
                 RevisionId = "rev-2",
                 CreatedAt = T1,
-                Files = new Dictionary<string, PackageFile>
+                Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = new() { Content = "pkgname=pkg\npkgver=2.0\n", Size = 0, Hash = "unused" }
                 }
@@ -527,7 +527,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
         public Task<PackageRevisionContentDocument?> GetRevisionAsync(
             string packageName, string revisionId, CancellationToken ct = default)
         {
-            return revisionId == hiddenRevisionId
+            return string.Equals(revisionId, hiddenRevisionId, StringComparison.Ordinal)
                 ? Task.FromResult<PackageRevisionContentDocument?>(null)
                 : inner.GetRevisionAsync(packageName, revisionId, ct);
         }

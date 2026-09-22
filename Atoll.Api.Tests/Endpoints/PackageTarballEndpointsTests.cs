@@ -110,7 +110,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
     [Fact]
     public async Task Shell_scripts_get_the_same_exec_bits_as_clones()
     {
-        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg", new Dictionary<string, PackageFile>
+        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg", new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 13, Hash = "h" },
             ["helper.sh"] = new() { Content = "#!/bin/sh\necho hi\n", Size = 18, Hash = "h2" }
@@ -123,8 +123,8 @@ public sealed class PackageTarballEndpointsTests : IDisposable
         var entries = await ReadTarballAsync(response);
         Assert.Multiple(() =>
         {
-            Assert.Equal(RegularFileMode, entries.Single(e => e.Name == "pkg/PKGBUILD").Mode);
-            Assert.Equal(ExecutableFileMode, entries.Single(e => e.Name == "pkg/helper.sh").Mode);
+            Assert.Equal(RegularFileMode, entries.Single(e => string.Equals(e.Name, "pkg/PKGBUILD", StringComparison.Ordinal)).Mode);
+            Assert.Equal(ExecutableFileMode, entries.Single(e => string.Equals(e.Name, "pkg/helper.sh", StringComparison.Ordinal)).Mode);
         });
     }
 
@@ -144,7 +144,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = "update",
-            Files = new Dictionary<string, PackageFile>
+            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = "pkgname=test2\n", Size = 14, Hash = "h2" }
             }
@@ -192,7 +192,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = "seed",
-            Files = files ?? new Dictionary<string, PackageFile>
+            Files = files ?? new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
                 ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 13, Hash = "h" }
             }

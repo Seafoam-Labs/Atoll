@@ -25,13 +25,13 @@ public class CatalogCacheCompositionTests
         // Warms the snapshot, so only an invalidation can make the seeded row appear.
         Assert.Empty((await SearchSeededAsync(catalog, ct)).Rows);
 
-        await packages.SeedFilesAsync("shelly-bin", new Dictionary<string, string>
+        await packages.SeedFilesAsync("shelly-bin", new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly-bin\n"
         });
 
-        Assert.Equal(["shelly-bin"], (await SearchSeededAsync(catalog, ct)).Rows.Select(row => row.Package.Name));
+        Assert.Equal(["shelly-bin"], (await SearchSeededAsync(catalog, ct)).Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class CatalogCacheCompositionTests
         var packages = factory.Services.GetRequiredService<IPackageService>();
         var ct = TestContext.Current.CancellationToken;
 
-        await packages.SeedFilesAsync("shelly-bin", new Dictionary<string, string>
+        await packages.SeedFilesAsync("shelly-bin", new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly-bin\n"

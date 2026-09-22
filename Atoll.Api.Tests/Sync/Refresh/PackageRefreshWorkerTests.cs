@@ -17,7 +17,7 @@ namespace Atoll.Api.Tests.Sync.Refresh;
 public class PackageRefreshWorkerTests
 {
     private static readonly IReadOnlyDictionary<string, string> BaseFiles =
-        new Dictionary<string, string>
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = demo\n"
@@ -93,7 +93,7 @@ public class PackageRefreshWorkerTests
             FilesFor =
             {
                 // Provide different file content so a new revision ID is computed.
-                ["shelly"] = new Dictionary<string, string>
+                ["shelly"] = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
@@ -109,7 +109,7 @@ public class PackageRefreshWorkerTests
         Assert.Multiple(() =>
         {
             Assert.Equal(RefreshCycleOutcome.Completed, outcome);
-            Assert.NotEqual(originalHead, newHead);
+            Assert.NotEqual(originalHead, newHead, StringComparer.Ordinal);
             Assert.Equal(1, mirror.FetchedBatches.Sum(b => b.Count));
             Assert.Equal(1, status.GetSnapshot().PackagesUpdated);
             Assert.Equal(0, status.GetSnapshot().PackagesUnchanged);
@@ -134,7 +134,7 @@ public class PackageRefreshWorkerTests
             BranchHeads = { ["shelly"] = "sha-new" },
             FilesFor =
             {
-                ["shelly"] = new Dictionary<string, string>
+                ["shelly"] = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
@@ -202,7 +202,7 @@ public class PackageRefreshWorkerTests
             BranchHeads = { ["foo"] = "sha-new" },
             FilesFor =
             {
-                ["foo"] = new Dictionary<string, string>
+                ["foo"] = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
@@ -222,8 +222,8 @@ public class PackageRefreshWorkerTests
             // One pkgbase fetched, both members updated.
             Assert.Equal(1, mirror.FetchedBatches.Sum(b => b.Count));
             // Revision IDs are pkgname-scoped, so they differ across members but both must change.
-            Assert.NotEqual(libfooOriginalHead, libfooUpdated);
-            Assert.NotEqual(libfooDevelOriginalHead, libfooDevelUpdated);
+            Assert.NotEqual(libfooOriginalHead, libfooUpdated, StringComparer.Ordinal);
+            Assert.NotEqual(libfooDevelOriginalHead, libfooDevelUpdated, StringComparer.Ordinal);
             Assert.Equal(2, status.GetSnapshot().PackagesUpdated);
         });
     }
@@ -248,7 +248,7 @@ public class PackageRefreshWorkerTests
             BranchHeads = { ["foo"] = "sha-new" },
             FilesFor =
             {
-                ["foo"] = new Dictionary<string, string>
+                ["foo"] = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
@@ -262,11 +262,11 @@ public class PackageRefreshWorkerTests
 
         var libfooUpdated = (await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken))!.HeadRevisionId;
         var libfooDoc = await repo.GetHeadAsync("libfoo", TestContext.Current.CancellationToken);
-        var libfooState = (await repo.ListSyncStatesAsync(TestContext.Current.CancellationToken)).Single(s => s.PackageName == "libfoo");
+        var libfooState = (await repo.ListSyncStatesAsync(TestContext.Current.CancellationToken)).Single(s => string.Equals(s.PackageName, "libfoo", StringComparison.Ordinal));
 
         Assert.Multiple(() =>
         {
-            Assert.NotEqual(libfooOriginalHead, libfooUpdated);
+            Assert.NotEqual(libfooOriginalHead, libfooUpdated, StringComparer.Ordinal);
             Assert.Equal(1, status.GetSnapshot().PackagesUpdated);
             // The succeeded member's watermark advances so it won't be refetched next cycle.
             Assert.Equal("sha-new", libfooState.LastSyncedUpstreamHead);
@@ -327,7 +327,7 @@ public class PackageRefreshWorkerTests
             BranchHeads = { ["shelly"] = "sha-new" },
             FilesFor =
             {
-                ["shelly"] = new Dictionary<string, string>
+                ["shelly"] = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
@@ -365,7 +365,7 @@ public class PackageRefreshWorkerTests
             FetchFails = { "broken" },
             FilesFor =
             {
-                ["good"] = new Dictionary<string, string>
+                ["good"] = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
@@ -380,7 +380,7 @@ public class PackageRefreshWorkerTests
         var goodNewHead = (await repo.GetHeadAsync("good", TestContext.Current.CancellationToken))!.HeadRevisionId;
         Assert.Multiple(() =>
         {
-            Assert.NotEqual(goodOriginalHead, goodNewHead);
+            Assert.NotEqual(goodOriginalHead, goodNewHead, StringComparer.Ordinal);
             Assert.Equal(1, status.GetSnapshot().PackagesUpdated);
             Assert.Equal(1, status.GetSnapshot().RefsFailed);
             Assert.Equal(1, status.GetSnapshot().PackagesSkipped);
@@ -414,7 +414,7 @@ public class PackageRefreshWorkerTests
         var grouped = RefreshPlan.GroupByPackageBase([.. states], store.Current);
         var candidates = RefreshPlan.SelectCandidates(
             grouped,
-            new Dictionary<string, string> { ["shelly"] = "sha-stable" },
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["shelly"] = "sha-stable" },
             DateTimeOffset.UtcNow.AddHours(2),
             TimeSpan.FromHours(1));
 
@@ -436,7 +436,7 @@ public class PackageRefreshWorkerTests
         var grouped = RefreshPlan.GroupByPackageBase([.. states], store.Current);
         var candidates = RefreshPlan.SelectCandidates(
             grouped,
-            new Dictionary<string, string> { ["shelly"] = "sha-stable" },
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["shelly"] = "sha-stable" },
             DateTimeOffset.UtcNow.AddHours(2),
             TimeSpan.FromHours(1));
 
@@ -503,7 +503,7 @@ public class PackageRefreshWorkerTests
         foreach (var meta in metas)
             await SeedAsync(service, meta.Name, BaseFiles);
 
-        var updatedFiles = new Dictionary<string, string>
+        var updatedFiles = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
             [".SRCINFO"] = "pkgname = demo\n"
@@ -579,7 +579,7 @@ public class PackageRefreshWorkerTests
             {
                 // Each file fits within MaxFileBytes, but together they push the revision
                 // snapshot past MongoDB's 16 MiB document limit.
-                ["shelly"] = new Dictionary<string, string>
+                ["shelly"] = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["big-1.txt"] = new('x', 9_000_000),
                     ["big-2.txt"] = new('x', 9_000_000)
@@ -602,7 +602,7 @@ public class PackageRefreshWorkerTests
             Assert.Equal(originalHead, docAfterFirstCycle!.HeadRevisionId);
             Assert.Contains("shelly", excludedBases);
             Assert.NotNull(docAfterFirstCycle.LastSyncError);
-            Assert.Contains("exceeds", docAfterFirstCycle.LastSyncError);
+            Assert.Contains("exceeds", docAfterFirstCycle.LastSyncError, StringComparison.Ordinal);
             Assert.Single(mirror.FetchedBatches);
         });
 
@@ -632,7 +632,7 @@ public class PackageRefreshWorkerTests
             BranchHeads = { ["shelly"] = "sha-new" },
             FilesFor =
             {
-                ["shelly"] = new Dictionary<string, string>
+                ["shelly"] = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"

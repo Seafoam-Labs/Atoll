@@ -97,12 +97,12 @@ public sealed class AurRpcService(PackageIndexStore store)
 
     private static string DependencyName(string value)
     {
-        var descriptionIndex = value.IndexOf(':');
+        var descriptionIndex = value.IndexOf(':', StringComparison.Ordinal);
         var end = descriptionIndex >= 0 ? descriptionIndex : value.Length;
 
         foreach (var separator in new[] { '<', '>', '=' })
         {
-            var index = value.IndexOf(separator);
+            var index = value.IndexOf(separator, StringComparison.Ordinal);
             if (index >= 0 && index < end)
                 end = index;
         }

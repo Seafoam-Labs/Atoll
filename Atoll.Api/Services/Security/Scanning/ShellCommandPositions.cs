@@ -110,7 +110,7 @@ internal static class ShellCommandPositions
     // the command.
     private static bool IsAssignmentToken(string token)
     {
-        var separator = token.IndexOf('=');
+        var separator = token.IndexOf('=', StringComparison.Ordinal);
         if (separator <= 0)
             return false;
 

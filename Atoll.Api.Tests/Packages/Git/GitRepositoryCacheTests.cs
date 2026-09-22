@@ -41,7 +41,7 @@ public class GitRepositoryCacheTests
     public void ComputeHistoryMarker_security_disabled_ignores_scan_statuses()
     {
         var doc = TestDoc("rev-3", ("rev-1", T0), ("rev-2", T1), ("rev-3", T2));
-        var statuses = new Dictionary<string, SecurityStatus>
+        var statuses = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
         {
             ["rev-1"] = SecurityStatus.Flagged,
             ["rev-2"] = SecurityStatus.Verified,
@@ -63,7 +63,7 @@ public class GitRepositoryCacheTests
     {
         // Revisions are stored newest-first; the marker must enumerate them in CreatedAt order.
         var doc = TestDoc("rev-3", ("rev-3", T2), ("rev-1", T0), ("rev-2", T1));
-        var statuses = new Dictionary<string, SecurityStatus>
+        var statuses = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
         {
             ["rev-1"] = SecurityStatus.Pending,
             ["rev-2"] = SecurityStatus.Verified,
@@ -78,44 +78,44 @@ public class GitRepositoryCacheTests
     public void ComputeHistoryMarker_changes_when_a_scan_status_flips()
     {
         var doc = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
-        var flagged = new Dictionary<string, SecurityStatus>
+        var flagged = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
         {
             ["rev-1"] = SecurityStatus.Flagged,
             ["rev-2"] = SecurityStatus.Verified
         };
-        var verified = new Dictionary<string, SecurityStatus>
+        var verified = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
         {
             ["rev-1"] = SecurityStatus.Verified,
             ["rev-2"] = SecurityStatus.Verified
         };
 
         Assert.NotEqual(GitRepositoryCache.ComputeHistoryMarker(doc, true, verified),
-            GitRepositoryCache.ComputeHistoryMarker(doc, true, flagged));
+            GitRepositoryCache.ComputeHistoryMarker(doc, true, flagged), StringComparer.Ordinal);
     }
 
     [Fact]
     public void ComputeHistoryMarker_changes_when_a_scan_document_appears_or_disappears()
     {
         var doc = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
-        var full = new Dictionary<string, SecurityStatus>
+        var full = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
         {
             ["rev-1"] = SecurityStatus.Pending,
             ["rev-2"] = SecurityStatus.Verified
         };
-        var neverScanned = new Dictionary<string, SecurityStatus> { ["rev-2"] = SecurityStatus.Verified };
+        var neverScanned = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal) { ["rev-2"] = SecurityStatus.Verified };
 
         Assert.NotEqual(GitRepositoryCache.ComputeHistoryMarker(doc, true, neverScanned),
-            GitRepositoryCache.ComputeHistoryMarker(doc, true, full));
+            GitRepositoryCache.ComputeHistoryMarker(doc, true, full), StringComparer.Ordinal);
     }
 
     [Fact]
     public void ComputeHistoryMarker_changes_when_security_is_toggled()
     {
         var doc = TestDoc("rev-1", ("rev-1", T0));
-        var statuses = new Dictionary<string, SecurityStatus> { ["rev-1"] = SecurityStatus.Verified };
+        var statuses = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal) { ["rev-1"] = SecurityStatus.Verified };
 
         Assert.NotEqual(GitRepositoryCache.ComputeHistoryMarker(doc, false, null),
-            GitRepositoryCache.ComputeHistoryMarker(doc, true, statuses));
+            GitRepositoryCache.ComputeHistoryMarker(doc, true, statuses), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -123,14 +123,14 @@ public class GitRepositoryCacheTests
     {
         var withOldRevision = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
         var withoutOldRevision = TestDoc("rev-2", ("rev-2", T1));
-        var statuses = new Dictionary<string, SecurityStatus>
+        var statuses = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
         {
             ["rev-1"] = SecurityStatus.Verified,
             ["rev-2"] = SecurityStatus.Verified
         };
 
         Assert.NotEqual(GitRepositoryCache.ComputeHistoryMarker(withoutOldRevision, true, statuses),
-            GitRepositoryCache.ComputeHistoryMarker(withOldRevision, true, statuses));
+            GitRepositoryCache.ComputeHistoryMarker(withOldRevision, true, statuses), StringComparer.Ordinal);
     }
 
     private static PackageDocument TestDoc(string headRevisionId, params (string Id, DateTimeOffset At)[] revisions)

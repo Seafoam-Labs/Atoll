@@ -16,7 +16,7 @@ internal sealed class MongoApiTestFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Testing");
 
         builder.UseConfiguration(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["Atoll:Mongo:ConnectionString"] = MongoFixture.ConnectionString,
                 ["Atoll:Mongo:Database"] = Database,

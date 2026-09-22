@@ -76,10 +76,12 @@ internal static class ShellEvalClassifier
         var operand = match.Groups[3].Value;
         var argument = TruncateAtCommandEnd(normalized[match.Groups[3].Index..]);
 
-        if (operand is "echo" or "printf")
+        if (operand.Equals("echo", StringComparison.Ordinal) ||
+            operand.Equals("printf", StringComparison.Ordinal))
             return ExtractSubstitutionCommands(argument).All(IsReviewableCommand);
 
-        if (operand is "$(" or "`")
+        if (operand.Equals("$(", StringComparison.Ordinal) ||
+            operand.Equals("`", StringComparison.Ordinal))
         {
             var commands = ExtractSubstitutionCommands(argument);
             return commands.Count > 0 && IsReviewableCommand(commands[0]);

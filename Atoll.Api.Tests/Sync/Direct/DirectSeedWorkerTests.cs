@@ -34,7 +34,7 @@ public class DirectSeedWorkerTests
             => throw new NotSupportedException();
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
-            => Task.FromResult(seededNames.Contains(packageName) || SeedCalls.Contains(packageName));
+            => Task.FromResult(seededNames.Contains(packageName, StringComparer.Ordinal) || SeedCalls.Contains(packageName));
 
         public Task<PackageFiles> GetAsync(string packageName, string? commitSha = null)
             => throw new NotSupportedException();
@@ -71,7 +71,7 @@ public class DirectSeedWorkerTests
             if (FailFor.Contains(packageBase))
                 throw new InvalidOperationException("boom");
 
-            return new Dictionary<string, string> { ["PKGBUILD"] = "pkgname=x\n" };
+            return new Dictionary<string, string>(StringComparer.Ordinal) { ["PKGBUILD"] = "pkgname=x\n" };
         }
     }
 
@@ -92,7 +92,7 @@ public class DirectSeedWorkerTests
             => throw new NotSupportedException();
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
-            => Task.FromResult(existing.Contains(packageName));
+            => Task.FromResult(existing.Contains(packageName, StringComparer.Ordinal));
 
         public Task<PackageDocument?> GetHeadAsync(string packageName, CancellationToken ct = default)
             => throw new NotSupportedException();
@@ -246,7 +246,7 @@ public class DirectSeedWorkerTests
         {
             Assert.Equal(DirectSeedCycleOutcome.Completed, result.Outcome);
             Assert.Equal(1, result.Seeded);
-            Assert.Equal(new[] { "fine" }, service.SeedCalls);
+            Assert.Equal(new[] { "fine" }, service.SeedCalls, StringComparer.Ordinal);
             Assert.Equal(1, snapshot.Seeded);
             Assert.Equal(1, snapshot.Failed);
             Assert.Equal(1, snapshot.CyclesCompleted);

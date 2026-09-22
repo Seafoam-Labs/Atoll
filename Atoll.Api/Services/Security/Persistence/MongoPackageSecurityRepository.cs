@@ -56,7 +56,7 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
 
     public async Task<IReadOnlyCollection<string>> ListPackageNamesAsync(CancellationToken ct = default)
     {
-        var cursor = await _scans.DistinctAsync(x => x.PackageName, Builders<PackageSecurityScanDocument>.Filter.Empty, null, ct);
+        using var cursor = await _scans.DistinctAsync(x => x.PackageName, Builders<PackageSecurityScanDocument>.Filter.Empty, null, ct);
         return await cursor.ToListAsync(ct);
     }
 
@@ -355,10 +355,11 @@ public sealed class MongoPackageSecurityRepository : IPackageSecurityRepository
         // on the live index list rather than suppressing IndexNotFound because DocumentDB reports
         // a missing index as a generic command error without MongoDB's codeName, which would
         // crash startup on a fresh cluster. Listing still surfaces authorization failures.
-        var existing = _scans.Indexes.List()
+        using var indexCursor = _scans.Indexes.List();
+        var existing = indexCursor
             .ToList()
             .Select(ix => ix["name"].AsString)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var superseded in new[]
                  {
                      // Pre-policy-aware claim index.
