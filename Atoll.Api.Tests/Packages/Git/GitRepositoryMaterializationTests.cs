@@ -1,3 +1,4 @@
+using System.Globalization;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
@@ -392,7 +393,7 @@ public class GitRepositoryMaterializationTests : IAsyncLifetime
             CancellationToken.None)).Trim();
         var pkgbuild = await GitClient.ExecuteAsync(cloneDir, ["show", "HEAD:PKGBUILD"], null, null,
             CancellationToken.None);
-        return (int.Parse(count), pkgbuild);
+        return (int.Parse(count, CultureInfo.InvariantCulture), pkgbuild);
     }
 
     private static void TryCleanup(string? path)

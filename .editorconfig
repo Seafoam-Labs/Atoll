@@ -1,0 +1,34 @@
+root = true
+
+[*.cs]
+# Starter posture: nothing new fails the build. Every analyzer diagnostic defaults to
+# suggestion (surfaced in the IDE), and rules Atoll wants enforced are promoted to warning
+# below. Promote a rule by name once its findings are resolved; set it to none to opt out.
+dotnet_analyzer_diagnostic.severity = suggestion
+
+# ConfigureAwait is not needed: ASP.NET Core has no synchronization context.
+dotnet_diagnostic.CA2007.severity = none
+
+# --- Promoted to warning: verified to emit zero findings on the current tree.
+# These lock in existing discipline rather than asking for new work.
+
+# Comparison/globalization (names and keys use StringComparer.Ordinal by design;
+# culture-sensitive ToString/Parse/Format pass CultureInfo.InvariantCulture).
+dotnet_diagnostic.CA1305.severity = warning
+dotnet_diagnostic.CA1310.severity = warning
+dotnet_diagnostic.CA1311.severity = warning
+dotnet_diagnostic.CA1862.severity = warning
+
+# Async/cancellation, including the fire-and-forget check VSTHRD110.
+dotnet_diagnostic.CA2016.severity = warning
+dotnet_diagnostic.VSTHRD110.severity = warning
+
+# Collections/LINQ hygiene and logging message templates.
+dotnet_diagnostic.CA1841.severity = warning
+dotnet_diagnostic.CA1860.severity = warning
+dotnet_diagnostic.CA2254.severity = warning
+
+# --- Left at suggestion on purpose (counts measured on the current tree): active and useful,
+# but high-count and mostly test-only, so they would flood rather than guide. Promote per rule
+# after triage: CA1861 (~130, tests), CA2000 (~102, ~98 tests), CA1063 (~48, tests; API clean),
+# VSTHRD002 (~10, test fixtures that block synchronously).

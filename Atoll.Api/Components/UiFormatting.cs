@@ -1,3 +1,4 @@
+using System.Globalization;
 using Atoll.Api.Services.Security;
 
 namespace Atoll.Api.Components;
@@ -125,12 +126,12 @@ public static class UiFormatting
     {
         return unixSeconds <= 0
             ? "-"
-            : DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString(format);
+            : DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString(format, CultureInfo.InvariantCulture);
     }
 
     public static string FormatUtc(DateTimeOffset? timestamp)
     {
-        return timestamp?.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "Never";
+        return timestamp?.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "Never";
     }
 
     public static string SiteMetaDescription(string brand)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Atoll.Api.Services.Security.Scanning;
@@ -230,7 +231,7 @@ internal static class ShellContentScanner
                         rule = SecurityFindingRules.PrivilegeEscalationHelperScript;
                     else
                         rule = SecurityFindingRules.PrivilegeEscalation;
-                    yield return Finding(rule, rawLine, path, message: string.Format(rule.Description, tool));
+                    yield return Finding(rule, rawLine, path, message: string.Format(CultureInfo.InvariantCulture, rule.Description, tool));
                     continue;
                 }
 
@@ -245,7 +246,7 @@ internal static class ShellContentScanner
                 {
                     var scriptletRule = SecurityFindingRules.PrivilegeEscalationScriptlet;
                     yield return Finding(scriptletRule, rawLine, path,
-                        message: string.Format(scriptletRule.Description, tool) +
+                        message: string.Format(CultureInfo.InvariantCulture, scriptletRule.Description, tool) +
                                  " The tool name was also obfuscated, but scriptlets run as root under alpm's control either way.");
                     continue;
                 }
@@ -254,7 +255,7 @@ internal static class ShellContentScanner
                 {
                     var helperRule = SecurityFindingRules.PrivilegeEscalationHelperScript;
                     yield return Finding(helperRule, rawLine, path,
-                        message: string.Format(helperRule.Description, tool) +
+                        message: string.Format(CultureInfo.InvariantCulture, helperRule.Description, tool) +
                                  " The tool name was also obfuscated, but helper scripts only run when the user invokes them voluntarily either way.");
                     continue;
                 }
@@ -272,7 +273,7 @@ internal static class ShellContentScanner
             if (ShellArraySpans.IsVisibleToolMatch(line, tool, index, positions, sourceIndices))
             {
                 var rule = SecurityFindingRules.RiskyTool;
-                yield return Finding(rule, rawLine, path, message: string.Format(rule.Description, tool));
+                yield return Finding(rule, rawLine, path, message: string.Format(CultureInfo.InvariantCulture, rule.Description, tool));
                 continue;
             }
 

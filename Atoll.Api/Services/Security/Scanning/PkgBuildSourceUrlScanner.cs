@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Atoll.Api.Services.Security.Scanning;
@@ -23,7 +24,7 @@ internal static partial class PkgBuildSourceUrlScanner
                 yield return new SecurityFinding(
                     rule.Id,
                     rule.Severity,
-                    string.Format(rule.Description, url),
+                    string.Format(CultureInfo.InvariantCulture, rule.Description, url),
                     line,
                     path);
             }

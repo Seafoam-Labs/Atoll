@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
@@ -247,7 +248,7 @@ public class GitTransferServiceTests : IAsyncLifetime
     private static string EncodePacketLine(string line)
     {
         var bytes = Encoding.ASCII.GetBytes(line);
-        var length = (bytes.Length + 4).ToString("x4");
+        var length = (bytes.Length + 4).ToString("x4", CultureInfo.InvariantCulture);
         return length + line;
     }
 

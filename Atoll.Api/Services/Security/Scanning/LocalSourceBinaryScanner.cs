@@ -1,5 +1,6 @@
 namespace Atoll.Api.Services.Security.Scanning;
 
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 internal static class LocalSourceBinaryScanner
@@ -29,30 +30,30 @@ internal static class LocalSourceBinaryScanner
             // trust class as binaries inside a vendored archive, so it does not block.
             if (SharedLibraryName.IsMatch(path))
                 return CreateFinding(SecurityFindingRules.LocalBinarySharedLibrary, path,
-                    string.Format(SecurityFindingRules.LocalBinarySharedLibrary.Description, path));
+                    string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinarySharedLibrary.Description, path));
 
             return CreateFinding(SecurityFindingRules.LocalBinary, path,
-                string.Format(SecurityFindingRules.LocalBinary.Description, path, "an ELF executable"));
+                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinary.Description, path, "an ELF executable"));
         }
 
         if (isWindowsExecutable)
             return CreateFinding(SecurityFindingRules.LocalBinary, path,
-                string.Format(SecurityFindingRules.LocalBinary.Description, path, "a Windows executable"));
+                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinary.Description, path, "a Windows executable"));
 
         if (IsArchive(content))
             return CreateFinding(SecurityFindingRules.LocalBinaryArchive, path,
-                string.Format(SecurityFindingRules.LocalBinaryArchive.Description, path));
+                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryArchive.Description, path));
 
         if (IsInertMedia(content) || IsCertificateOrSignature(path))
             return CreateFinding(SecurityFindingRules.LocalBinaryInertMedia, path,
-                string.Format(SecurityFindingRules.LocalBinaryInertMedia.Description, path));
+                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryInertMedia.Description, path));
 
         if (!HasControlCharacters(content))
             return CreateFinding(SecurityFindingRules.LocalBinaryUnencodableText, path,
-                string.Format(SecurityFindingRules.LocalBinaryUnencodableText.Description, path));
+                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryUnencodableText.Description, path));
 
         return CreateFinding(SecurityFindingRules.LocalBinaryData, path,
-            string.Format(SecurityFindingRules.LocalBinaryData.Description, path));
+            string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryData.Description, path));
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using CliWrap;
 using CliWrap.Exceptions;
@@ -202,7 +203,7 @@ public sealed class GitTransferService(
     private static async Task WritePacketLineAsync(Stream output, string line, CancellationToken ct)
     {
         var bytes = Encoding.UTF8.GetBytes(line);
-        var length = (bytes.Length + 4).ToString("x4");
+        var length = (bytes.Length + 4).ToString("x4", CultureInfo.InvariantCulture);
         await output.WriteAsync(Encoding.UTF8.GetBytes(length).AsMemory(0, 4), ct);
         await output.WriteAsync(bytes.AsMemory(0, bytes.Length), ct);
     }

@@ -1,0 +1,21 @@
+<Project>
+
+    <!--
+        Shared analyzer composition for every project in the solution.
+        Rule severities are curated in .editorconfig, not here: this file only turns the
+        engines on and pins the third-party analyzer packages. Nothing is promoted to
+        error; the build stays green and findings surface for triage.
+    -->
+    <PropertyGroup>
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <AnalysisLevel>latest</AnalysisLevel>
+        <AnalysisMode>Default</AnalysisMode>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Meziantou.Analyzer" Version="3.0.270" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23" PrivateAssets="all" />
+        <PackageReference Include="IDisposableAnalyzers" Version="4.0.8" PrivateAssets="all" />
+    </ItemGroup>
+
+</Project>

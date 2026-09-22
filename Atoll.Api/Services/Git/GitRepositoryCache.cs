@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
@@ -283,7 +284,7 @@ public sealed class GitRepositoryCache(
 
         if (revision.CreatedAt != default)
         {
-            var unix = revision.CreatedAt.ToUnixTimeSeconds().ToString();
+            var unix = revision.CreatedAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
             env["GIT_AUTHOR_DATE"] = unix;
             env["GIT_COMMITTER_DATE"] = unix;
         }

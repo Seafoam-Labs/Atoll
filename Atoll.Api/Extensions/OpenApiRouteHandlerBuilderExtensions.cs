@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.OpenApi;
 
 namespace Atoll.Api.Extensions;
@@ -31,7 +32,7 @@ public static class OpenApiRouteHandlerBuilderExtensions
                 secondSchema = new OpenApiSchemaReference(secondSchemaId, context.Document);
             }
 
-            var response = operation.Responses![statusCode.ToString()];
+            var response = operation.Responses![statusCode.ToString(CultureInfo.InvariantCulture)];
             response.Content!["application/json"].Schema = new OpenApiSchema
             {
                 OneOf = [firstSchema, secondSchema]
