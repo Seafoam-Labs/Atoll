@@ -381,7 +381,7 @@ The cache persists Git objects and fetched `refs/atoll/*` refs across cycles and
 intentionally retained so subsequent cycles do not repeatedly bootstrap a repository, but it has no automatic pruning
 or size limit. A full sync has historically been estimated at roughly 3 GB; actual growth depends on the mirror and how
 many refs change. Monitor the configured cache path and reclaim space deliberately according to the deployment's
-retention policy.
+retention policy. This mirror is one entry in the overall cache inventory in [Caching](CACHING.md).
 
 Both workers use a single `IAurMirror` singleton, registered when either bulk seeding or refresh is active. When bulk
 mode is active, its `MirrorUrl`/`CachePath` configures the singleton and the `Atoll:Refresh` mirror settings are

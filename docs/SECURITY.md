@@ -307,7 +307,8 @@ materialized Git history.
 **Git materialization is scan-status aware:** the bare repository is materialized from `Verified` revisions only, so
 a `Flagged`/`Pending`/`Error` historical revision cannot be reached via `git clone` + `git checkout <sha>`. The
 `.atoll-head` marker embeds every retained revision id and its scan status; any status or history change (or
-toggling security) invalidates the marker and triggers a lazy rebuild on the next Git request.
+toggling security) invalidates the marker and triggers a lazy rebuild on the next Git request. The marker mechanics
+and the other derived caches are catalogued in [Caching](CACHING.md).
 
 ## Configuration
 

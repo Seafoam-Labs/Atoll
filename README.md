@@ -57,6 +57,7 @@ is available at `http://localhost:3000` with the default login `admin` / `admin`
 For important, up-to-date implementation and operations details, use the docs in `docs/`:
 
 - [Architecture overview](docs/ARCHITECTURE.md) — system design, storage model, API surface, and architecture decisions
+- [Caching overview](docs/CACHING.md): derived caches, invalidation rules, and staleness windows
 - [Development setup](docs/DEVELOPMENT.md) — local tooling: Tailwind CLI, Docker, Terraform, and test/build flags
 - [Package seeding and refresh](docs/SYNC.md) — direct/bulk seeding, refresh behavior, config, and operational notes
 - [Using yay and paru](docs/AUR_HELPERS.md) — helper configuration, RPC/Git compatibility, and limitations

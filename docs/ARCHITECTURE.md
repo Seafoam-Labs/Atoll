@@ -145,6 +145,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   `ByProvides` lookup tables. Rebuilt on startup from MongoDB and swapped atomically on metadata refresh.
 - **On-disk Git repos (cache):** Bare repositories under `data/repos/` (configurable via `Atoll:Git:RepositoriesPath`),
   lazily materialized from `package-revisions`. Re-materialized whenever the head revision or security status changes.
+- **Derived caches:** the in-memory index, the bare repos, the HybridCache entries, and the shared AUR mirror,
+  with their invalidation rules and staleness windows, are catalogued in [Caching](CACHING.md).
 - **Limits & containment:**
   - `MaxRevisions` (default 10) caps retained revision history per package.
   - `MaxFileBytes` (default 5 MB) is enforced on UTF-8 content bytes; each file stores its SHA-256 hash.
@@ -190,15 +192,10 @@ external UI clients:
   uniformly to every key); out-of-range or malformed values return `400`.
 - Ordering is `packageName` ascending for the default `sortBy=name&order=asc` (paged in MongoDB, so pages are
   deterministic). Every other combination ranks the seeded-package set through cached per-sort name views
-  (`PackageIndexRanker`): votes, popularity, and version only exist in the in-memory catalog, not Mongo, so the
-  sorted names are HybridCache entries (`atoll.rank.names` plus one `atoll.rank.sorted/{sort}/{order}` array per
-  key) under the `catalog` tag, and a page costs one name-filtered Mongo query. Seeded-set writers
-  (`SeedFilesAsync`, `DeleteAsync`) drop `catalog`; the snapshot's `head-status` tag is deliberately not on
-  these entries, so rescans and scan completions refresh the catalog without re-ranking warm pages. The TTL comes
-  from `Atoll:Caching:RankTtlSeconds` (default 30 s) and backstops repository writes that bypass
-  `IPackageService`, so a sorted page can lag a bypass write by up to one TTL. Index swaps and stores racing a tag
-  removal are not evicted by it, so pre-write rankings can ride out their remaining TTL (the cache ADR records
-  the worst-case bounds). Tie-breaking is on `packageName` ascending for deterministic pages. Packages absent from
+  (`PackageIndexRanker`): votes, popularity, and version only exist in the in-memory catalog, not Mongo, so a
+  page costs one name-filtered Mongo query instead of sorting the whole seeded set. Invalidation, TTLs, and the
+  staleness bounds of those entries are in [Caching](CACHING.md). Tie-breaking is on `packageName` ascending for
+  deterministic pages. Packages absent from
   the catalog rank as zero votes/popularity and sort first (ascending) or last (descending) on version; version
   strings compare ordinally, not semver-aware. A `page` beyond the last returns `200` with empty `items`; an
   empty corpus reports `totalItems: 0` and `totalPages: 0`.
@@ -268,8 +265,8 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | Subprocess execution for `git upload-pack` | Reuses complete and standard Git smart HTTP protocol implementation. | Requires `git` binary in container; small process-spawn overhead per Git fetch. | Active |
 | Atomic snapshot swap in `PackageIndexStore` | Lock-free, zero-contention reads; consistent view per query. | Full index rebuild on refresh; temporary 2× peak memory during rebuild. | Active |
 | Cached sorted views in `PackageCatalogService` | Fast UI pagination over 100k+ packages. Each `(generation, sort)` is pre-sorted once into an array reference. | First request per sort pays O(N log N). Substring queries still scan linearly (~10-25 ms). | Active |
-| Frozen seeded/head snapshot in `PackageCatalogService` | Row filters probe a `FrozenSet`/`FrozenDictionary` instead of immutable hash collections; the seeded-filter scenario drops ~2.3x at 85k packages and the rebuild is ~2.7x faster. | ~5.5 MB more transient garbage per rebuild, and rebuilds are no longer TTL-bounded: `head-status` drops fire per queued head rescan and per completed or errored head scan, so a scan sweep with sustained catalog reads rebuilds at the head-completion rate. Duplicate `isHead` documents during a head promotion force the last-wins indexed build, since the key-selector overload throws. | Active |
-| HybridCache for the TTL caches (`PackageIndexRanker`, catalog seeded snapshot, status dashboard) | Bounds the sorted REST feed (the seeded set is ranked once per sort into a cached name array, so a page costs O(limit) instead of sorting ~118k enriched rows) while collapsing three bespoke gate/epoch/TTL implementations into one library pattern: `GetOrCreateAsync` with keys from `AtollCacheKeys`, TTLs from `Atoll:Caching`, and two tags — `catalog` (dropped by seed/delete) and `head-status` (dropped by a queued head rescan and by a completed or errored head scan). | Per-instance invalidation and coalescing only (no backplane); a tag removal cannot cancel an in-flight store, so an index swap trails cached rankings by up to one TTL and a write racing a store can serve stale membership for up to two TTLs on ranked paths; `head-status` drops are unthrottled, so a scan sweep with sustained catalog reads rebuilds the snapshot at the head-completion rate; a names expiry under warm sort entries costs one extra Mongo LIST per window; each cold store pays one discardable size-check serialization while there is no L2. | Active |
+| Frozen seeded/head snapshot in `PackageCatalogService` | Row filters probe a `FrozenSet`/`FrozenDictionary` instead of immutable hash collections; the seeded-filter scenario drops ~2.3x at 85k packages and the rebuild is ~2.7x faster. | ~5.5 MB more transient garbage per rebuild; `head-status` invalidation is unthrottled, and a head promotion forces the last-wins indexed build. Window bounds in [Caching](CACHING.md). | Active |
+| HybridCache for the TTL caches (`PackageIndexRanker`, catalog seeded snapshot, status dashboard) | Bounds the sorted REST feed (the seeded set is ranked once per sort into a cached name array, so a page costs O(limit) instead of sorting ~118k enriched rows) while collapsing three bespoke gate/epoch/TTL implementations into one library pattern: `GetOrCreateAsync` with keys from `AtollCacheKeys`, TTLs from `Atoll:Caching`, and the `catalog` and `head-status` tags. | Per-instance invalidation and coalescing only (no backplane), with the known invalidation windows, the extra Mongo list per window, and the discardable size-check serialization documented in [Caching](CACHING.md). | Active |
 | Response compression (Brotli + Gzip) | Reduces dynamic SSR and API payload sizes ~5× without external infrastructure. | Minor CPU overhead (mitigated by `Fastest` level). Disabled over HTTPS by default to prevent BREACH attacks. | Active |
 | Open endpoints / Trusted network model | Keeps the API and Git clone surface simple and standard for self-hosted instances. | Anyone on the network can mutate data unless `Atoll:Mutations:Enabled=false` is set. | Active |
 | URL-segment REST versioning (`Asp.Versioning`) | The JSON REST surface evolves without breaking pinned clients: `/v1/…` reserves the contract, and a future breaking revision ships side-by-side as `/v2/…`. Query/header readers are disabled so the version is unambiguous and cache-friendly. | AUR RPC, Git Smart HTTP, `/health`, and `/metrics` stay version-neutral forever (client-built URLs); unsupported or unversioned paths `404`. Breaking move off the old unversioned `/search` and `/packages` paths. | Active |
@@ -326,6 +323,7 @@ store and feeds only the marker string, so that rebuild leaves the served SHAs u
 - Git Smart HTTP protocol: `https://git-scm.com/docs/http-protocol`
 - Local setup and quickstart: see [README](../README.md)
 - Development setup and local tooling: see [DEVELOPMENT.md](DEVELOPMENT.md)
+- Derived caches and staleness windows: see [CACHING.md](CACHING.md)
 - Package seeding and refresh: see [SYNC.md](SYNC.md)
 - Package security scanning: see [SECURITY.md](SECURITY.md)
 - Deployment guide: see [DEPLOYMENT.md](DEPLOYMENT.md)
