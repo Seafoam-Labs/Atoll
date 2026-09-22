@@ -13,9 +13,7 @@ public class HomographScannerTests
 
     private static SecurityFinding SingleFinding(string content)
     {
-        var findings = Scan(content);
-        Assert.Single(findings);
-        return findings[0];
+        return Assert.Single(Scan(content));
     }
 
     // ===== scope: fields and value extraction =====
@@ -52,8 +50,8 @@ public class HomographScannerTests
     [InlineData("source=(\"https://g\u0456thub.com/x.tar.gz\")")]
     public void All_phase2_fields_are_checked(string content)
     {
-        Assert.Single(Scan(content));
-        Assert.Equal("homograph", Scan(content)[0].RuleId);
+        var finding = Assert.Single(Scan(content));
+        Assert.Equal("homograph", finding.RuleId);
     }
 
     [Fact]
@@ -61,8 +59,8 @@ public class HomographScannerTests
     {
         var findings = Scan("package() {\n  depends=('pacman' 'ev\u0430il')\n}\n");
 
-        Assert.Single(findings);
-        Assert.Equal("PKGBUILD", findings[0].File);
+        var finding = Assert.Single(findings);
+        Assert.Equal("PKGBUILD", finding.File);
     }
 
     [Fact]
@@ -88,9 +86,9 @@ public class HomographScannerTests
         var single = Scan("url='https://g\u0456thub.com/x'");
         var unquoted = Scan("url=https://g\u0456thub.com/x");
 
-        Assert.Single(single);
-        Assert.Single(unquoted);
-        Assert.Equal(unquoted[0].Message, single[0].Message);
+        var singleFinding = Assert.Single(single);
+        var unquotedFinding = Assert.Single(unquoted);
+        Assert.Equal(unquotedFinding.Message, singleFinding.Message);
     }
 
     [Fact]
@@ -98,9 +96,9 @@ public class HomographScannerTests
     {
         var findings = Scan("depends=('ok' '\u0430bc' 'def\u0435')");
 
-        Assert.Single(findings);
-        Assert.Contains("[U+0430]bc", findings[0].Message);
-        Assert.Contains("def[U+0435]", findings[0].Message);
+        var finding = Assert.Single(findings);
+        Assert.Contains("[U+0430]bc", finding.Message);
+        Assert.Contains("def[U+0435]", finding.Message);
     }
 
     [Fact]
@@ -108,8 +106,8 @@ public class HomographScannerTests
     {
         var findings = Scan("source=('local file with \u0430 spaces.tar.gz')");
 
-        Assert.Single(findings);
-        Assert.Contains("local file with [U+0430] spaces.tar.gz", findings[0].Message);
+        var finding = Assert.Single(findings);
+        Assert.Contains("local file with [U+0430] spaces.tar.gz", finding.Message);
     }
 
     [Fact]

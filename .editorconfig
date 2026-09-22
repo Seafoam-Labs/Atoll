@@ -63,6 +63,40 @@ dotnet_diagnostic.MA0160.severity = error
 dotnet_diagnostic.MA0184.severity = error
 dotnet_diagnostic.MA0194.severity = error
 
+# Allocation-avoiding overloads the framework already offers: Contains for a containment
+# test, the char and Span forms instead of a Substring or single-char string, TryGetValue
+# instead of ContainsKey plus indexing, Convert.ToHexString over BitConverter.ToString,
+# ordinal comparison, and named placeholders in log templates.
+dotnet_diagnostic.CA1309.severity = error
+dotnet_diagnostic.CA1846.severity = error
+dotnet_diagnostic.CA1847.severity = error
+dotnet_diagnostic.CA1854.severity = error
+dotnet_diagnostic.CA1865.severity = error
+dotnet_diagnostic.CA1867.severity = error
+dotnet_diagnostic.CA1872.severity = error
+dotnet_diagnostic.CA2249.severity = error
+dotnet_diagnostic.CA2253.severity = error
+
+# Type and member shape: ignored return values, types declared outside namespaces, unused
+# private fields, never-instantiated internal types, settable collection properties, thrown
+# reserved exception types, and parameterless Get-methods that should be properties.
+dotnet_diagnostic.CA1024.severity = error
+dotnet_diagnostic.CA1050.severity = error
+dotnet_diagnostic.CA1806.severity = error
+dotnet_diagnostic.CA1812.severity = error
+dotnet_diagnostic.CA1823.severity = error
+dotnet_diagnostic.CA2201.severity = error
+dotnet_diagnostic.CA2227.severity = error
+
+# Regression guards for a service that scans untrusted AUR content: weak and broken crypto
+# must never appear, and a constant format string gets a pre-parsed CompositeFormat.
+# CA3075 is deliberately absent: its analyzer (Microsoft.NetFramework.Analyzers) skips any
+# compilation whose System.String does not come from mscorlib, so it can never report on a
+# net10.0 target, and an error entry would enforce nothing.
+dotnet_diagnostic.CA1863.severity = error
+dotnet_diagnostic.CA5350.severity = error
+dotnet_diagnostic.CA5351.severity = error
+
 # --- Left at suggestion on purpose: active and useful, but high-count, so they would flood
 # rather than guide. Count a rule's findings with a forced Rebuild; an incremental build
 # reports a false clean and every warning prints twice in the log.
@@ -96,3 +130,10 @@ dotnet_diagnostic.VSTHRD103.severity = suggestion
 
 # --- Test scope: conventions that are a deliberate choice only inside tests.
 [Atoll.Api.Tests/**.cs]
+# Assertion style: consume the value an assertion already returns (Assert.Single, the
+# IsType result) instead of re-deriving it, prefer the IsType/IsNotType naming with an
+# explicit exactMatch flag over IsAssignableFrom, and use equality assertions rather than
+# Assert.True(a == b).
+dotnet_diagnostic.xUnit2024.severity = error
+dotnet_diagnostic.xUnit2032.severity = error
+dotnet_diagnostic.xUnit2033.severity = error

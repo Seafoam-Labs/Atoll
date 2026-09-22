@@ -442,9 +442,9 @@ public class PackageRefreshWorkerTests
 
         Assert.Multiple(() =>
         {
-            Assert.Single(candidates);
+            var candidate = Assert.Single(candidates);
             // Head unchanged -> worker must advance watermark without fetching.
-            Assert.True(candidates[0].HeadUnchanged);
+            Assert.True(candidate.HeadUnchanged);
         });
     }
 

@@ -14,8 +14,7 @@ public class ShellContentScannerTests
     private static SecurityFinding SingleFinding(string content, string ruleId, string path = "PKGBUILD")
     {
         var matches = Scan(content, path).Where(f => f.RuleId == ruleId).ToList();
-        Assert.Single(matches);
-        return matches[0];
+        return Assert.Single(matches);
     }
 
     private static void AssertHasFinding(string content, string ruleId, FindingSeverity severity, string path = "PKGBUILD")
@@ -420,9 +419,9 @@ public class ShellContentScannerTests
 
         var findings = Scan(content);
         var sudo = findings.Where(f => f.RuleId == "privilege-escalation").ToList();
-        Assert.Single(sudo);
-        Assert.Equal(FindingSeverity.High, sudo[0].Severity);
-        Assert.Contains("sudo make install", sudo[0].Snippet);
+        var sudoFinding = Assert.Single(sudo);
+        Assert.Equal(FindingSeverity.High, sudoFinding.Severity);
+        Assert.Contains("sudo make install", sudoFinding.Snippet);
         Assert.DoesNotContain(findings, f => f.RuleId == "risky-tool" && f.Message.Contains("curl", StringComparison.Ordinal));
     }
 
@@ -698,8 +697,8 @@ public class ShellContentScannerTests
         var findings = Scan("echo hello\nsudo whoami\necho done");
 
         var sudoFindings = findings.Where(f => f.RuleId == "privilege-escalation").ToList();
-        Assert.Single(sudoFindings);
-        Assert.Equal("sudo whoami", sudoFindings[0].Snippet);
+        var sudoFinding = Assert.Single(sudoFindings);
+        Assert.Equal("sudo whoami", sudoFinding.Snippet);
     }
 
     [Fact]

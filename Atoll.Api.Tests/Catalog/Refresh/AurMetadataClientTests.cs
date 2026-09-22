@@ -20,7 +20,7 @@ public class AurMetadataClientTests
 
         var result = await client.FetchAsync(null, null, CancellationToken.None);
 
-        Assert.IsAssignableFrom<AurMetadataResult.NotModified>(result);
+        Assert.IsType<AurMetadataResult.NotModified>(result, exactMatch: false);
     }
 
     [Fact]
@@ -34,8 +34,7 @@ public class AurMetadataClientTests
 
         var result = await client.FetchAsync(null, null, CancellationToken.None);
 
-        Assert.IsAssignableFrom<AurMetadataResult.Snapshot>(result);
-        var snapshot = (AurMetadataResult.Snapshot)result;
+        var snapshot = Assert.IsType<AurMetadataResult.Snapshot>(result, exactMatch: false);
         Assert.Multiple(() =>
         {
             Assert.Equivalent(new[] { "demo" }, snapshot.Packages.Select(p => p.Name), strict: true);

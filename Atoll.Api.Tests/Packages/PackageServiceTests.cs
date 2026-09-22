@@ -91,10 +91,10 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.Single(history);
-            Assert.Equal(64, history[0].Sha.Length);
-            Assert.Equal("aur", history[0].Author);
-            Assert.Equal("seed from AUR", history[0].Message);
+            var revision = Assert.Single(history);
+            Assert.Equal(64, revision.Sha.Length);
+            Assert.Equal("aur", revision.Author);
+            Assert.Equal("seed from AUR", revision.Message);
         });
     }
 
@@ -202,8 +202,8 @@ public class PackageServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.Single(afterHistory);
-            Assert.Equal(originalHead, afterHistory[0].Sha);
+            var revision = Assert.Single(afterHistory);
+            Assert.Equal(originalHead, revision.Sha);
             Assert.True(packageExists);
         });
     }

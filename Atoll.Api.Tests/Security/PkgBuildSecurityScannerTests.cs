@@ -626,7 +626,7 @@ public class PkgBuildSecurityScannerTests
 
         var findings = result.Findings.Where(f => f.RuleId == "local-binary").ToList();
         Assert.Equal(3, findings.Count);
-        Assert.All(findings, f => Assert.True(f.Severity == FindingSeverity.Medium));
+        Assert.All(findings, f => Assert.Equal(FindingSeverity.Medium, f.Severity));
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
 

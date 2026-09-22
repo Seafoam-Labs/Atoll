@@ -17,8 +17,7 @@ public class PackageSearchServiceTests
         var byProvides = query.FindByProvides(["shelly"]);
         var byWords = query.FindByWords(["handheld", "portable"]);
 
-        Assert.Single(byProvides);
-        Assert.Equal("shelly-bin", byProvides[0].Name);
+        Assert.Equal("shelly-bin", Assert.Single(byProvides).Name);
 
         Assert.Equal(2, byWords.Length);
         Assert.Equal("portable-pro", byWords[0].Name);
@@ -34,7 +33,6 @@ public class PackageSearchServiceTests
 
         var result = query.FindByNames(["portable-kit", "not-real"]);
 
-        Assert.Single(result);
-        Assert.Equal("portable-kit", result[0].Name);
+        Assert.Equal("portable-kit", Assert.Single(result).Name);
     }
 }

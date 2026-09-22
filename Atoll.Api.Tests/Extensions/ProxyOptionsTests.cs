@@ -34,9 +34,9 @@ public class ProxyOptionsTests
             Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, forwarded.ForwardedHeaders);
             Assert.Equal("X-Forwarded-Proto", forwarded.ForwardedProtoHeaderName);
             Assert.Equal(1, forwarded.ForwardLimit);
-            Assert.Single(forwarded.KnownIPNetworks);
-            Assert.Equal(IPAddress.Parse("127.0.0.0"), forwarded.KnownIPNetworks[0].BaseAddress);
-            Assert.Equal(8, forwarded.KnownIPNetworks[0].PrefixLength);
+            var network = Assert.Single(forwarded.KnownIPNetworks);
+            Assert.Equal(IPAddress.Parse("127.0.0.0"), network.BaseAddress);
+            Assert.Equal(8, network.PrefixLength);
             Assert.Equal(new[] { IPAddress.IPv6Loopback }, forwarded.KnownProxies);
         });
     }

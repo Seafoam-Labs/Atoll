@@ -13,9 +13,7 @@ public class PkgBuildSourceUrlScannerTests
 
     private static SecurityFinding SingleFinding(string content, string path = "PKGBUILD")
     {
-        var findings = Scan(content, path);
-        Assert.Single(findings);
-        return findings[0];
+        return Assert.Single(Scan(content, path));
     }
 
     [Fact]
@@ -24,9 +22,9 @@ public class PkgBuildSourceUrlScannerTests
         var findings = PkgBuildSourceUrlScanner.Scan(
             "source=(https://payload.exe https://example.com/source.txt)", "PKGBUILD").ToList();
 
-        Assert.Single(findings);
-        Assert.Equal("suspicious-source-url", findings[0].RuleId);
-        Assert.Contains("https://payload.exe", findings[0].Snippet);
+        var finding = Assert.Single(findings);
+        Assert.Equal("suspicious-source-url", finding.RuleId);
+        Assert.Contains("https://payload.exe", finding.Snippet);
     }
 
     [Theory]
@@ -47,8 +45,8 @@ public class PkgBuildSourceUrlScannerTests
     {
         var findings = Scan($"source=({url})");
 
-        Assert.Single(findings);
-        Assert.Equal("suspicious-source-url", findings[0].RuleId);
+        var finding = Assert.Single(findings);
+        Assert.Equal("suspicious-source-url", finding.RuleId);
     }
 
     [Fact]

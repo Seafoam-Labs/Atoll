@@ -66,7 +66,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
         {
             using var output = new MemoryStream();
             var result = await git.AdvertiseRefsAsync("missing", output, CancellationToken.None);
-            Assert.IsAssignableFrom<GitTransferResult.NotFound>(result);
+            Assert.IsType<GitTransferResult.NotFound>(result, exactMatch: false);
             Assert.Equal(0, output.Length);
         }
         finally
@@ -84,7 +84,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
             using var input = new MemoryStream();
             using var output = new MemoryStream();
             var result = await git.UploadPackAsync("missing", input, output, CancellationToken.None);
-            Assert.IsAssignableFrom<GitTransferResult.NotFound>(result);
+            Assert.IsType<GitTransferResult.NotFound>(result, exactMatch: false);
         }
         finally
         {
@@ -104,7 +104,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
             using var output = new MemoryStream();
             var result = await git.AdvertiseRefsAsync("shelly", output, CancellationToken.None);
 
-            Assert.IsAssignableFrom<GitTransferResult.Ok>(result);
+            Assert.IsType<GitTransferResult.Ok>(result, exactMatch: false);
 
             output.Position = 0;
             using var reader = new StreamReader(output, leaveOpen: false);
@@ -173,7 +173,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
             using var output = new MemoryStream();
 
             var result = await git.UploadPackAsync("shelly", input, output, CancellationToken.None);
-            Assert.IsAssignableFrom<GitTransferResult.Ok>(result);
+            Assert.IsType<GitTransferResult.Ok>(result, exactMatch: false);
             Assert.True(output.Length > 0, "expected upload-pack response body");
         }
         finally
@@ -198,7 +198,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
 
             var result = await git.UploadPackAsync("shelly", input, output, CancellationToken.None);
 
-            Assert.IsAssignableFrom<GitTransferResult.Ok>(result);
+            Assert.IsType<GitTransferResult.Ok>(result, exactMatch: false);
             Assert.Equal(
                 EncodePacketLine($"ERR upload-pack: not our ref {bogus}"),
                 Encoding.ASCII.GetString(output.ToArray()));
@@ -223,7 +223,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
 
             var result = await git.UploadPackAsync("shelly", input, output, CancellationToken.None);
 
-            Assert.IsAssignableFrom<GitTransferResult.Ok>(result);
+            Assert.IsType<GitTransferResult.Ok>(result, exactMatch: false);
             Assert.Equal(0, output.Length);
         }
         finally

@@ -95,8 +95,7 @@ public class BulkSeedPlanTests
 
         Assert.Multiple(() =>
         {
-            Assert.Single(batch);
-            Assert.Equal(new[] { 1, 2 }, batch[0]);
+            Assert.Equal(new[] { 1, 2 }, Assert.Single(batch));
         });
     }
 

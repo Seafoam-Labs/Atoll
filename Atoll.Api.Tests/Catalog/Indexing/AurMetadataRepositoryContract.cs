@@ -109,8 +109,7 @@ public abstract class AurMetadataRepositoryContract
         await repo.SaveAsync([original], CancellationToken.None);
         var loaded = await repo.LoadAsync(CancellationToken.None);
 
-        Assert.Single(loaded);
-        var pkg = loaded[0];
+        var pkg = Assert.Single(loaded);
 
         Assert.Multiple(() =>
         {
