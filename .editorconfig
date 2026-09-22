@@ -49,7 +49,7 @@ dotnet_diagnostic.MA0194.severity = error
 # --- Left at suggestion on purpose: active and useful, but high-count, so they would flood
 # rather than guide. Count a rule's findings with a forced Rebuild; an incremental build
 # reports a false clean and every warning prints twice in the log.
-# CA1861, CA1816, VSTHRD002, IDISP001, MA0002.
+# IDISP001, MA0002.
 # The global default above only reaches rules that ship enabled by default: CA2000, CA1063,
 # CA1307, CA1031, CA1062 and CA1002 are invisible here and need their own dotnet_diagnostic
 # entry to run at all.
@@ -59,6 +59,23 @@ dotnet_diagnostic.MA0194.severity = error
 # --- Production scope: promote a rule as soon as its Atoll.Api column is clean, even while
 # the test project still carries findings for it.
 [Atoll.Api/**.cs]
+# Step 2: zero findings in production, test fixtures only, so a violation breaks the app
+# build while the test project keeps its own column.
+dotnet_diagnostic.CA1816.severity = error
+dotnet_diagnostic.CA1822.severity = error
+dotnet_diagnostic.CA1826.severity = error
+dotnet_diagnostic.CA1829.severity = error
+dotnet_diagnostic.CA1861.severity = error
+dotnet_diagnostic.IDISP007.severity = error
+dotnet_diagnostic.IDISP014.severity = error
+dotnet_diagnostic.IDISP025.severity = error
+dotnet_diagnostic.IDISP026.severity = error
+dotnet_diagnostic.MA0042.severity = error
+dotnet_diagnostic.MA0074.severity = error
+dotnet_diagnostic.MA0136.severity = error
+dotnet_diagnostic.MA0159.severity = error
+dotnet_diagnostic.MA0184.severity = error
+dotnet_diagnostic.VSTHRD002.severity = error
 
 # --- Per-file exemption: the last matching section wins, so this must stay below the `[*.cs]`
 # promotion. The parameterless Aggregate() only builds a pipeline and cannot block; the
