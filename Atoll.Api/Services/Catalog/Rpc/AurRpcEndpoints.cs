@@ -82,9 +82,9 @@ public static class AurRpcEndpoints
         return Suggest(rpc, arg, true);
     }
 
-    private static Ok<AurRpcResponse> Info(AurRpcService rpc, IReadOnlyList<string> arguments)
+    private static Ok<AurRpcResponse> Info(AurRpcService rpc, string[] arguments)
     {
-        return arguments.Count == 0
+        return arguments.Length == 0
             ? JsonError("No request type/data specified.")
             : TypedResults.Ok(AurRpcResponse.Success("multiinfo", rpc.Info(arguments)));
     }

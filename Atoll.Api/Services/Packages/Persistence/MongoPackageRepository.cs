@@ -205,7 +205,7 @@ public sealed class MongoPackageRepository : IPackageRepository
         IReadOnlyCollection<string> packageNames,
         string? upstreamHead,
         bool succeeded,
-        string? error,
+        string? errorMessage,
         CancellationToken ct = default)
     {
         if (packageNames.Count == 0) return Task.CompletedTask;
@@ -216,9 +216,9 @@ public sealed class MongoPackageRepository : IPackageRepository
         if (succeeded)
             truncatedError = null;
         else
-            truncatedError = string.IsNullOrEmpty(error)
+            truncatedError = string.IsNullOrEmpty(errorMessage)
                 ? null
-                : error[..Math.Min(error.Length, maxErrorLength)];
+                : errorMessage[..Math.Min(errorMessage.Length, maxErrorLength)];
 
         var update = succeeded
             ? Builders<PackageDocument>.Update

@@ -126,7 +126,7 @@ public class DirectSeedWorkerTests
             IReadOnlyCollection<string> packageNames,
             string? upstreamHead,
             bool succeeded,
-            string? error,
+            string? errorMessage,
             CancellationToken ct = default)
             => throw new NotSupportedException();
 

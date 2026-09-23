@@ -29,7 +29,7 @@ public interface IPackageRepository
 
     Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default);
 
-    Task UpdateSyncStateAsync(IReadOnlyCollection<string> packageNames, string? upstreamHead, bool succeeded, string? error,
+    Task UpdateSyncStateAsync(IReadOnlyCollection<string> packageNames, string? upstreamHead, bool succeeded, string? errorMessage,
         CancellationToken ct = default);
 
     Task DeleteAsync(string packageName, CancellationToken ct = default);

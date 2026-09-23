@@ -556,10 +556,10 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
         }
 
         public Task UpdateSyncStateAsync(
-            IReadOnlyCollection<string> packageNames, string? upstreamHead, bool succeeded, string? error,
+            IReadOnlyCollection<string> packageNames, string? upstreamHead, bool succeeded, string? errorMessage,
             CancellationToken ct = default)
         {
-            return inner.UpdateSyncStateAsync(packageNames, upstreamHead, succeeded, error, ct);
+            return inner.UpdateSyncStateAsync(packageNames, upstreamHead, succeeded, errorMessage, ct);
         }
 
         public Task DeleteAsync(string packageName, CancellationToken ct = default)

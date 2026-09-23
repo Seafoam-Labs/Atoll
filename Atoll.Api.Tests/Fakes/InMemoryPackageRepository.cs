@@ -225,7 +225,7 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
         IReadOnlyCollection<string> packageNames,
         string? upstreamHead,
         bool succeeded,
-        string? error,
+        string? errorMessage,
         CancellationToken ct = default)
     {
         lock (_gate)
@@ -246,7 +246,7 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                     LastSyncAttemptAt = now,
                     LastSyncSucceededAt = succeeded ? now : existing.LastSyncSucceededAt,
                     LastSyncedUpstreamHead = succeeded ? upstreamHead : existing.LastSyncedUpstreamHead,
-                    LastSyncError = succeeded ? null : error
+                    LastSyncError = succeeded ? null : errorMessage
                 };
             }
 

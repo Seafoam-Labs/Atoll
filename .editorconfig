@@ -13,8 +13,15 @@ root = true
 # name once its findings are resolved; set it to none to opt out.
 dotnet_analyzer_diagnostic.severity = suggestion
 
-# ConfigureAwait is not needed: ASP.NET Core has no synchronization context.
+# ConfigureAwait family: request and worker code has no synchronization context to suppress,
+# but the demand is wrong in the other direction too - Blazor Interactive Server components
+# run on the renderer's synchronization context and depend on the default capture, so a
+# .ConfigureAwait(false) in a component would be a live bug. MA0004's DetectContext (its
+# permissive default) still reports hundreds of sites on Sdk.Web and VSTHRD111 has no scope
+# knob, so both are opted out beside CA2007.
 dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.MA0004.severity = none
+dotnet_diagnostic.VSTHRD111.severity = none
 
 # Opt-outs, each a stated decision rather than debt. CA1031: catching every exception and
 # logging it is the intended posture of the background workers (seed/refresh/scan loops must
@@ -23,9 +30,29 @@ dotnet_diagnostic.CA2007.severity = none
 # framework-supplied argument (WebApplication, EndpointFilterInvocationContext) where null
 # cannot arrive. CA1002's three sites are BSON document properties whose List<T> shape the
 # MongoDB serializer and init-only construction need; they are persistence types, not API.
+# MA0003 (parameter names on literal arguments) and MA0007 (trailing commas) contradict the
+# hand-trimmed positional call style, and their fixers would churn every multiline construct.
+# MA0048: the multi-type files are intentional (AtollOptions.cs holds the whole options model,
+# PackageDocuments.cs the persistence documents) and its Prefix modes cannot express a plural
+# file name. MA0038/MA0041 demand static of members that read a captured primary-constructor
+# parameter or an extension-block receiver, where writing static does not compile (CS9105);
+# CA1822, the authoritative engine, is promoted above. MA0008 wants an explicit StructLayout
+# on value types with only primitive fields; nothing here crosses a native boundary (the app
+# shells out to git), so the attribute is noise on every numeric pair-struct. AV0025 asks for
+# an assembly <Description> to describe the served OpenAPI document, but GetOpenApiInfo() in
+# Microsoft.AspNetCore.OpenApi 10.0.12 reads only the application name and never
+# AssemblyDescription, so the diagnostic's cure is provably inert here; re-triage if the
+# framework ever consumes the attribute.
 dotnet_diagnostic.CA1002.severity = none
 dotnet_diagnostic.CA1031.severity = none
 dotnet_diagnostic.CA1062.severity = none
+dotnet_diagnostic.AV0025.severity = none
+dotnet_diagnostic.MA0003.severity = none
+dotnet_diagnostic.MA0007.severity = none
+dotnet_diagnostic.MA0008.severity = none
+dotnet_diagnostic.MA0038.severity = none
+dotnet_diagnostic.MA0041.severity = none
+dotnet_diagnostic.MA0048.severity = none
 
 # --- Promoted to error: a finding breaks the build, so these lock in existing discipline
 # rather than asking for new work. Each is verified clean in both projects by a forced Rebuild.
@@ -116,6 +143,10 @@ dotnet_diagnostic.CA1823.severity = error
 dotnet_diagnostic.CA2201.severity = error
 dotnet_diagnostic.CA2227.severity = error
 
+# Cross-language surface: a member named after a VB reserved word would block other-language
+# implementers of the repository interface.
+dotnet_diagnostic.CA1716.severity = error
+
 # Regression guards for a service that scans untrusted AUR content: weak and broken crypto
 # must never appear, and a constant format string gets a pre-parsed CompositeFormat.
 # CA3075 is deliberately absent: its analyzer (Microsoft.NetFramework.Analyzers) skips any
@@ -172,6 +203,12 @@ dotnet_diagnostic.VSTHRD002.severity = error
 # ToString(..., CultureInfo.InvariantCulture)) is production-clean; its 58 test findings are
 # assertion messages and fixture text with no culture-sensitive output contract.
 dotnet_diagnostic.MA0076.severity = error
+# CA1707 forbids underscores in member names; the test convention is underscore-delimited test
+# names and opts out below, production has none. CA1859 pins concrete types on private static
+# signatures whose only callers already hand them over; its three test findings are helper
+# parameters typed IPackageService that receive fakes, and stay at suggestion.
+dotnet_diagnostic.CA1707.severity = error
+dotnet_diagnostic.CA1859.severity = error
 
 # --- Per-file exemption: the last matching section wins, so this must stay below the `[*.cs]`
 # promotion. The parameterless Aggregate() only builds a pipeline and cannot block; the
@@ -208,3 +245,22 @@ dotnet_diagnostic.xUnit2033.severity = error
 # promotion does not apply here.
 dotnet_diagnostic.IDISP001.severity = none
 dotnet_diagnostic.IDISP004.severity = none
+# Test method names are underscore-delimited by convention.
+dotnet_diagnostic.CA1707.severity = none
+# The test columns of the production-scoped promotions above, whose premises do not hold in
+# tests: an assertion runs once and its expected array is the literal (CA1861); assertion
+# messages and fixture text carry no culture-sensitive output contract (MA0076); multi-line
+# raw strings are how the PKGBUILD and dump fixtures are written (MA0136); a static skip
+# predicate and a synchronous test constructor cannot await (VSTHRD002); the Mongo fixture
+# disposes the container it started itself (IDISP007).
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.IDISP007.severity = none
+dotnet_diagnostic.MA0076.severity = none
+dotnet_diagnostic.MA0136.severity = none
+dotnet_diagnostic.VSTHRD002.severity = none
+# The three sites await the Task of a TaskCompletionSource created inside the same test: the
+# TCS is the synchronization mechanism under test, so there is no compliant code shape.
+dotnet_diagnostic.VSTHRD003.severity = none
+# Ships disabled by default and nags nowhere today; recorded to hold the fixture-lifetime
+# posture (see IDISP001/IDISP004 above) if a future activation ever turns it on.
+dotnet_diagnostic.CA2000.severity = none

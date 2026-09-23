@@ -274,7 +274,7 @@ internal static class HomographScanner
     ///     scripts - CJK, Hangul, Arabic, ... - are ignored: they cannot spoof ASCII and
     ///     legitimate values (internationalized domain names, localized filenames) use them.
     /// </summary>
-    private static IReadOnlyList<Script>? CollectMixedScripts(string value)
+    private static List<Script>? CollectMixedScripts(string value)
     {
         var hasLatin = false;
         List<Script>? mixed = null;

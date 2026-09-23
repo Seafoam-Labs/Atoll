@@ -132,7 +132,7 @@ public class AurMirror : IAurMirror
         return files;
     }
 
-    private static IReadOnlyDictionary<string, string> ParseBranchHeads(string output)
+    private static Dictionary<string, string> ParseBranchHeads(string output)
     {
         var heads = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))

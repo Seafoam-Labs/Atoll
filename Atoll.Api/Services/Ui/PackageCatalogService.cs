@@ -239,7 +239,7 @@ public sealed class PackageCatalogService(
     private static readonly Comparison<AurPackageMetadata> ByName =
         (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
 
-    private static IComparer<AurPackageMetadata> PackageComparer(CatalogSort sort)
+    private static Comparer<AurPackageMetadata> PackageComparer(CatalogSort sort)
     {
         // Array.Sort is unstable; tie-break on name for deterministic paging.
         return sort switch
