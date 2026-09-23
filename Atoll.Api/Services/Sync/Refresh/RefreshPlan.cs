@@ -77,9 +77,6 @@ public static class RefreshPlan
             && !string.IsNullOrEmpty(metadata.PackageBase))
             return metadata.PackageBase;
 
-        if (!string.IsNullOrEmpty(state.UpstreamPackageBase))
-            return state.UpstreamPackageBase;
-
         return state.PackageName;
     }
 }

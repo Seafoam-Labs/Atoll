@@ -54,7 +54,8 @@ public sealed class PackageIndexEndpointsTests : IDisposable
 
             Assert.Equal("rev-1", items[0].GetProperty("headRevisionId").GetString());
             Assert.Equal(1, items[0].GetProperty("revisionCount").GetInt32());
-            Assert.Equal(JsonValueKind.Null, items[0].GetProperty("upstreamPackageBase").ValueKind);
+            // Dropped from the contract: nothing ever wrote it, so it was always null on the wire.
+            Assert.False(items[0].TryGetProperty("upstreamPackageBase", out _));
             Assert.True(items[0].TryGetProperty("createdAt", out var createdAt));
             Assert.True(createdAt.GetDateTimeOffset() > DateTimeOffset.MinValue);
             Assert.Equal(JsonValueKind.Null, items[0].GetProperty("description").ValueKind);
@@ -285,6 +286,16 @@ public sealed class PackageIndexEndpointsTests : IDisposable
             Assert.Equal(JsonValueKind.Null, apple.GetProperty("numVotes").ValueKind);
             Assert.Equal(JsonValueKind.Null, apple.GetProperty("popularity").ValueKind);
             Assert.Equal(JsonValueKind.Null, apple.GetProperty("outOfDate").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("url").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("maintainer").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("packageBase").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("firstSubmitted").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("lastModified").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("license").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("depends").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("makeDepends").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("optDepends").ValueKind);
+            Assert.Equal(JsonValueKind.Null, apple.GetProperty("provides").ValueKind);
         });
 
         var shelly = items[1];
@@ -297,6 +308,21 @@ public sealed class PackageIndexEndpointsTests : IDisposable
             Assert.Equal(10, shelly.GetProperty("numVotes").GetInt32());
             Assert.Equal(0, shelly.GetProperty("popularity").GetDouble());
             Assert.Equal(1735689600, shelly.GetProperty("outOfDate").GetInt64());
+            Assert.Equal("https://example.test/shelly", shelly.GetProperty("url").GetString());
+            Assert.Equal("alice", shelly.GetProperty("maintainer").GetString());
+            Assert.Equal("shelly", shelly.GetProperty("packageBase").GetString());
+            Assert.Equivalent(new[] { "MIT" },
+                shelly.GetProperty("license").EnumerateArray().Select(e => e.GetString()), strict: true);
+            Assert.Equivalent(new[] { "pacman>=6" },
+                shelly.GetProperty("depends").EnumerateArray().Select(e => e.GetString()), strict: true);
+            Assert.Equivalent(new[] { "shelly" },
+                shelly.GetProperty("provides").EnumerateArray().Select(e => e.GetString()), strict: true);
+            Assert.Equal(0, shelly.GetProperty("makeDepends").GetArrayLength());
+            Assert.Equal(0, shelly.GetProperty("optDepends").GetArrayLength());
+            // The sample dump carries no submission timestamps, so they reach the wire as the
+            // catalog's zero value, not as null; null is reserved for rows missing from the dump.
+            Assert.Equal(0, shelly.GetProperty("firstSubmitted").GetInt64());
+            Assert.Equal(0, shelly.GetProperty("lastModified").GetInt64());
         });
     }
 

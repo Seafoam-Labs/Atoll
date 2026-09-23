@@ -31,10 +31,6 @@ public sealed class PackageDocument
 
     [BsonElement("revisions")] public List<PackageRevisionDocument> Revisions { get; init; } = [];
 
-    [BsonElement("upstreamPackageBase")]
-    [BsonIgnoreIfNull]
-    public string? UpstreamPackageBase { get; init; }
-
     [BsonElement("lastSyncedUpstreamHead")]
     [BsonIgnoreIfNull]
     public string? LastSyncedUpstreamHead { get; init; }
@@ -93,31 +89,40 @@ public sealed class PackageRevisionContentDocument
     [BsonElement("files")] public Dictionary<string, PackageFile> Files { get; init; } = new(StringComparer.Ordinal);
 }
 
-/// <summary>Lean listing row for the package index endpoint; never carries the embedded revisions array.</summary>
+/// <summary>
+/// Listing row for the package index endpoint: the mirror-side columns projected in MongoDB plus catalog fields
+/// joined from the in-memory index at read time. Never carries the embedded revisions array.
+/// </summary>
 public sealed record PackageIndexEntry(
     string Name,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string HeadRevisionId,
-    int RevisionCount,
-    string? UpstreamPackageBase)
+    int RevisionCount)
 {
     // Catalog presentation fields joined from the in-memory index at read time; null when the package
-    // is absent from the current dump (pruned upstream, or the index has not loaded yet).
+    // is absent from the current dump (pruned upstream, or the index has not loaded yet). An empty array
+    // means the dump carries none for that key, which is distinct from a null array.
     public string? Description { get; init; }
     public string? Version { get; init; }
     public long? NumVotes { get; init; }
     public double? Popularity { get; init; }
     public long? OutOfDate { get; init; }
+    public string? Url { get; init; }
+    public string? Maintainer { get; init; }
+    public string? PackageBase { get; init; }
+    public long? FirstSubmitted { get; init; }
+    public long? LastModified { get; init; }
+    public IReadOnlyList<string>? License { get; init; }
+    public IReadOnlyList<string>? Depends { get; init; }
+    public IReadOnlyList<string>? MakeDepends { get; init; }
+    public IReadOnlyList<string>? OptDepends { get; init; }
+    public IReadOnlyList<string>? Provides { get; init; }
 }
 
 public sealed class PackageSyncState
 {
     [BsonElement("packageName")] public string PackageName { get; init; } = string.Empty;
-
-    [BsonElement("upstreamPackageBase")]
-    [BsonIgnoreIfNull]
-    public string? UpstreamPackageBase { get; init; }
 
     [BsonElement("lastSyncedUpstreamHead")]
     [BsonIgnoreIfNull]

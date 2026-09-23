@@ -52,7 +52,7 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                     .OrderBy(d => d.PackageName, StringComparer.Ordinal)
                     .Select(d => new PackageIndexEntry(
                         d.PackageName, d.CreatedAt, d.UpdatedAt, d.HeadRevisionId,
-                        d.Revisions.Count, d.UpstreamPackageBase))
+                        d.Revisions.Count))
                     .Skip(skip)
                     .Take(take)
             ];
@@ -75,7 +75,7 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                         var d = _docs[name];
                         return new PackageIndexEntry(
                             d.PackageName, d.CreatedAt, d.UpdatedAt, d.HeadRevisionId,
-                            d.Revisions.Count, d.UpstreamPackageBase);
+                            d.Revisions.Count);
                     })
             ];
 
@@ -192,7 +192,6 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                 UpdatedAt = DateTimeOffset.UtcNow,
                 HeadRevisionId = revision.RevisionId,
                 Revisions = retained,
-                UpstreamPackageBase = existing.UpstreamPackageBase,
                 LastSyncedUpstreamHead = existing.LastSyncedUpstreamHead,
                 LastSyncAttemptAt = existing.LastSyncAttemptAt,
                 LastSyncSucceededAt = existing.LastSyncSucceededAt,
@@ -213,7 +212,6 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                     .Select(d => new PackageSyncState
                     {
                         PackageName = d.PackageName,
-                        UpstreamPackageBase = d.UpstreamPackageBase,
                         LastSyncedUpstreamHead = d.LastSyncedUpstreamHead,
                         LastSyncSucceededAt = d.LastSyncSucceededAt
                     })
@@ -245,7 +243,6 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
                     UpdatedAt = existing.UpdatedAt,
                     HeadRevisionId = existing.HeadRevisionId,
                     Revisions = existing.Revisions,
-                    UpstreamPackageBase = existing.UpstreamPackageBase,
                     LastSyncAttemptAt = now,
                     LastSyncSucceededAt = succeeded ? now : existing.LastSyncSucceededAt,
                     LastSyncedUpstreamHead = succeeded ? upstreamHead : existing.LastSyncedUpstreamHead,

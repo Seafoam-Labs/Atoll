@@ -245,9 +245,9 @@ New head revisions are marked `Pending` for security scanning and the previous h
 conservatively **blocking content and Git access until verified**. On-disk bare repos are lazily re-materialized on the
 next Git request when the updated `headRevisionId` is observed.
 
-Each `packages` document carries lightweight refresh watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`,
-`lastSyncAttemptAt`, `lastSyncSucceededAt`, `lastSyncError`); these are nullable and omitted when unset, so they do not
-change the public API response contracts.
+Each `packages` document carries lightweight refresh watermarks (`lastSyncedUpstreamHead`, `lastSyncAttemptAt`,
+`lastSyncSucceededAt`, `lastSyncError`); these are nullable and omitted when unset, so they do not change the
+public API response contracts.
 
 If a revision snapshot exceeds MongoDB's 16 MiB document limit (checked before insert), the append fails
 deterministically; the worker records the pkgbase in `seed-exclusions` (reason `mongo-document-too-large`) and skips

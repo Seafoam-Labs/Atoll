@@ -174,7 +174,6 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
             Assert.Equal(2, apple.RevisionCount);
             Assert.True(apple.CreatedAt > DateTimeOffset.MinValue);
             Assert.True(apple.UpdatedAt > DateTimeOffset.MinValue);
-            Assert.Null(apple.UpstreamPackageBase);
         });
     }
 
@@ -222,9 +221,9 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         {
             Assert.Equal(
                 fromMongo.OrderBy(p => p.Name, StringComparer.Ordinal)
-                    .Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount, p.UpstreamPackageBase)),
+                    .Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount)),
                 fromFake.OrderBy(p => p.Name, StringComparer.Ordinal)
-                    .Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount, p.UpstreamPackageBase)));
+                    .Select(p => (p.Name, p.HeadRevisionId, p.RevisionCount)));
             Assert.Equal(3, fromMongo.Count);
 
             var apple = fromMongo.Single(p => string.Equals(p.Name, "a-apple", StringComparison.Ordinal));
@@ -232,7 +231,6 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
             Assert.Equal(2, apple.RevisionCount);
             Assert.True(apple.CreatedAt > DateTimeOffset.MinValue);
             Assert.True(apple.UpdatedAt > DateTimeOffset.MinValue);
-            Assert.Null(apple.UpstreamPackageBase);
 
             Assert.Empty(empty);
         });

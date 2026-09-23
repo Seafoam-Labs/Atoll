@@ -105,10 +105,18 @@ public sealed class OpenApiEndpointsTests : IDisposable
             Assert.True(schemas.TryGetProperty("PackageVersion", out _));
             Assert.True(schemas.TryGetProperty("PackageIndexResponse", out _));
             Assert.True(schemas.TryGetProperty("PackageIndexEntry", out var indexEntrySchema));
+            var indexEntryProperties = indexEntrySchema.GetProperty("properties").EnumerateObject()
+                .Select(property => property.Name).ToHashSet(StringComparer.Ordinal);
+            // upstreamPackageBase was dropped once the wire contract had a populated packageBase.
+            Assert.DoesNotContain("upstreamPackageBase", indexEntryProperties);
             Assert.Superset(
-                new HashSet<string>(StringComparer.Ordinal) { "name", "description", "version", "numVotes", "popularity", "outOfDate" },
-                new HashSet<string>(
-                    indexEntrySchema.GetProperty("properties").EnumerateObject().Select(property => property.Name), StringComparer.Ordinal));
+                new HashSet<string>(StringComparer.Ordinal)
+                {
+                    "name", "description", "version", "numVotes", "popularity", "outOfDate", "url", "maintainer",
+                    "packageBase", "firstSubmitted", "lastModified", "license", "depends", "makeDepends",
+                    "optDepends", "provides"
+                },
+                indexEntryProperties);
             Assert.True(schemas.TryGetProperty("PackageSecurityHistoryResponse", out _));
             Assert.True(schemas.TryGetProperty("PackageSecurityRevisionResponse", out _));
         });

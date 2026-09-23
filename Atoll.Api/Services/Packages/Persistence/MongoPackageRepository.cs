@@ -47,7 +47,7 @@ public sealed class MongoPackageRepository : IPackageRepository
             .Limit(take)
             .Project(p => new PackageIndexEntry(
                 p.PackageName, p.CreatedAt, p.UpdatedAt, p.HeadRevisionId,
-                p.Revisions.Count, p.UpstreamPackageBase))
+                p.Revisions.Count))
             .ToListAsync(ct);
     }
 
@@ -62,7 +62,7 @@ public sealed class MongoPackageRepository : IPackageRepository
             .Find(Builders<PackageDocument>.Filter.In(p => p.PackageName, names))
             .Project(p => new PackageIndexEntry(
                 p.PackageName, p.CreatedAt, p.UpdatedAt, p.HeadRevisionId,
-                p.Revisions.Count, p.UpstreamPackageBase))
+                p.Revisions.Count))
             .ToListAsync(ct);
     }
 
@@ -195,7 +195,6 @@ public sealed class MongoPackageRepository : IPackageRepository
             .Project(p => new PackageSyncState
             {
                 PackageName = p.PackageName,
-                UpstreamPackageBase = p.UpstreamPackageBase,
                 LastSyncedUpstreamHead = p.LastSyncedUpstreamHead,
                 LastSyncSucceededAt = p.LastSyncSucceededAt
             })

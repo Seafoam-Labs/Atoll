@@ -105,7 +105,17 @@ public sealed class PackageService(
                     Version = metadata.Version,
                     NumVotes = metadata.NumVotes,
                     Popularity = metadata.Popularity,
-                    OutOfDate = metadata.OutOfDate
+                    OutOfDate = metadata.OutOfDate,
+                    Url = metadata.Url,
+                    Maintainer = metadata.Maintainer,
+                    PackageBase = metadata.PackageBase,
+                    FirstSubmitted = metadata.FirstSubmitted,
+                    LastModified = metadata.LastModified,
+                    License = metadata.License,
+                    Depends = metadata.Depends,
+                    MakeDepends = metadata.MakeDepends,
+                    OptDepends = metadata.OptDepends,
+                    Provides = metadata.Provides
                 }
                 : item)
             .ToArray();

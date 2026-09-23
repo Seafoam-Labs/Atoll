@@ -414,6 +414,57 @@ public class PackageServiceTests
     }
 
     [Fact]
+    public async Task GetIndexPageAsync_joins_catalog_detail_fields_and_leaves_absent_packages_null()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
+            """
+            [
+              {
+                "Name": "j-shelly",
+                "PackageBase": "shelly",
+                "License": ["MIT"],
+                "Depends": ["pacman>=6"],
+                "Provides": ["shelly"],
+                "FirstSubmitted": 1700000000,
+                "LastModified": 1720000000
+              }
+            ]
+            """));
+
+        await service.SeedFilesAsync("j-shelly", SampleFiles);
+        await service.SeedFilesAsync("j-absent", SampleFiles);
+
+        var page = await service.GetIndexPageAsync(1, 10, ct: TestContext.Current.CancellationToken);
+        var joined = page.Items.Single(item => string.Equals(item.Name, "j-shelly", StringComparison.Ordinal));
+        var absent = page.Items.Single(item => string.Equals(item.Name, "j-absent", StringComparison.Ordinal));
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal("shelly", joined.PackageBase);
+            Assert.Equal(1700000000, joined.FirstSubmitted);
+            Assert.Equal(1720000000, joined.LastModified);
+            Assert.Equivalent(new[] { "MIT" }, joined.License, strict: true);
+            Assert.Equivalent(new[] { "pacman>=6" }, joined.Depends, strict: true);
+            Assert.Equivalent(new[] { "shelly" }, joined.Provides, strict: true);
+
+            // The dump omits these keys for a package it does carry, so the row reports a known
+            // absence as an empty array rather than the missing-from-dump null.
+            Assert.Equivalent(Array.Empty<string>(), joined.MakeDepends, strict: true);
+            Assert.Equivalent(Array.Empty<string>(), joined.OptDepends, strict: true);
+
+            Assert.Null(absent.PackageBase);
+            Assert.Null(absent.FirstSubmitted);
+            Assert.Null(absent.LastModified);
+            Assert.Null(absent.License);
+            Assert.Null(absent.Depends);
+            Assert.Null(absent.MakeDepends);
+            Assert.Null(absent.OptDepends);
+            Assert.Null(absent.Provides);
+        });
+    }
+
+    [Fact]
     public async Task GetIndexPageAsync_cached_rankings_match_direct_sorts_of_the_same_corpus()
     {
         // One cached corpus, three sort keys covering both key components: each page must equal a

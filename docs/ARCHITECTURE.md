@@ -128,8 +128,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 
 - **MongoDB (authoritative):**
   - `packages` — Root package documents. Stores metadata, embedded revision headers (ID, author, timestamp, message),
-    `headRevisionId` pointer, and refresh sync watermarks (`upstreamPackageBase`, `lastSyncedUpstreamHead`,
-    `lastSyncAttemptAt`, `lastSyncSucceededAt`, `lastSyncError`). Indexed on `packageName` at startup.
+    `headRevisionId` pointer, and refresh sync watermarks (`lastSyncedUpstreamHead`, `lastSyncAttemptAt`,
+    `lastSyncSucceededAt`, `lastSyncError`). Indexed on `packageName` at startup.
   - `package-revisions` — Normalized snapshot file content (one document per retained revision, keyed by
     `{packageName}:{revisionId}`). History length does not bloat root package documents; snapshots are capped by
     MongoDB's 16 MiB BSON limit.
@@ -199,13 +199,25 @@ external UI clients:
   the catalog rank as zero votes/popularity and sort first (ascending) or last (descending) on version; version
   strings compare ordinally, not semver-aware. A `page` beyond the last returns `200` with empty `items`; an
   empty corpus reports `totalItems: 0` and `totalPages: 0`.
-- Each row is a lean mirror-side projection (`name`, `createdAt`, `updatedAt`, `headRevisionId`, `revisionCount`,
-  nullable `upstreamPackageBase`); the embedded revisions array is never transferred. AUR catalog presentation
-  fields (`description`, `version`, `numVotes`, `popularity`, `outOfDate`) are joined per row from the live
-  in-memory index and are `null` when the package is absent from the current AUR dump (pruned upstream, or the
-  index has not loaded yet; `outOfDate` is also `null` when upstream reports the package as current). Detail-pane
-  catalog fields are hydrated by batching `GET /v1/search?by=name&query={page names}`
-  (keep batches ≤ 100 names so URLs stay short).
+- Each row projects the mirror-side columns (`name`, `createdAt`, `updatedAt`, `headRevisionId`, `revisionCount`);
+  the embedded revisions array is never transferred. Catalog fields (`description`, `version`, `numVotes`,
+  `popularity`, `outOfDate`, `url`, `maintainer`, `packageBase`, `firstSubmitted`, `lastModified`, `license`,
+  `depends`, `makeDepends`, `optDepends`, `provides`) join per row from the live in-memory index at read time, so a
+  browse row and its detail pane need one request, not two.
+- Nullability on those joined fields separates mirror state from catalog state: `null` means the package is
+  absent from the current AUR dump (pruned upstream, or the index has not loaded yet), while `[]` on an array
+  field means the dump carries the package with no entries for that key. `outOfDate` is also `null` when upstream
+  reports the package current, and `url`/`maintainer` also for a dump-present package (no `url=` set, or an
+  orphan package, which is ~12% of the corpus). `firstSubmitted`/`lastModified` are epoch seconds and read `0`
+  when the dump omits them, since the catalog holds them as non-nullable. `packageBase` is the AUR pkgbase: it
+  differs from `name` on ~7% of split packages and is the segment a Git clone URL needs. Cost on the measured
+  corpus (119,808 entries, 2026-09-23): the dependency arrays add 42 chars of content at p50 and 475 at p99 per
+  row, and the fifteen joined fields grow an average row by roughly 240 B, putting a `limit=200` page near 135 KB
+  uncompressed. Compression covers that in the standard deployment, where the proxy-to-Kestrel hop is plaintext
+  (see [Deployment](DEPLOYMENT.md)); a client talking to Kestrel over TLS directly gets no compression and pays
+  it in full. Remaining catalog fields (`conflicts`, `keywords`, `groups`, `replaces`, `checkDepends`,
+  `coMaintainers`, `submitter`, `urlPath`, `id`, `packageBaseId`) stay hydration-only through
+  `GET /v1/search?by=name&query={page names}` (keep batches ≤ 100 names so URLs stay short).
 - On the sorted paths `totalItems`/`totalPages` describe the cached name snapshot the page is sliced from, so a
   name deleted between the ranking build and the page fetch drops out and shortens the page instead of
   re-ranking. The default `name` ascending path keeps a live Mongo count, where concurrent seeding can skew
@@ -220,7 +232,7 @@ external UI clients:
 | GET | `/v1/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
 | GET/POST | `/rpc` | aurweb-compatible RPC v5 endpoint for yay/paru (version-neutral) |
 | GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint (version-neutral) |
-| GET | `/v1/packages?page=…&limit=…&sortBy=…&order=…` | Paged seeded-package listing for UI clients (default 50, max 200 per page; `sortBy` one of `name`\|`votes`\|`popularity`\|`version` with `order` `asc`\|`desc`, defaulting to `asc`; rows carry nullable catalog fields `description`/`version`/`numVotes`/`popularity`/`outOfDate` joined from the live index) |
+| GET | `/v1/packages?page=…&limit=…&sortBy=…&order=…` | Paged seeded-package listing for UI clients (default 50, max 200 per page; `sortBy` one of `name`\|`votes`\|`popularity`\|`version` with `order` `asc`\|`desc`, defaulting to `asc`; rows carry nullable catalog fields `description`/`version`/`numVotes`/`popularity`/`outOfDate`/`url`/`maintainer`/`packageBase`/`firstSubmitted`/`lastModified`/`license`/`depends`/`makeDepends`/`optDepends`/`provides` joined from the live index) |
 | POST | `/v1/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/v1/packages/{name}` | Get head revision files |
 | GET | `/v1/packages/{name}/versions` | Get revision history |

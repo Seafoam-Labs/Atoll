@@ -532,19 +532,16 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public void RefreshPlan_ResolvePackageBase_falls_back_to_stored_upstream_base()
+    public void RefreshPlan_ResolvePackageBase_falls_back_to_pkgname_when_index_has_no_entry()
     {
-        // Package not in the index but has a persisted upstream pkgbase.
+        // A seeded package that the current dump no longer describes still has to group somewhere;
+        // the pkgname is the only remaining key, and it is what upstream names map to by definition.
         var index = SearchIndexData.Empty;
-        var state = new PackageSyncState
-        {
-            PackageName = "orphan",
-            UpstreamPackageBase = "orphan-base"
-        };
+        var state = new PackageSyncState { PackageName = "orphan" };
 
         var grouped = RefreshPlan.GroupByPackageBase([state], index);
 
-        Assert.Equal("orphan-base", grouped.Keys.Single());
+        Assert.Equal("orphan", grouped.Keys.Single());
     }
 
     [Fact]

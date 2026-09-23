@@ -138,7 +138,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
             Assert.Equal("zulu", items[0].GetProperty("name").GetString());
             Assert.Equal("rev-1", items[0].GetProperty("headRevisionId").GetString());
             Assert.Equal(1, items[0].GetProperty("revisionCount").GetInt32());
-            Assert.Equal(JsonValueKind.Null, items[0].GetProperty("upstreamPackageBase").ValueKind);
+            Assert.False(items[0].TryGetProperty("upstreamPackageBase", out _));
         });
     }
 
