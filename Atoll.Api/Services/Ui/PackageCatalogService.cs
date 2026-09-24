@@ -61,7 +61,7 @@ public sealed record CatalogResult(
     int TotalPages);
 
 public sealed class PackageCatalogService(
-    PackageIndexStore indexStore,
+    PackageSearchEngine engine,
     IPackageService packageService,
     IPackageSecurityRepository securityRepository,
     HybridCache cache,
@@ -101,7 +101,7 @@ public sealed class PackageCatalogService(
     {
         if (page < 1) page = 1;
 
-        var index = indexStore.Current;
+        var index = engine.Capture();
         var sorted = GetSortedPackages(index, sort);
         var matches = BuildPredicate(mode, query);
         var snapshot = await GetSeededSnapshotAsync(ct);
@@ -125,7 +125,7 @@ public sealed class PackageCatalogService(
     {
         await GetSeededSnapshotAsync(ct);
 
-        var index = indexStore.Current;
+        var index = engine.Capture();
         foreach (var sort in DefaultSorts)
             _ = GetSortedPackages(index, sort);
     }
@@ -231,7 +231,7 @@ public sealed class PackageCatalogService(
                 Array.Sort(packages, PackageComparer(s));
                 return packages;
             },
-            index.ByNames.Values);
+            engine.All(index));
     }
 
     private static Func<AurPackageMetadata, bool>? BuildPredicate(CatalogSearchMode mode, string? query)

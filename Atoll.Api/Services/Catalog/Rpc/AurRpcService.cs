@@ -1,21 +1,20 @@
 using System.Text.Json.Serialization;
-using Atoll.Api.Services.Catalog.Indexing;
 
 namespace Atoll.Api.Services.Catalog.Rpc;
 
-public sealed class AurRpcService(PackageIndexStore store)
+public sealed class AurRpcService(PackageSearchEngine engine)
 {
     public const int MaxResults = 5000;
 
     public IReadOnlyList<AurPackageMetadata> Info(IEnumerable<string> names)
     {
-        var snapshot = store.Current;
+        var snapshot = engine.Capture();
         var results = new List<AurPackageMetadata>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var name in names)
         {
-            if (seen.Add(name) && snapshot.ByNames.TryGetValue(name, out var package))
+            if (seen.Add(name) && engine.FindByName(snapshot, name) is { } package)
                 results.Add(package);
         }
 
@@ -24,7 +23,7 @@ public sealed class AurRpcService(PackageIndexStore store)
 
     public IReadOnlyList<AurPackageMetadata> Search(string query, string by)
     {
-        IEnumerable<AurPackageMetadata> matches = store.Current.ByNames.Values;
+        IEnumerable<AurPackageMetadata> matches = engine.All(engine.Capture());
 
         matches = by switch
         {
@@ -57,7 +56,7 @@ public sealed class AurRpcService(PackageIndexStore store)
 
     public IReadOnlyList<string> Suggest(string prefix, bool packageBases)
     {
-        var values = store.Current.ByNames.Values
+        var values = engine.All(engine.Capture())
             .Where(package => (packageBases ? package.PackageBase : package.Name)
                 .StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .Select(package => packageBases ? package.PackageBase : package.Name)
@@ -71,8 +70,8 @@ public sealed class AurRpcService(PackageIndexStore store)
 
     public IReadOnlyList<string> ResolvePackageNames(string nameOrPackageBase)
     {
-        var snapshot = store.Current;
-        var names = snapshot.ByNames.Values
+        var snapshot = engine.Capture();
+        var names = engine.All(snapshot)
             .Where(package => string.Equals(package.PackageBase, nameOrPackageBase, StringComparison.Ordinal))
             .Select(package => package.Name)
             .Where(name => !string.Equals(name, nameOrPackageBase, StringComparison.Ordinal))

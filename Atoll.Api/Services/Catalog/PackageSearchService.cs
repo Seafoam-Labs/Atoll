@@ -1,8 +1,6 @@
-using Atoll.Api.Services.Catalog.Indexing;
-
 namespace Atoll.Api.Services.Catalog;
 
-public sealed class PackageSearchService(PackageIndexStore store)
+public sealed class PackageSearchService(PackageSearchEngine engine)
 {
     private long _requestCount;
 
@@ -10,72 +8,31 @@ public sealed class PackageSearchService(PackageIndexStore store)
 
     public AurPackageMetadata[] FindByNames(IReadOnlySet<string> names)
     {
-        var snapshot = store.Current;
+        var snapshot = engine.Capture();
         Interlocked.Increment(ref _requestCount);
 
-        return
-        [
-            .. names
-                .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-                .Where(package => package is not null)
-                .Cast<AurPackageMetadata>()
-        ];
+        return engine.Hydrate(snapshot, names);
     }
 
     public AurPackageMetadata[] FindByProvides(IReadOnlySet<string> names)
     {
-        var snapshot = store.Current;
+        var snapshot = engine.Capture();
         Interlocked.Increment(ref _requestCount);
 
-        var matchingNames = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var name in names)
-        {
-            if (!snapshot.ByProvides.TryGetValue(name, out var packageNames)) continue;
-
-            matchingNames.UnionWith(packageNames);
-        }
-
-        return
-        [
-            .. matchingNames
-                .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-                .Where(package => package is not null)
-                .Cast<AurPackageMetadata>()
-        ];
+        return engine.Hydrate(snapshot, engine.MatchProvides(snapshot, names));
     }
 
     public AurPackageMetadata[] FindByWords(IReadOnlySet<string> words)
     {
-        var snapshot = store.Current;
+        var snapshot = engine.Capture();
         Interlocked.Increment(ref _requestCount);
 
-        if (words.Count == 0) return [];
-
-        HashSet<string>? intersection = null;
-
-        foreach (var word in words)
-        {
-            if (!snapshot.ByWords.TryGetValue(word, out var packageNames)) return [];
-
-            if (intersection is null)
-            {
-                intersection = [.. packageNames];
-                continue;
-            }
-
-            intersection.IntersectWith(packageNames);
-            if (intersection.Count == 0) return [];
-        }
-
-        if (intersection is null) return [];
+        var matchingNames = engine.MatchWords(snapshot, words);
+        if (matchingNames is null) return [];
 
         return
         [
-            .. intersection
-                .Select(name => snapshot.ByNames.GetValueOrDefault(name))
-                .Where(package => package is not null)
-                .Cast<AurPackageMetadata>()
+            .. engine.Hydrate(snapshot, matchingNames)
                 .OrderByDescending(package => package.NumVotes)
                 .Take(50)
         ];

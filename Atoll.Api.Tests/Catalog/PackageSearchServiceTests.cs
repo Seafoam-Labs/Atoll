@@ -12,7 +12,7 @@ public class PackageSearchServiceTests
     {
         var store = new PackageIndexStore();
         store.Replace(TestData.LoadSampleIndexes());
-        var query = new PackageSearchService(store);
+        var query = new PackageSearchService(new PackageSearchEngine(store));
 
         var byProvides = query.FindByProvides(new HashSet<string>(["shelly"], StringComparer.Ordinal));
         var byWords = query.FindByWords(new HashSet<string>(["handheld", "portable"], StringComparer.Ordinal));
@@ -29,7 +29,7 @@ public class PackageSearchServiceTests
     {
         var store = new PackageIndexStore();
         store.Replace(TestData.LoadSampleIndexes());
-        var query = new PackageSearchService(store);
+        var query = new PackageSearchService(new PackageSearchEngine(store));
 
         var result = query.FindByNames(new HashSet<string>(["portable-kit", "not-real"], StringComparer.Ordinal));
 
@@ -133,7 +133,7 @@ public class PackageSearchServiceTests
     {
         var store = new PackageIndexStore();
         store.Replace(index ?? TestData.LoadSampleIndexes());
-        return new PackageSearchService(store);
+        return new PackageSearchService(new PackageSearchEngine(store));
     }
 
     private static HashSet<string> Query(params string[] values) => new(values, StringComparer.Ordinal);

@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Ui;
@@ -26,7 +27,7 @@ public class PackageIndexWorkerTests
         var store = new PackageIndexStore();
         store.Replace(TestData.LoadSampleIndexes());
         var catalog = new PackageCatalogService(
-            store, packages, new InMemoryPackageSecurityRepository(), TestHybridCache.New(),
+            new PackageSearchEngine(store), packages, new InMemoryPackageSecurityRepository(), TestHybridCache.New(),
             Options.Create(new AtollOptions()));
 
         var worker = new PackageIndexWorker(
@@ -52,7 +53,7 @@ public class PackageIndexWorkerTests
         var store = new PackageIndexStore();
         store.Replace(TestData.LoadSampleIndexes());
         var catalog = new PackageCatalogService(
-            store, packages, new InMemoryPackageSecurityRepository(), TestHybridCache.New(),
+            new PackageSearchEngine(store), packages, new InMemoryPackageSecurityRepository(), TestHybridCache.New(),
             Options.Create(new AtollOptions()));
 
         var worker = new PackageIndexWorker(
@@ -79,7 +80,7 @@ public class PackageIndexWorkerTests
         var store = new PackageIndexStore();
         store.Replace(TestData.LoadSampleIndexes());
         var catalog = new PackageCatalogService(
-            store, packages, new InMemoryPackageSecurityRepository(), TestHybridCache.New(),
+            new PackageSearchEngine(store), packages, new InMemoryPackageSecurityRepository(), TestHybridCache.New(),
             Options.Create(new AtollOptions()));
 
         // The worker never starts, so the cycles run one at a time: a swap, a 304, then a fetch that

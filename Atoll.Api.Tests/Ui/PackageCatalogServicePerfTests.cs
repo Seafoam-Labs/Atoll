@@ -79,7 +79,7 @@ public class PackageCatalogServicePerfTests
         store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         _service = new PackageCatalogService(
-            store,
+            new PackageSearchEngine(store),
             new SeededNamesPackageService(seeded),
             new InMemoryPackageSecurityRepository(),
             TestHybridCache.New(),

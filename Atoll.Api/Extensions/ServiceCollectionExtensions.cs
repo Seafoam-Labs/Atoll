@@ -173,6 +173,7 @@ internal static class ServiceCollectionExtensions
         public IServiceCollection AddCatalogServices()
         {
             services.AddSingleton<PackageIndexStore>();
+            services.AddSingleton<PackageSearchEngine>();
             services.AddSingleton<PackageSearchService>();
             services.AddSingleton<AurRpcService>();
             services.AddSingleton<IAurMetadataRepository, MongoAurMetadataRepository>();

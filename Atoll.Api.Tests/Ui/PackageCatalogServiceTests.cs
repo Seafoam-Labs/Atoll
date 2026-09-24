@@ -37,7 +37,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     private PackageCatalogService CreateService(int snapshotTtlSeconds = 30)
     {
         return new PackageCatalogService(
-            _store,
+            new PackageSearchEngine(_store),
             new SeededNamesPackageService(_seededNames),
             _securityRepository,
             TestHybridCache.New(),
@@ -183,7 +183,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
             new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance),
             cache,
             _store);
-        var catalog = new PackageCatalogService(_store, packageService, security, cache, options);
+        var catalog = new PackageCatalogService(new PackageSearchEngine(_store), packageService, security, cache, options);
 
         var ct = TestContext.Current.CancellationToken;
         Assert.Empty((await SearchSeededAsync(catalog, ct)).Rows);
@@ -235,7 +235,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
             new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance),
             cache,
             _store);
-        var catalog = new PackageCatalogService(_store, packageService, security, cache, options);
+        var catalog = new PackageCatalogService(new PackageSearchEngine(_store), packageService, security, cache, options);
         var status = new PackageSecurityStatusService(repo, security, scanner);
 
         var ct = TestContext.Current.CancellationToken;
@@ -273,7 +273,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     {
         var packages = new SeededNamesPackageService(["shelly-bin"]);
         var catalog = new PackageCatalogService(
-            _store, packages, _securityRepository, TestHybridCache.New(), Options.Create(new AtollOptions()));
+            new PackageSearchEngine(_store), packages, _securityRepository, TestHybridCache.New(), Options.Create(new AtollOptions()));
 
         var ct = TestContext.Current.CancellationToken;
         await catalog.PrewarmAsync(ct);
@@ -299,7 +299,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         // would keep it alive indefinitely.
         var packages = new SeededNamesPackageService(["shelly-bin"]);
         var catalog = new PackageCatalogService(
-            _store, packages, _securityRepository, TestHybridCache.New(),
+            new PackageSearchEngine(_store), packages, _securityRepository, TestHybridCache.New(),
             Options.Create(new AtollOptions
             {
                 Caching = new CachingOptions { SnapshotTtlSeconds = 1 }
