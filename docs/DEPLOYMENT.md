@@ -136,12 +136,17 @@ The current AWS deployment uses the VPC CIDR, a limit of `2`, and
 
 ## Transport security & response compression
 
-Atoll enables in-app response compression (Brotli/Gzip) for dynamic HTML and API responses. ASP.NET Core disables
-compression for HTTPS by default (`EnableForHttps = false`), which matches Atoll's standard deployment: TLS is
-terminated at the proxy/ALB and the proxy-to-Kestrel hop is plain HTTP, so compression applies without exposing
-CRIME/BREACH side channels. If TLS is ever terminated directly in Kestrel with `EnableForHttps = true`, pages
-containing per-user secrets or tokens need BREACH mitigations (randomized padding, antiforgery token masking);
-residual risk is low for the current public-metadata mirror.
+Atoll enables in-app response compression (Brotli/Gzip) for dynamic HTML and API responses, and sets
+`EnableForHttps = true`. TLS terminates at the proxy/ALB in the standard deployment, but the app trusts the
+forwarded-proto header (`Atoll:Proxy`; `CloudFront-Forwarded-Proto` in AWS), so it observes HTTPS on every
+request and compresses only because of that override, not because the proxy-to-Kestrel hop is plain HTTP.
+CloudFront's edge compression does not cover these responses either: the behavior leaves `compress` off, and
+the dynamic responses stream without a `Content-Length`, which CloudFront requires before it compresses.
+
+The BREACH exposure this accepts: the prerendered document carries per-client state (the
+`.AspNetCore.Antiforgery.*` cookie and the Blazor circuit token), but the content is public AUR metadata, so
+the residual risk is accepted for this mirror. If per-user secrets are ever rendered into compressed
+responses, add BREACH mitigations (randomized padding, antiforgery token masking) or drop the override.
 
 ## Decommissioning the old account
 

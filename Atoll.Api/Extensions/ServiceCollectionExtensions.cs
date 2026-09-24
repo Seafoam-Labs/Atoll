@@ -123,6 +123,10 @@ internal static class ServiceCollectionExtensions
 
                 options.Providers.Add<BrotliCompressionProvider>();
                 options.Providers.Add<GzipCompressionProvider>();
+
+                // Proxied requests arrive with a forwarded https scheme, where the framework
+                // default disables compression; the accepted BREACH posture is in DEPLOYMENT.md.
+                options.EnableForHttps = true;
             });
 
             services.Configure<BrotliCompressionProviderOptions>(options => { options.Level = CompressionLevel.Fastest; });

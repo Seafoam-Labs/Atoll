@@ -196,6 +196,22 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
+    public async Task RootPageCompressesResponseOverForwardedHttps()
+    {
+        // The deployed proxy terminates TLS and forwards the https scheme, so the app observes
+        // HTTPS on every request and the framework's EnableForHttps default would silently
+        // disable compression there.
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/");
+        request.Headers.AcceptEncoding.ParseAdd("br");
+        request.Headers.Add("X-Forwarded-Proto", "https");
+
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("br", response.Content.Headers.ContentEncoding, StringComparer.Ordinal);
+    }
+
+    [Fact]
     public async Task RootPageDecoratesRowsWithBadges()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);

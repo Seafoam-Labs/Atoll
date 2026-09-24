@@ -213,11 +213,11 @@ external UI clients:
   differs from `name` on ~7% of split packages and is the segment a Git clone URL needs. Cost on the measured
   corpus (119,808 entries, 2026-09-23): the dependency arrays add 42 chars of content at p50 and 475 at p99 per
   row, and the fifteen joined fields grow an average row by roughly 240 B, putting a `limit=200` page near 135 KB
-  uncompressed. Compression covers that in the standard deployment, where the proxy-to-Kestrel hop is plaintext
-  (see [Deployment](DEPLOYMENT.md)); a client talking to Kestrel over TLS directly gets no compression and pays
-  it in full. Remaining catalog fields (`conflicts`, `keywords`, `groups`, `replaces`, `checkDepends`,
-  `coMaintainers`, `submitter`, `urlPath`, `id`, `packageBaseId`) stay hydration-only through
-  `GET /v1/search?by=name&query={page names}` (keep batches ≤ 100 names so URLs stay short).
+  uncompressed. Response compression covers that in every deployment, since `EnableForHttps = true` lifts the
+  framework's HTTPS exclusion (see [Deployment](DEPLOYMENT.md)). Remaining catalog fields (`conflicts`,
+  `keywords`, `groups`, `replaces`, `checkDepends`, `coMaintainers`, `submitter`, `urlPath`, `id`,
+  `packageBaseId`) stay hydration-only through `GET /v1/search?by=name&query={page names}` (keep batches ≤ 100
+  names so URLs stay short).
 - On the sorted paths `totalItems`/`totalPages` describe the cached name snapshot the page is sliced from, so a
   name deleted between the ranking build and the page fetch drops out and shortens the page instead of
   re-ranking. The default `name` ascending path keeps a live Mongo count, where concurrent seeding can skew
@@ -279,7 +279,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | Cached sorted views in `PackageCatalogService` | Fast UI pagination over 100k+ packages. Each `(generation, sort)` is pre-sorted once into an array reference, and the worker's post-cycle warm rebuilds the default sorts off the request path. | First access per sort pays O(N log N) only when the warm did not cover it (a failed warm, a non-default sort). Substring queries still scan linearly (~10-25 ms). | Active |
 | Frozen seeded/head snapshot in `PackageCatalogService` | Row filters probe a `FrozenSet`/`FrozenDictionary` instead of immutable hash collections; the seeded-filter scenario drops ~2.3x at 85k packages and the rebuild is ~2.7x faster. | ~5.5 MB more transient garbage per rebuild; `head-status` invalidation is unthrottled, and a head promotion forces the last-wins indexed build. Window bounds in [Caching](CACHING.md). | Active |
 | HybridCache for the TTL caches (`PackageIndexRanker`, catalog seeded snapshot, status dashboard) | Bounds the sorted REST feed (the seeded set is ranked once per sort into a cached name array, so a page costs O(limit) instead of sorting ~118k enriched rows) while collapsing three bespoke gate/epoch/TTL implementations into one library pattern: `GetOrCreateAsync` with keys from `AtollCacheKeys`, TTLs from `Atoll:Caching`, and the `catalog` and `head-status` tags. | Per-instance invalidation and coalescing only (no backplane), with the known invalidation windows, the extra Mongo list per window, and the discardable size-check serialization documented in [Caching](CACHING.md). | Active |
-| Response compression (Brotli + Gzip) | Reduces dynamic SSR and API payload sizes ~5× without external infrastructure. | Minor CPU overhead (mitigated by `Fastest` level). Disabled over HTTPS by default to prevent BREACH attacks. | Active |
+| Response compression (Brotli + Gzip) | Reduces dynamic SSR and API payload sizes ~5× without external infrastructure; `EnableForHttps = true` keeps it active behind the TLS-terminating proxy, where the CloudFront edge cannot compress streaming dynamic responses. | Minor CPU overhead (mitigated by `Fastest` level). Accepts the BREACH exposure of compressing pages that carry the antiforgery cookie and Blazor circuit token; residual risk accepted for a public-metadata mirror (see [Deployment](DEPLOYMENT.md)). | Active |
 | Open endpoints / Trusted network model | Keeps the API and Git clone surface simple and standard for self-hosted instances. | Anyone on the network can mutate data unless `Atoll:Mutations:Enabled=false` is set. | Active |
 | URL-segment REST versioning (`Asp.Versioning`) | The JSON REST surface evolves without breaking pinned clients: `/v1/…` reserves the contract, and a future breaking revision ships side-by-side as `/v2/…`. Query/header readers are disabled so the version is unambiguous and cache-friendly. | AUR RPC, Git Smart HTTP, `/health`, and `/metrics` stay version-neutral forever (client-built URLs); unsupported or unversioned paths `404`. Breaking move off the old unversioned `/search` and `/packages` paths. | Active |
 
