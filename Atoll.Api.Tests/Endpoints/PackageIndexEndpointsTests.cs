@@ -199,6 +199,70 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Index_collapses_comma_joined_sort_values_onto_one_column()
+    {
+        foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin" })
+            await SeedAsync(name);
+
+        // votes|popularity is 3, which is Version, so the page sorts by a column nobody asked for.
+        var combined = await IndexNamesAsync("sortBy=votes,popularity&order=desc");
+        var repeated = await IndexNamesAsync("sortBy=votes&sortBy=popularity&order=desc");
+        var numeric = await IndexNamesAsync("sortBy=3&order=desc");
+        var version = await IndexNamesAsync("sortBy=version&order=desc");
+        var votes = await IndexNamesAsync("sortBy=votes&order=desc");
+        var popularity = await IndexNamesAsync("sortBy=popularity&order=desc");
+
+        Assert.Multiple(() =>
+        {
+            // Sample index: only shelly-bin carries a version, and every popularity is 0, so all
+            // three requested columns order these rows differently and the collapse is observable.
+            Assert.Equal(["shelly-bin", "portable-kit", "portable-pro"], version, StringComparer.Ordinal);
+            Assert.Equal(version, combined, StringComparer.Ordinal);
+            Assert.Equal(version, repeated, StringComparer.Ordinal);
+            Assert.Equal(version, numeric, StringComparer.Ordinal);
+            Assert.Equal(["portable-pro", "shelly-bin", "portable-kit"], votes, StringComparer.Ordinal);
+            Assert.Equal(["portable-kit", "portable-pro", "shelly-bin"], popularity, StringComparer.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Index_binds_padded_numeric_and_flag_combined_sort_values()
+    {
+        foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin" })
+            await SeedAsync(name);
+
+        // asc|desc is 1, so a repeated order silently means Desc; Enum.TryParse trims padding.
+        var combinedOrder = await IndexNamesAsync("sortBy=name&order=asc,desc");
+        var padded = await IndexNamesAsync("sortBy=%20name&order=DESC");
+        var numeric = await IndexNamesAsync("sortBy=0&order=1");
+        // Asc is 0, so an undefined order carries no Desc bit and reads as ascending.
+        var undefinedOrder = await IndexNamesAsync("sortBy=name&order=2");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(["shelly-bin", "portable-pro", "portable-kit"], combinedOrder, StringComparer.Ordinal);
+            Assert.Equal(combinedOrder, padded, StringComparer.Ordinal);
+            Assert.Equal(combinedOrder, numeric, StringComparer.Ordinal);
+            Assert.Equal(["portable-kit", "portable-pro", "shelly-bin"], undefinedOrder, StringComparer.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Index_rejects_an_undefined_numeric_sort_value()
+    {
+        await SeedAsync("portable-kit");
+
+        // 8 binds like any other number and only the ranker's switch rejects it, so the 400 is a
+        // ProblemDetails body rather than the HTML a binding failure produces.
+        var response = await _client.GetAsync("/v1/packages?sortBy=8", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("sortBy", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Index_beyond_last_page_returns_empty_items()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
@@ -324,6 +388,58 @@ public sealed class PackageIndexEndpointsTests : IDisposable
             Assert.Equal(0, shelly.GetProperty("firstSubmitted").GetInt64());
             Assert.Equal(0, shelly.GetProperty("lastModified").GetInt64());
         });
+    }
+
+    [Fact]
+    public async Task IndexPageNamesRoundTripThroughSearchByNameHydration()
+    {
+        await SeedAsync("portable-pro");
+        await SeedAsync("shelly-bin");
+        // Seeded but absent from the AUR metadata index, so hydration must drop it.
+        await SeedAsync("zzz-unindexed");
+
+        var pageNames = await IndexNamesAsync("limit=10");
+
+        Assert.Equal(["portable-pro", "shelly-bin", "zzz-unindexed"], pageNames, StringComparer.Ordinal);
+
+        var searchResponse = await _client.GetAsync(
+            $"/v1/search?by=name&query={Uri.EscapeDataString(string.Join(',', pageNames))}",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
+
+        var searchBody = await searchResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        using var searchDoc = JsonDocument.Parse(searchBody);
+        var hydrated = searchDoc.RootElement;
+
+        Assert.Equal(JsonValueKind.Array, hydrated.ValueKind);
+        Assert.Equal(["portable-pro", "shelly-bin"],
+            hydrated.EnumerateArray()
+                .Select(item => item.GetProperty("name").GetString() ?? string.Empty)
+                .Order(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+
+        var shelly = hydrated.EnumerateArray().Single(item =>
+            string.Equals(item.GetProperty("name").GetString(), "shelly-bin", StringComparison.Ordinal));
+        Assert.Multiple(() =>
+        {
+            Assert.Equal("1.2.3-1", shelly.GetProperty("version").GetString());
+            Assert.Equal(10, shelly.GetProperty("numVotes").GetInt32());
+            Assert.Equal("shelly", shelly.GetProperty("packageBase").GetString());
+        });
+    }
+
+    private async Task<string[]> IndexNamesAsync(string queryString)
+    {
+        var response = await _client.GetAsync($"/v1/packages?{queryString}", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        return
+        [
+            .. document.RootElement.GetProperty("items")
+                .EnumerateArray()
+                .Select(item => item.GetProperty("name").GetString() ?? string.Empty)
+        ];
     }
 
     private async Task SeedAsync(string name, string revisionId = "rev-1")

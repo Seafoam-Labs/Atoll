@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Atoll.Api.Services.Catalog.Rpc;
 using Atoll.Api.Tests.Support;
 using Xunit;
 
@@ -119,9 +120,103 @@ public sealed class AurRpcEndpointsTests : IDisposable
         });
     }
 
-    private async Task<JsonElement> JsonAsync(string path)
+    [Fact]
+    public async Task LegacyInfo_result_carries_the_exact_uppercase_wire_field_set()
     {
-        var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
+        var body = await JsonAsync("/rpc?v=5&type=info&arg=shelly-bin");
+
+        var fields = body.GetProperty("results")[0].EnumerateObject().Select(property => property.Name);
+
+        Assert.Equal(
+            [
+                "ID", "Name", "PackageBaseID", "PackageBase", "Version", "Description", "URL",
+                "NumVotes", "Popularity", "OutOfDate", "Maintainer", "FirstSubmitted", "LastModified",
+                "URLPath", "Depends", "CheckDepends", "Provides", "Replaces", "Groups", "License", "Keywords"
+            ],
+            fields,
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task LegacySearch_field_predicates_match_aurweb_semantics()
+    {
+        var providesExact = await JsonAsync("/rpc?v=5&type=search&arg=shel&by=provides");
+        var providesHit = await JsonAsync("/rpc?v=5&type=search&arg=shelly&by=provides");
+        var dependsStripped = await JsonAsync("/rpc?v=5&type=search&arg=pacman&by=depends");
+        var dependsWithConstraint = await JsonAsync("/rpc?v=5&type=search&arg=pacman%3E%3D6&by=depends");
+        var maintainerExact = await JsonAsync("/rpc?v=5&type=search&arg=alice&by=maintainer");
+        var maintainerSubstring = await JsonAsync("/rpc?v=5&type=search&arg=ali&by=maintainer");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(0, providesExact.GetProperty("resultcount").GetInt32());
+            Assert.Equal(1, providesHit.GetProperty("resultcount").GetInt32());
+            // Version constraints are stripped from both sides of the comparison.
+            Assert.Equal(1, dependsStripped.GetProperty("resultcount").GetInt32());
+            Assert.Equal(0, dependsWithConstraint.GetProperty("resultcount").GetInt32());
+            Assert.Equal(1, maintainerExact.GetProperty("resultcount").GetInt32());
+            Assert.Equal(0, maintainerSubstring.GetProperty("resultcount").GetInt32());
+        });
+    }
+
+    [Fact]
+    public async Task LegacySearch_orders_name_matches_ordinal()
+    {
+        await using var factory = new ApiTestFactory { Index = TestData.IndexFromNames(["alpha", "ALPHA", "alpha-b", "alpha_a"]) };
+        using var client = factory.CreateClient();
+
+        var body = await JsonAsync(client, "/rpc?v=5&type=search&arg=alph&by=name");
+
+        var names = body.GetProperty("results").EnumerateArray()
+            .Select(result => result.GetProperty("Name").GetString() ?? string.Empty);
+
+        Assert.Equal(["ALPHA", "alpha", "alpha-b", "alpha_a"], names, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task LegacySearch_succeeds_at_five_thousand_matches()
+    {
+        await using var factory = BulkFactory(AurRpcService.MaxResults);
+        using var client = factory.CreateClient();
+
+        var body = await JsonAsync(client, "/rpc?v=5&type=search&arg=bulk&by=name");
+
+        var results = body.GetProperty("results");
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(AurRpcService.MaxResults, body.GetProperty("resultcount").GetInt32());
+            Assert.Equal(AurRpcService.MaxResults, results.GetArrayLength());
+            Assert.Equal("bulk-0000", results[0].GetProperty("Name").GetString());
+            Assert.Equal("bulk-4999", results[results.GetArrayLength() - 1].GetProperty("Name").GetString());
+        });
+    }
+
+    [Fact]
+    public async Task LegacySearch_errors_when_matches_exceed_five_thousand()
+    {
+        await using var factory = BulkFactory(AurRpcService.MaxResults + 1);
+        using var client = factory.CreateClient();
+
+        var body = await JsonAsync(client, "/rpc?v=5&type=search&arg=bulk&by=name");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal("error", body.GetProperty("type").GetString());
+            Assert.Equal(0, body.GetProperty("resultcount").GetInt32());
+            Assert.Equal("Too many package results.", body.GetProperty("error").GetString());
+        });
+    }
+
+    private static ApiTestFactory BulkFactory(int count) => new()
+    {
+        Index = TestData.IndexFromNames(Enumerable.Range(0, count).Select(i => $"bulk-{i:0000}"))
+    };
+
+    private Task<JsonElement> JsonAsync(string path) => JsonAsync(_client, path);
+
+    private static async Task<JsonElement> JsonAsync(HttpClient client, string path)
+    {
+        var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         return document.RootElement.Clone();

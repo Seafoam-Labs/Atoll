@@ -56,6 +56,19 @@ public class PackageQueryTests
         Assert.Equal(default(By), result.By);
     }
 
+    // The binder comma-joins repeated ?by= values and Enum.TryParse ORs comma-separated names:
+    // Name is 0, so "name,words" collapses to Words and "provides,words" is an undefined pair.
+    [Theory]
+    [InlineData("name,words", By.Words)]
+    [InlineData("provides,words", (By)3)]
+    public void CommaJoinedValuesParseAsFlagCombinations(string input, By expected)
+    {
+        var parsed = ByQuery.TryParse(input, out var result);
+
+        Assert.True(parsed);
+        Assert.Equal(expected, result.By);
+    }
+
     [Fact]
     public void NamesAreSplitByComma()
     {
@@ -69,10 +82,31 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void EmptySourceProducesNoParts()
+    public void SpacesAreNotSeparators()
     {
-        _ = SearchQuery.TryParse("", out var result);
+        var parsed = SearchQuery.TryParse("vim editor", out var result);
 
+        Assert.True(parsed);
+        Assert.Equal("vim editor", Assert.Single(result.Query));
+    }
+
+    [Fact]
+    public void PartsAreTrimmedAndEmptySegmentsDropped()
+    {
+        var parsed = SearchQuery.TryParse(" shelly , ,portable,, ", out var result);
+
+        Assert.True(parsed);
+        Assert.Equal(["shelly", "portable"], result.Query, StringComparer.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void EmptyOrWhitespaceSourceProducesNoParts(string source)
+    {
+        var parsed = SearchQuery.TryParse(source, out var result);
+
+        Assert.True(parsed);
         Assert.Empty(result.Query);
     }
 }

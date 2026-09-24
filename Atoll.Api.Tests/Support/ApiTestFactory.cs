@@ -11,6 +11,9 @@ namespace Atoll.Api.Tests.Support;
 
 internal sealed class ApiTestFactory : WebApplicationFactory<Program>
 {
+    /// <summary>Optional replacement for the three-package sample index, for corpus-shape tests.</summary>
+    internal SearchIndexData? Index { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -22,7 +25,7 @@ internal sealed class ApiTestFactory : WebApplicationFactory<Program>
             services.RemoveAll<IAurMetadataRepository>();
 
             var store = new PackageIndexStore();
-            store.Replace(TestData.LoadSampleIndexes());
+            store.Replace(Index ?? TestData.LoadSampleIndexes());
 
             services.AddSingleton(store);
             services.AddSingleton<IAurMetadataRepository>(_ => new InMemoryAurMetadataRepository());

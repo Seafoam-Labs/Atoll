@@ -35,31 +35,92 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     [Fact]
     public async Task PackagesSupportsNameProvidesAndWordsQueries()
     {
-        var byName = await _client.GetAsync("/v1/search?query=portable-kit,not-real", TestContext.Current.CancellationToken);
-        var byProv = await _client.GetAsync("/v1/search?query=shelly&by=provides", TestContext.Current.CancellationToken);
-        var byDesc = await _client.GetAsync("/v1/search?query=handheld,portable&by=words", TestContext.Current.CancellationToken);
+        var byName = await SearchNamesAsync("query=portable-kit,not-real");
+        var byProvides = await SearchNamesAsync("query=shelly&by=provides");
+        var byWords = await SearchNamesAsync("query=handheld,portable&by=words");
 
-        Assert.Equal(HttpStatusCode.OK, byName.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, byProv.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, byDesc.StatusCode);
+        Assert.Equal(["portable-kit"], byName, StringComparer.Ordinal);
+        Assert.Equal(["shelly-bin"], byProvides, StringComparer.Ordinal);
+        // Words orders by votes descending: portable-pro carries 20, portable-kit 5.
+        Assert.Equal(["portable-pro", "portable-kit"], byWords, StringComparer.Ordinal);
+    }
 
-        var byNameBody = await byName.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var byProvBody = await byProv.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var byDescBody = await byDesc.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+    [Fact]
+    public async Task SearchByNameIsExactCaseSensitiveAndSubstringFree()
+    {
+        var exact = await SearchNamesAsync("by=name&query=shelly-bin");
+        var wrongCase = await SearchNamesAsync("by=name&query=Shelly-Bin");
+        var nearMissPrefix = await SearchNamesAsync("by=name&query=portable");
+        var providesValue = await SearchNamesAsync("by=name&query=shelly");
+        var unknown = await SearchNamesAsync("by=name&query=not-real");
 
-        using var byNameDoc = JsonDocument.Parse(byNameBody);
-        using var byProvidesDoc = JsonDocument.Parse(byProvBody);
-        using var byWordsDoc = JsonDocument.Parse(byDescBody);
+        Assert.Equal(["shelly-bin"], exact, StringComparer.Ordinal);
+        Assert.Empty(wrongCase);
+        Assert.Empty(nearMissPrefix);
+        Assert.Empty(providesValue);
+        Assert.Empty(unknown);
+    }
 
-        Assert.Equal(1, byNameDoc.RootElement.GetArrayLength());
-        Assert.Equal("portable-kit", byNameDoc.RootElement[0].GetProperty("name").GetString());
+    [Fact]
+    public async Task SearchByWordsRequiresEveryToken()
+    {
+        var allTokens = await SearchNamesAsync("by=words&query=handheld,emulator");
+        var missingToken = await SearchNamesAsync("by=words&query=handheld,missing");
+        var wrongCase = await SearchNamesAsync("by=words&query=Handheld");
 
-        Assert.Equal(1, byProvidesDoc.RootElement.GetArrayLength());
-        Assert.Equal("shelly-bin", byProvidesDoc.RootElement[0].GetProperty("name").GetString());
+        Assert.Equal(["portable-pro"], allTokens, StringComparer.Ordinal);
+        Assert.Empty(missingToken);
+        Assert.Empty(wrongCase);
+    }
 
-        Assert.Equal(2, byWordsDoc.RootElement.GetArrayLength());
-        Assert.Equal("portable-pro", byWordsDoc.RootElement[0].GetProperty("name").GetString());
-        Assert.Equal("portable-kit", byWordsDoc.RootElement[1].GetProperty("name").GetString());
+    [Fact]
+    public async Task SearchByProvidesIsExactAndFallsBackToSelfName()
+    {
+        var exact = await SearchNamesAsync("by=provides&query=shelly");
+        var nearMissPrefix = await SearchNamesAsync("by=provides&query=shel");
+        var selfNameFallback = await SearchNamesAsync("by=provides&query=portable-kit");
+        var explicitSelfName = await SearchNamesAsync("by=provides&query=shelly-bin");
+        var unknown = await SearchNamesAsync("by=provides&query=not-real");
+
+        Assert.Equal(["shelly-bin"], exact, StringComparer.Ordinal);
+        Assert.Empty(nearMissPrefix);
+        Assert.Equal(["portable-kit"], selfNameFallback, StringComparer.Ordinal);
+        Assert.Empty(explicitSelfName);
+        Assert.Empty(unknown);
+    }
+
+    [Fact]
+    public async Task SearchQueryBindingPinsSpacesEncodingRepeatsAndEmpties()
+    {
+        // Legacy modes never treat a space as a separator; "portable kit" stays one literal key.
+        var space = await SearchNamesAsync("by=words&query=portable%20kit");
+        // Percent-encoded commas and dashes decode before SearchQuery.TryParse runs.
+        var encodedComma = await SearchNamesAsync("by=name&query=portable-kit%2Cnot-real");
+        var encodedName = await SearchNamesAsync("by=name&query=shelly%2Dbin");
+        // Repeated parameters are comma-joined by the binder, so a miss-first pair still batches.
+        var repeated = await SearchNamesAsync("by=name&query=not-real&query=portable-kit");
+        var empty = await SearchNamesAsync("by=name&query=");
+        var emptySegments = await SearchNamesAsync("by=name&query=%2C%2C%20");
+        var missing = await SearchNamesAsync("by=name");
+
+        Assert.Empty(space);
+        Assert.Equal(["portable-kit"], encodedComma, StringComparer.Ordinal);
+        Assert.Equal(["shelly-bin"], encodedName, StringComparer.Ordinal);
+        Assert.Equal(["portable-kit"], repeated, StringComparer.Ordinal);
+        Assert.Empty(empty);
+        Assert.Empty(emptySegments);
+        Assert.Empty(missing);
+    }
+
+    [Fact]
+    public async Task RepeatedByValuesCombineAsFlags()
+    {
+        // "name,words" ORs to Words because Name is 0; an undefined combination is rejected instead.
+        var collapsed = await SearchNamesAsync("query=handheld&by=name&by=words");
+        var undefined = await _client.GetAsync("/v1/search?query=handheld&by=provides&by=words", TestContext.Current.CancellationToken);
+
+        Assert.Equal(["portable-pro", "portable-kit"], collapsed, StringComparer.Ordinal);
+        Assert.Equal(HttpStatusCode.BadRequest, undefined.StatusCode);
     }
 
     [Fact]
@@ -95,5 +156,20 @@ public sealed class MinimalApiEndpointsTests : IDisposable
             Assert.Contains("atoll_process_uptime_seconds", body, StringComparison.Ordinal);
             Assert.Contains("http_server_request_duration_seconds", body, StringComparison.Ordinal);
         });
+    }
+
+    private async Task<string[]> SearchNamesAsync(string queryString)
+    {
+        var response = await _client.GetAsync($"/v1/search?{queryString}", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        using var document = JsonDocument.Parse(body);
+        return
+        [
+            .. document.RootElement
+                .EnumerateArray()
+                .Select(element => element.GetProperty("name").GetString() ?? string.Empty)
+        ];
     }
 }

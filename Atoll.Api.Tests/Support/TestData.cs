@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Xunit;
 
@@ -51,4 +52,37 @@ internal static class TestData
     }
 
     internal static SearchIndexData LoadSampleIndexes() => PackageIndexBuilder.Parse(SamplePackagesJson);
+
+    /// <summary>A catalog entry with every non-essential field empty, for synthetic corpora.</summary>
+    internal static AurPackageMetadata Package(string name, long votes = 0, string[]? provides = null)
+    {
+        return new AurPackageMetadata(
+            Id: 0,
+            Name: name,
+            PackageBaseId: 0,
+            PackageBase: name,
+            Version: "1.0-1",
+            Description: "",
+            Url: null,
+            NumVotes: votes,
+            Popularity: 0,
+            OutOfDate: null,
+            Maintainer: null,
+            Submitter: null,
+            FirstSubmitted: 0,
+            LastModified: 0,
+            UrlPath: "",
+            Depends: [],
+            MakeDepends: [],
+            OptDepends: [],
+            Conflicts: [],
+            Provides: provides ?? [],
+            License: [],
+            Keywords: [],
+            CoMaintainers: []);
+    }
+
+    /// <summary>Indexes bare names, for tests that only need a corpus of a given size or key set.</summary>
+    internal static SearchIndexData IndexFromNames(IEnumerable<string> names)
+        => PackageIndexBuilder.BuildFromPackages(names.Select(name => Package(name)));
 }

@@ -47,6 +47,13 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
             }));
     }
 
+    /// <summary>Serves a synthetic name corpus instead of the three-package sample index.</summary>
+    private PackageCatalogService CreateService(ImmutableDictionary<string, AurPackageMetadata> names)
+    {
+        _store.Replace(SearchIndexData.Empty with { ByNames = names });
+        return CreateService();
+    }
+
     [Fact]
     public async Task EmptyQueryReturnsAllPackagesSortedByName()
     {
@@ -315,24 +322,85 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
             result.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
     }
 
+    [Theory]
+    [InlineData(CatalogSort.NameAsc, "pkg-a,pkg-b,pkg-c,pkg-d")]
+    [InlineData(CatalogSort.NameDesc, "pkg-d,pkg-c,pkg-b,pkg-a")]
+    [InlineData(CatalogSort.VotesAsc, "pkg-a,pkg-c,pkg-d,pkg-b")]
+    [InlineData(CatalogSort.VotesDesc, "pkg-b,pkg-d,pkg-c,pkg-a")]
+    [InlineData(CatalogSort.PopularityAsc, "pkg-b,pkg-d,pkg-a,pkg-c")]
+    [InlineData(CatalogSort.PopularityDesc, "pkg-c,pkg-a,pkg-d,pkg-b")]
+    [InlineData(CatalogSort.LastModifiedAsc, "pkg-d,pkg-a,pkg-b,pkg-c")]
+    [InlineData(CatalogSort.LastModifiedDesc, "pkg-c,pkg-b,pkg-a,pkg-d")]
+    public async Task EverySortOrdersTheCorpusByItsColumn(CatalogSort sort, string expected)
+    {
+        // Each column is a distinct permutation of 1-4, so no two sorts may agree.
+        var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
+        names["pkg-a"] = CreateMetadata("pkg-a") with { NumVotes = 1, Popularity = 3, LastModified = 2 };
+        names["pkg-b"] = CreateMetadata("pkg-b") with { NumVotes = 4, Popularity = 1, LastModified = 3 };
+        names["pkg-c"] = CreateMetadata("pkg-c") with { NumVotes = 2, Popularity = 4, LastModified = 4 };
+        names["pkg-d"] = CreateMetadata("pkg-d") with { NumVotes = 3, Popularity = 2, LastModified = 1 };
+
+        var result = await CreateService(names.ToImmutable())
+            .SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, sort, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected.Split(','), result.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task NamePopularityAndLastModifiedSortsBreakTiesByName()
+    {
+        var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
+        names["pkg-a"] = CreateMetadata("pkg-a") with { Popularity = 5, LastModified = 100 };
+        names["pkg-b"] = CreateMetadata("pkg-b") with { Popularity = 5, LastModified = 300 };
+        names["pkg-c"] = CreateMetadata("pkg-c") with { Popularity = 9, LastModified = 100 };
+
+        var service = CreateService(names.ToImmutable());
+
+        var popularity = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.PopularityDesc, ct: TestContext.Current.CancellationToken);
+        var lastModified = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.LastModifiedDesc, ct: TestContext.Current.CancellationToken);
+        var nameDesc = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameDesc, ct: TestContext.Current.CancellationToken);
+
+        Assert.Multiple(() =>
+        {
+            // pkg-a and pkg-b tie on popularity, so the name tie-break decides.
+            Assert.Equal(["pkg-c", "pkg-a", "pkg-b"],
+                popularity.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+            Assert.Equal(["pkg-b", "pkg-a", "pkg-c"],
+                lastModified.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+            Assert.Equal(["pkg-c", "pkg-b", "pkg-a"],
+                nameDesc.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task RowFiltersNarrowTotalsBeforePagingAndClamping()
+    {
+        // Only 75 of the 124 rows are seeded, so totals and page counts must follow the filter.
+        _seededNames = ExpectedNames(0, 75);
+
+        var service = CreateService(Corpus(124));
+
+        var ct = TestContext.Current.CancellationToken;
+        var firstPage = await service.SearchAsync(null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: ct);
+        var clamped = await service.SearchAsync(null, CatalogSeededFilter.Seeded, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 99, ct: ct);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(75, firstPage.TotalMatches);
+            Assert.Equal(2, firstPage.TotalPages);
+            Assert.Equal(PackageCatalogService.PageSize, firstPage.Rows.Count);
+            Assert.Equal(2, clamped.Page);
+            Assert.Equal(25, clamped.Rows.Count);
+            Assert.Equal("pkg-0074", clamped.Rows[^1].Package.Name);
+        });
+    }
+
     [Fact]
     public async Task NonNameSortsBreakTiesByNameForStablePaging()
     {
         // All packages share the same votes/popularity/mtime, so the name tie-break is the only
         // thing keeping page boundaries deterministic across the cached sorted view.
-        var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
-        for (var i = 0; i < PackageCatalogService.PageSize + 1; i++)
-        {
-            var name = $"pkg-{i:0000}";
-            names[name] = CreateMetadata(name);
-        }
-
-        var store = new PackageIndexStore();
-        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
-
-        var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New(),
-            Options.Create(new AtollOptions()));
+        var service = CreateService(Corpus(PackageCatalogService.PageSize + 1));
 
         var page1 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 1, ct: TestContext.Current.CancellationToken);
         var page2 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, page: 2, ct: TestContext.Current.CancellationToken);
@@ -349,19 +417,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     [Fact]
     public async Task ResultsArePaginatedInPageSizeChunk()
     {
-        var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
-        for (var i = 0; i <= PackageCatalogService.PageSize * 2; i++)
-        {
-            var name = $"pkg-{i:0000}";
-            names[name] = CreateMetadata(name);
-        }
-
-        var store = new PackageIndexStore();
-        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
-
-        var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New(),
-            Options.Create(new AtollOptions()));
+        var service = CreateService(Corpus(PackageCatalogService.PageSize * 2 + 1));
 
         var page1 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 1, ct: TestContext.Current.CancellationToken);
         var page2 = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 2, ct: TestContext.Current.CancellationToken);
@@ -392,12 +448,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
         names["pkg-a"] = CreateMetadata("pkg-a");
 
-        var store = new PackageIndexStore();
-        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
-
-        var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New(),
-            Options.Create(new AtollOptions()));
+        var service = CreateService(names.ToImmutable());
 
         var result = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, page: 0, ct: TestContext.Current.CancellationToken);
 
@@ -411,18 +462,13 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
         names["pkg-a"] = CreateMetadata("pkg-a");
 
-        var store = new PackageIndexStore();
-        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
-
-        var service = new PackageCatalogService(
-            store, new SeededNamesPackageService([]), _securityRepository, TestHybridCache.New(),
-            Options.Create(new AtollOptions()));
+        var service = CreateService(names.ToImmutable());
 
         var before = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
         Assert.Equal(["pkg-a"], before.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
 
         names["pkg-b"] = CreateMetadata("pkg-b");
-        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
+        _store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
 
         var after = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
         Assert.Equal(["pkg-a", "pkg-b"], after.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
@@ -431,6 +477,12 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     private static string[] ExpectedNames(int start, int count)
     {
         return [.. Enumerable.Range(start, count).Select(i => $"pkg-{i:0000}")];
+    }
+
+    /// <summary>An otherwise-uniform <c>pkg-0000</c>... corpus of the given size.</summary>
+    private static ImmutableDictionary<string, AurPackageMetadata> Corpus(int count)
+    {
+        return ExpectedNames(0, count).ToImmutableDictionary(name => name, CreateMetadata, StringComparer.Ordinal);
     }
 
     private static AurPackageMetadata CreateMetadata(string name)
