@@ -44,6 +44,7 @@ public static class Endpoints
             By.Name => TypedResults.Ok(searchService.FindByNames(queryValues)),
             By.Words => TypedResults.Ok(searchService.FindByWords(queryValues)),
             By.Provides => TypedResults.Ok(searchService.FindByProvides(queryValues)),
+            By.Relevance => TypedResults.Ok(searchService.FindByRelevance(query?.Raw ?? string.Empty)),
             _ => throw new ArgumentOutOfRangeException(nameof(by), by, null)
         };
     }

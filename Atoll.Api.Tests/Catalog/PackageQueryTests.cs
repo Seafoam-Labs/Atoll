@@ -70,6 +70,25 @@ public class PackageQueryTests
     }
 
     [Fact]
+    public void RelevanceIsExplicitlyFourLeavingThreeUndefined()
+    {
+        Assert.Equal(4, (int)By.Relevance);
+        Assert.False(Enum.IsDefined(typeof(By), 3));
+    }
+
+    [Theory]
+    [InlineData("Relevance")]
+    [InlineData("relevance")]
+    [InlineData("RELEVANCE")]
+    public void RelevanceParsesInAnyCasing(string input)
+    {
+        var parsed = ByQuery.TryParse(input, out var result);
+
+        Assert.True(parsed);
+        Assert.Equal(By.Relevance, result.By);
+    }
+
+    [Fact]
     public void NamesAreSplitByComma()
     {
         var parsed = SearchQuery.TryParse("shelly,portable,portable", out var result);
@@ -79,6 +98,19 @@ public class PackageQueryTests
         Assert.Equal("shelly", result.Query[0]);
         Assert.Equal("portable", result.Query[1]);
         Assert.Equal("portable", result.Query[2]);
+    }
+
+    [Fact]
+    public void RawSurvivesTheCommaSplit()
+    {
+        var parsed = SearchQuery.TryParse("vim editor,gui", out var result);
+
+        Assert.True(parsed);
+        Assert.Multiple(() =>
+        {
+            Assert.Equal("vim editor,gui", result.Raw);
+            Assert.Equal(["vim editor", "gui"], result.Query, StringComparer.Ordinal);
+        });
     }
 
     [Fact]

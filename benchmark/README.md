@@ -29,8 +29,10 @@ in [`results/`](results/), newest first.
 
 ## Workload
 
-Six scenarios cover the contracts real AUR clients and browser users exercise;
-keeping them separate stops a slow path from hiding in the aggregate.
+Six always-on scenarios cover the contracts real AUR clients and browser users
+exercise; keeping them separate stops a slow path from hiding in the aggregate.
+A seventh, `relevance`, is opt-in (`RELEVANCE_RATE > 0`) so the default profile
+stays byte-identical to the recorded baseline.
 
 | Scenario | Executor | Path | Threshold |
 | --- | --- | --- | --- |
@@ -40,6 +42,7 @@ keeping them separate stops a slow path from hiding in the aggregate.
 | `catalog_sorted` | constant-arrival-rate, 10 requests/s | `GET /v1/packages?sortBy=votes/popularity/version` | p95 < 600 ms |
 | `ui` | ramping-vus, 5 VUs | `GET /` and `GET /package/{name}` (server-rendered Blazor) | p95 < 1 s |
 | `git_fetch` | constant-arrival-rate, 2 fetches/s | Full Git Smart HTTP fetch: `info/refs` advertisement → one-shot `want`/`done` → `git-upload-pack` | p95 < 2 s |
+| `relevance` (opt-in) | constant-arrival-rate, `RELEVANCE_RATE` requests/s | `GET /v1/search?query=&by=relevance`: free-text ranked retrieval, one full rank over the in-memory index, bare array capped at 50; queries draw from `RELEVANCE_QUERIES` | p95 < 300 ms |
 
 The two rate-driven scenarios are capped instead of VU-driven because each is
 expensive per request: Git fetching shells out to `git upload-pack` server-side,
@@ -74,6 +77,21 @@ sanity checks, not timing gates, so the probe stays in the normal test run.
 `Atoll.Api.Tests/Packages/PackageIndexRankerPerfTests.cs` is the same kind of
 probe for the code behind `catalog_sorted`, reporting a cold sorted request, the
 cold view build per sort, and the warm page over a synthetic 85k-name seeded set.
+
+`Atoll.Api.Tests/Catalog/PackageSearchRelevancePerfTests.cs` is the probe for the
+code behind `relevance`: a log-only cost measurement of `PackageSearchEngine.Rank`
+over a 120k-package index shape-matched to the live corpus (deterministic name
+families reproduce the measured prefix/contains/token counts per term, asserted
+before measuring so a generator edit cannot silently invalidate the comparison).
+It reports median/p95/min latency, allocations, candidate count, and 50-row
+serialized bytes per scenario. `dotnet test` hides `ITestOutputHelper`, so read
+the numbers by running the MTP executable directly:
+
+```sh
+dotnet build Atoll.Api.Tests/Atoll.Api.Tests.csproj -c Release -p:SkipTailwind=true
+./Atoll.Api.Tests/bin/Release/net10.0/Atoll.Api.Tests -showLiveOutput -noLogo \
+  -class "Atoll.Api.Tests.Catalog.PackageSearchRelevancePerfTests"
+```
 
 ## Corpora
 
@@ -114,10 +132,12 @@ returns a package's whole file contents, not metadata.
 | `PACKAGES` | `yay,paru,visual-studio-code-bin,slack-desktop,xpipe-ptb,duckstation-gpl` | Request mix for the name-keyed scenarios; spans median documents and the size/depth tail. Rotate it (see above). Every name must be seedable — `setup()` aborts on one that is not |
 | `TERMS` | 22 validated words, hot to unmatched | Queries for `by=words` and RPC suggestions |
 | `PROVIDES` | 9 validated provided tokens | Queries for `by=provides` |
+| `RELEVANCE_QUERIES` | `yay,vim,rust,browser,neovim,qt,git,brwose,vim editor,rust browser gui` | Free-text queries for `by=relevance`; may contain spaces (sent as `%20`). Spans the distinct relevance code paths: exact, prefix, name-vs-metadata, interior token, short, stop word, no-hit, multi-term |
 | `VUS` | `25` | Peak VUs per VU-driven scenario |
 | `UI_VUS` | `5` | Peak VUs requesting server-rendered HTML |
 | `GIT_RATE` | `2` | Git fetches per second |
 | `SORT_RATE` | `10` | Sorted package pages per second |
+| `RELEVANCE_RATE` | `0` | Relevance requests per second; `0` omits the `relevance` scenario and its thresholds entirely, leaving the default profile unchanged |
 | `WARMUP` / `HOLD` / `COOLDOWN` | `20s` / `1m` / `15s` | Ramp-up, steady-state, ramp-down stage durations |
 | `GIT_DURATION` | `95s` | Duration of the rate-driven scenarios; keep aligned with the three stages |
 | `VERIFY_SECURITY` | `false` | Require every selected package's head scan to be `Verified` before load |

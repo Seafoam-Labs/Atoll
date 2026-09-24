@@ -64,17 +64,28 @@ public static partial class TokenCleaning
         foreach (var split in SeparatorsRegex.Split(token))
         foreach (var part in CamelCaseRegex.Split(split))
         {
-            if (part.Length < MinimumTokenLength
-                && !AllowedShortTerms.Contains(part.ToLowerInvariant())) continue;
-            if (!part.All(IsPrintableAscii)) continue;
-            if (StartsWithTwoDigits(part)) continue;
-            if (part.All(char.IsAsciiDigit)) continue;
-
-            var lowered = part.ToLowerInvariant();
-            if (IgnoredTerms.Contains(lowered)) continue;
-
-            if (seen.Add(lowered)) yield return lowered;
+            var lowered = NormalizePosting(part);
+            if (lowered is not null && seen.Add(lowered)) yield return lowered;
         }
+    }
+
+    /// <summary>
+    ///     Applies the indexing filters to one already-split segment and returns the lowercased
+    ///     posting key, or <see langword="null" /> when the segment is rejected (too short and not
+    ///     an allowed short term, non-ASCII, leading two digits, all digits, or a stop word). Shared
+    ///     by <see cref="SplitAndClean" /> and the relevance parser so both sides clean identically.
+    /// </summary>
+    internal static string? NormalizePosting(string segment)
+    {
+        var lowered = segment.ToLowerInvariant();
+
+        if (segment.Length < MinimumTokenLength && !AllowedShortTerms.Contains(lowered)) return null;
+        if (!segment.All(IsPrintableAscii)) return null;
+        if (StartsWithTwoDigits(segment)) return null;
+        if (segment.All(char.IsAsciiDigit)) return null;
+        if (IgnoredTerms.Contains(lowered)) return null;
+
+        return lowered;
     }
 
     /// <summary>U+0020–U+007F only; drop if internationalized content is needed.</summary>

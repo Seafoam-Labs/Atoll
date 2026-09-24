@@ -37,4 +37,17 @@ public sealed class PackageSearchService(PackageSearchEngine engine)
                 .Take(50)
         ];
     }
+
+    public AurPackageMetadata[] FindByRelevance(string rawQuery)
+    {
+        var snapshot = engine.Capture();
+        Interlocked.Increment(ref _requestCount);
+
+        return
+        [
+            .. PackageSearchEngine.Rank(snapshot, rawQuery)
+                .Take(50)
+                .Select(hit => hit.Package)
+        ];
+    }
 }

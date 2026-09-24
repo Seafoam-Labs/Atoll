@@ -13,8 +13,9 @@
 // The AWS web ACL rate-limits per source IP (terraform/waf.tf); raise
 // `waf_rate_limit` before pointing this script at a real deployment.
 //
-// Tunables via env: TARGET, PACKAGES, TERMS, PROVIDES, VUS, GIT_RATE,
-// SORT_RATE, UI_VUS, WARMUP, HOLD, COOLDOWN, GIT_DURATION, VERIFY_SECURITY.
+// Tunables via env: TARGET, PACKAGES, TERMS, PROVIDES, RELEVANCE_QUERIES, VUS,
+// GIT_RATE, SORT_RATE, RELEVANCE_RATE, UI_VUS, WARMUP, HOLD, COOLDOWN,
+// GIT_DURATION, VERIFY_SECURITY.
 //
 // PACKAGES is the request mix, not the corpus: every name-keyed read (RPC,
 // detail, versions, UI, Git) and every exact-name search draws from it, while
@@ -30,6 +31,10 @@ while (TARGET.endsWith("/")) TARGET = TARGET.slice(0, -1);
 const VUS = Number(__ENV.VUS || 25);
 const GIT_RATE = Number(__ENV.GIT_RATE || 2);
 const SORT_RATE = Number(__ENV.SORT_RATE || 10);
+// Relevance is opt-in: at the default 0 the scenario and its thresholds are not
+// registered, so `k6 run loadtest.js` stays byte-identical to the recorded
+// compatibility-mode baseline. Raise it to measure the ranked path (Phase 2 gate).
+const RELEVANCE_RATE = Number(__ENV.RELEVANCE_RATE || 0);
 const UI_VUS = Number(__ENV.UI_VUS || 5);
 const VERIFY_SECURITY = __ENV.VERIFY_SECURITY === "true";
 const WARMUP = __ENV.WARMUP || "20s";
@@ -57,6 +62,14 @@ const TERMS = csv(__ENV.TERMS ||
 const PROVIDES = csv(__ENV.PROVIDES ||
   "vim,nvidia,gcc-libs,sh,wine,chromium,gtk2,bash,jre");
 
+// Relevance is free text, not the legacy comma-batch grammar, so this pool is
+// kept separate from TERMS/PROVIDES and may contain spaces (encodeURIComponent
+// turns them into %20, which the relevance parser splits back into terms). It
+// spans the distinct code paths: exact name, broad prefix, name-vs-metadata,
+// interior token, short term, stop word, no-hit, and multi-term coverage.
+const RELEVANCE_QUERIES = csv(__ENV.RELEVANCE_QUERIES ||
+  "yay,vim,rust,browser,neovim,qt,git,brwose,vim editor,rust browser gui");
+
 // Real `yay` runs ask for many packages at once and the RPC silently truncates
 // batches past 200 args, so tiers stay at or below that ceiling; tiers larger
 // than the package pool are skipped rather than sending duplicates.
@@ -75,78 +88,110 @@ const sortedSchedule =
     ? { rate: 1, timeUnit: `${Math.round(1 / SORT_RATE)}s` }
     : { rate: SORT_RATE, timeUnit: "1s" };
 
+// Same sub-1/s handling as the sorted schedule.
+const relevanceSchedule =
+  RELEVANCE_RATE < 1
+    ? { rate: 1, timeUnit: `${Math.round(1 / RELEVANCE_RATE)}s` }
+    : { rate: RELEVANCE_RATE, timeUnit: "1s" };
+
+const scenarios = {
+  search: {
+    executor: "ramping-vus",
+    exec: "search",
+    startVUs: 0,
+    stages: rampStages(VUS),
+    gracefulRampDown: "10s",
+  },
+  rpc: {
+    executor: "ramping-vus",
+    exec: "rpc",
+    startVUs: 0,
+    stages: rampStages(VUS),
+    gracefulRampDown: "10s",
+  },
+  catalog: {
+    executor: "ramping-vus",
+    exec: "catalog",
+    startVUs: 0,
+    stages: rampStages(Math.max(1, Math.floor(VUS / 2))),
+    gracefulRampDown: "10s",
+  },
+  catalog_sorted: {
+    // Non-default sorts serve from a cached per-sort name view plus one
+    // name-filtered Mongo query per page. Arrival-rate scheduling keeps this
+    // formerly unbounded public request measured in isolation.
+    executor: "constant-arrival-rate",
+    exec: "catalogSorted",
+    rate: sortedSchedule.rate,
+    timeUnit: sortedSchedule.timeUnit,
+    duration: GIT_DURATION,
+    // Sized for the default rate: 10 arrivals/s at the measured full-profile
+    // p95 (~0.5 s) needs ~5 VUs in flight, so pre-allocate past that instead
+    // of letting the generator allocate mid-run and drop arrivals.
+    preAllocatedVUs: 6,
+    maxVUs: 12,
+    gracefulStop: "10s",
+  },
+  ui: {
+    executor: "ramping-vus",
+    exec: "ui",
+    startVUs: 0,
+    stages: rampStages(UI_VUS),
+    gracefulRampDown: "10s",
+  },
+  git_fetch: {
+    executor: "constant-arrival-rate",
+    exec: "gitFetch",
+    rate: GIT_RATE,
+    timeUnit: "1s",
+    duration: GIT_DURATION,
+    preAllocatedVUs: 4,
+    maxVUs: 12,
+    gracefulStop: "10s",
+  },
+};
+
+const thresholds = {
+  http_req_failed: ["rate<0.01"],
+  "http_req_duration{scenario:search}": ["p(95)<300"],
+  "http_req_duration{scenario:rpc}": ["p(95)<300"],
+  "http_req_duration{scenario:catalog}": ["p(95)<600"],
+  "http_req_duration{scenario:catalog_sorted}": ["p(95)<600"],
+  "http_req_duration{scenario:ui}": ["p(95)<1000"],
+  "http_req_duration{scenario:git_fetch}": ["p(95)<2000"],
+  "checks{scenario:search}": ["rate>0.99"],
+  "checks{scenario:rpc}": ["rate>0.99"],
+  "checks{scenario:catalog}": ["rate>0.99"],
+  "checks{scenario:catalog_sorted}": ["rate>0.99"],
+  "checks{scenario:ui}": ["rate>0.99"],
+  "checks{scenario:git_fetch}": ["rate>0.99"],
+};
+
+// Registered only when measured, so the default profile stays byte-identical to
+// the recorded baseline. A new per-request-expensive public path (a full rank
+// over the in-memory index), so it runs on arrival-rate scheduling in isolation
+// like catalog_sorted rather than VU-driven inside the aggregate.
+if (RELEVANCE_RATE > 0) {
+  scenarios.relevance = {
+    executor: "constant-arrival-rate",
+    exec: "relevance",
+    rate: relevanceSchedule.rate,
+    timeUnit: relevanceSchedule.timeUnit,
+    duration: GIT_DURATION,
+    // Sized from the in-process probe (PackageSearchRelevancePerfTests): a full
+    // 120k-index rank is ~25-60 ms p95, so even 10 arrivals/s needs well under
+    // one VU in flight; pre-allocate past that to avoid mid-run allocation.
+    preAllocatedVUs: 4,
+    maxVUs: 12,
+    gracefulStop: "10s",
+  };
+  thresholds["http_req_duration{scenario:relevance}"] = ["p(95)<300"];
+  thresholds["checks{scenario:relevance}"] = ["rate>0.99"];
+}
+
 export const options = {
-  scenarios: {
-    search: {
-      executor: "ramping-vus",
-      exec: "search",
-      startVUs: 0,
-      stages: rampStages(VUS),
-      gracefulRampDown: "10s",
-    },
-    rpc: {
-      executor: "ramping-vus",
-      exec: "rpc",
-      startVUs: 0,
-      stages: rampStages(VUS),
-      gracefulRampDown: "10s",
-    },
-    catalog: {
-      executor: "ramping-vus",
-      exec: "catalog",
-      startVUs: 0,
-      stages: rampStages(Math.max(1, Math.floor(VUS / 2))),
-      gracefulRampDown: "10s",
-    },
-    catalog_sorted: {
-      // Non-default sorts serve from a cached per-sort name view plus one
-      // name-filtered Mongo query per page. Arrival-rate scheduling keeps this
-      // formerly unbounded public request measured in isolation.
-      executor: "constant-arrival-rate",
-      exec: "catalogSorted",
-      rate: sortedSchedule.rate,
-      timeUnit: sortedSchedule.timeUnit,
-      duration: GIT_DURATION,
-      // Sized for the default rate: 10 arrivals/s at the measured full-profile
-      // p95 (~0.5 s) needs ~5 VUs in flight, so pre-allocate past that instead
-      // of letting the generator allocate mid-run and drop arrivals.
-      preAllocatedVUs: 6,
-      maxVUs: 12,
-      gracefulStop: "10s",
-    },
-    ui: {
-      executor: "ramping-vus",
-      exec: "ui",
-      startVUs: 0,
-      stages: rampStages(UI_VUS),
-      gracefulRampDown: "10s",
-    },
-    git_fetch: {
-      executor: "constant-arrival-rate",
-      exec: "gitFetch",
-      rate: GIT_RATE,
-      timeUnit: "1s",
-      duration: GIT_DURATION,
-      preAllocatedVUs: 4,
-      maxVUs: 12,
-      gracefulStop: "10s",
-    },
-  },
-  thresholds: {
-    http_req_failed: ["rate<0.01"],
-    "http_req_duration{scenario:search}": ["p(95)<300"],
-    "http_req_duration{scenario:rpc}": ["p(95)<300"],
-    "http_req_duration{scenario:catalog}": ["p(95)<600"],
-    "http_req_duration{scenario:catalog_sorted}": ["p(95)<600"],
-    "http_req_duration{scenario:ui}": ["p(95)<1000"],
-    "http_req_duration{scenario:git_fetch}": ["p(95)<2000"],
-    "checks{scenario:search}": ["rate>0.99"],
-    "checks{scenario:rpc}": ["rate>0.99"],
-    "checks{scenario:catalog}": ["rate>0.99"],
-    "checks{scenario:catalog_sorted}": ["rate>0.99"],
-    "checks{scenario:ui}": ["rate>0.99"],
-    "checks{scenario:git_fetch}": ["rate>0.99"],
-  },
+  scenarios,
+  thresholds,
   summaryTrendStats: ["avg", "min", "med", "p(90)", "p(95)", "max"],
 };
 
@@ -179,7 +224,7 @@ export function setup() {
     if (VERIFY_SECURITY) verifyServableHead(name);
   }
 
-  return { packages: PACKAGES, terms: TERMS, provides: PROVIDES };
+  return { packages: PACKAGES, terms: TERMS, provides: PROVIDES, relevance: RELEVANCE_QUERIES };
 }
 
 function waitForHealth() {
@@ -228,6 +273,18 @@ export function search(data) {
   check(res, {
     "search returns 200": (r) => r.status === 200,
     "search returns a JSON array": (r) => Array.isArray(r.json()),
+  });
+}
+
+export function relevance(data) {
+  // Free-text ranked retrieval: one full rank over the in-memory index, served
+  // as a bare array capped at 50. Distinct tag so it never folds into `search`.
+  const query = `${TARGET}/v1/search?query=${encodeURIComponent(pick(data.relevance))}&by=relevance`;
+  const res = http.get(query, { tags: { name: "GET /v1/search (relevance)" } });
+  check(res, {
+    "relevance returns 200": (r) => r.status === 200,
+    "relevance returns a JSON array": (r) => Array.isArray(r.json()),
+    "relevance caps at 50 rows": (r) => r.json().length <= 50,
   });
 }
 

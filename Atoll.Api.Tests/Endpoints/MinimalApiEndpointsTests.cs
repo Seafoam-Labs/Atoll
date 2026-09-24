@@ -124,6 +124,81 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task RelevanceServesRankedBareArray()
+    {
+        var portable = await SearchNamesAsync("query=portable&by=relevance");
+        var upperCase = await SearchNamesAsync("query=SHELLY&by=Relevance");
+        var wordTie = await SearchNamesAsync("query=handheld&by=relevance");
+        var token = await SearchNamesAsync("query=kit&by=relevance");
+        var noHit = await SearchNamesAsync("query=brwose&by=relevance");
+
+        Assert.Multiple(() =>
+        {
+            // Exact provides (portable-pro) outranks the name prefix (portable-kit).
+            Assert.Equal(["portable-pro", "portable-kit"], portable, StringComparer.Ordinal);
+            // Case-insensitive name match still finds shelly-bin while case-sensitive provides misses.
+            Assert.Equal(["shelly-bin"], upperCase, StringComparer.Ordinal);
+            // Pure word-posting tie broken by votes descending (portable-pro 20, portable-kit 5).
+            Assert.Equal(["portable-pro", "portable-kit"], wordTie, StringComparer.Ordinal);
+            Assert.Equal(["portable-kit"], token, StringComparer.Ordinal);
+            Assert.Empty(noHit);
+        });
+    }
+
+    [Fact]
+    public async Task RelevanceTreatsPlusAsSeparatorButPercentEncodedPlusAsLiteral()
+    {
+        // QueryStringEnumerable.Decode turns '+' into a space before unescaping, so "portable+pro"
+        // is two terms; "%2B" unescapes to a literal '+' that survives as one term, matching nothing.
+        var plusAsSeparator = await SearchNamesAsync("query=portable+pro&by=relevance");
+        var plusAsLiteral = await SearchNamesAsync("query=portable%2Bpro&by=relevance");
+
+        Assert.Multiple(() =>
+        {
+            // Two-term coverage ranks portable-pro (both terms) above portable-kit (prefix only).
+            Assert.Equal(["portable-pro", "portable-kit"], plusAsSeparator, StringComparer.Ordinal);
+            Assert.Empty(plusAsLiteral);
+        });
+    }
+
+    [Fact]
+    public async Task RelevanceResponseIsBareArrayWithoutScoreOrTier()
+    {
+        var response = await _client.GetAsync("/v1/search?query=portable&by=relevance", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(body);
+        var first = document.RootElement[0];
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(JsonValueKind.Array, document.RootElement.ValueKind);
+            Assert.True(first.TryGetProperty("name", out _));
+            Assert.False(first.TryGetProperty("score", out _));
+            Assert.False(first.TryGetProperty("tier", out _));
+        });
+    }
+
+    [Fact]
+    public async Task RelevanceRejectsOverBoundQuery()
+    {
+        var overBound = new string('a', 257);
+
+        var response = await _client.GetAsync($"/v1/search?query={overBound}&by=relevance", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // GlobalExceptionHandler maps ArgumentOutOfRangeException to ProblemDetails, message as title;
+        // the message carries the framework's "(Parameter 'raw') / Actual value was 257." suffix.
+        using var document = JsonDocument.Parse(body);
+        Assert.StartsWith(
+            "Relevance query must be at most 256 characters.",
+            document.RootElement.GetProperty("title").GetString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task InvalidPackagesByAndUnknownRouteReturnTextHtml404()
     {
         var invalidBy = await _client.GetAsync("/v1/search?query=shelly&by=unknown", TestContext.Current.CancellationToken);
