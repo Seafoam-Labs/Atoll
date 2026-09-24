@@ -6,20 +6,30 @@ changing an invalidation path.
 
 The shared HybridCache TTLs come from `Atoll:Caching` (`RankTtlSeconds` 600, `SnapshotTtlSeconds` 600,
 `DashboardTtlSeconds` 5) and are read once when a consuming service is constructed, so changing them needs a
-restart. Rank and snapshot are a backstop, not the freshness mechanism: they sit well above the 5-minute index
-swap cadence, `PackageIndexWorker` warms the seeded snapshot, the default catalog sorts, and the ranked name
-list at startup, and writes invalidate by tag, so a warm entry is not meant to expire into a request. Their
-`[Range]` attributes are enforced at startup: `AtollOptions` marks each nested section with
-`[ValidateObjectMembers]`, which is what makes `ValidateDataAnnotations` descend into it.
+restart. Their `[Range]` attributes are enforced at startup: `AtollOptions` marks each nested section with
+`[ValidateObjectMembers]`, which is what makes `ValidateDataAnnotations` descend into it. Rank and snapshot are a
+backstop, not the freshness mechanism: writes invalidate by tag, and `PackageIndexWorker` calls `PrewarmAsync` on
+both services at startup and after every refresh cycle that reached the archive, 304s included.
+
+Expiration is absolute, so a read hit does not extend it and a fill-only warm would still let an entry expire into
+a request. The two warms differ on purpose:
+
+- The ranker re-stores the name list and every served sorted array, re-ranked from the current index generation,
+  so its entries live as long as the worker keeps cycling. That is safe because every `catalog` writer changes the
+  name set, so nothing there depends on expiry to heal.
+- The catalog only fills the seeded snapshot and primes the default sorts. A head promoted by refresh drops no
+  tag, so its badge heals through the snapshot's expiry, and re-arming that expiry would make the lag unbounded.
+  The sorted views need no re-arm: they are keyed on the index instance, so a swap drops them structurally and the
+  warm rebuilds them.
 
 ## Inventory
 
 | # | Cache | Location | Contents | Refresh / invalidation | Max staleness |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Search index snapshot | `PackageIndexStore` (`Services/Catalog/Indexing/`) | Whole AUR catalog as `SearchIndexData` (`ByNames`, `ByProvides`, `ByWords`) | Startup prime from the `aur-metadata` collection, then an atomic swap every `Atoll:DataSource:RefreshIntervalMinutes` (default 5) | Refresh interval; indefinite while dump downloads fail (the last good snapshot is kept) |
-| 2 | Ranked name views | `PackageIndexRanker` (`Services/Packages/`) | Seeded name list plus one sorted name array per (sort, order) | HybridCache keys `atoll.rank.names` and `atoll.rank.sorted/{sort}/{order}` under the `catalog` tag only: seed/delete drop it; `Atoll:Caching:RankTtlSeconds` backstop | One TTL (600 s); about two when a write races an in-flight store; an index swap is not seen until expiry or a write |
-| 3 | Catalog sorted views | `PackageCatalogService._sortedViews` (UI) | `AurPackageMetadata[]` pre-sorted for each catalog sort, keyed on the index instance | Rebuilt per index generation; dropped structurally when the replaced `SearchIndexData` becomes unreachable | Same as #1 |
-| 4 | Catalog seeded snapshot | `PackageCatalogService` (UI) | `FrozenSet` of seeded names plus a `FrozenDictionary` of head scan statuses | HybridCache key `atoll.ui.seeded-snapshot` under both `catalog` and `head-status`: seed/delete drop `catalog`; a queued head rescan and a completed or errored head scan drop `head-status` | Immediate for seeds, deletes, rescans, and scan completions; for a refresh-promoted head, up to one TTL (600 s) of stale badge display, accepted because access gating reads live statuses; a build racing a tag removal serves its pre-write value for up to one TTL |
+| 2 | Ranked name views | `PackageIndexRanker` (`Services/Packages/`) | Seeded name list plus one sorted name array per (sort, order) | HybridCache keys `atoll.rank.names` and `atoll.rank.sorted/{sort}/{order}` under the `catalog` tag only: seed/delete drop it; the worker's warm re-stores all of them after every refresh cycle; `Atoll:Caching:RankTtlSeconds` is the backstop for the cycles that fail | About two TTLs when a write races an in-flight store; otherwise bounded by tag drops alone, since the warm re-arms the TTL every cycle |
+| 3 | Catalog sorted views | `PackageCatalogService._sortedViews` (UI) | `AurPackageMetadata[]` pre-sorted for each catalog sort, keyed on the index instance | Rebuilt per index generation; primed after each swap by the worker's warm; dropped structurally when the replaced `SearchIndexData` becomes unreachable | Same as #1; the default sorts are rebuilt off the request path by the warm |
+| 4 | Catalog seeded snapshot | `PackageCatalogService` (UI) | `FrozenSet` of seeded names plus a `FrozenDictionary` of head scan statuses | HybridCache key `atoll.ui.seeded-snapshot` under both `catalog` and `head-status`: seed/delete drop `catalog`; a queued head rescan and a completed or errored head scan drop `head-status`; the worker's warm fills it without re-arming, so the TTL keeps running | Immediate for seeds, deletes, rescans, and scan completions; for a refresh-promoted head, up to one TTL (600 s) of stale badge display, accepted because access gating reads live statuses; a build racing a tag removal serves its pre-write value for up to one TTL |
 | 5 | Status dashboard model | `StatusDashboardService` (UI) | One assembled `StatusDashboardModel` | HybridCache key `atoll.ui.status-dashboard`, no tags, `Atoll:Caching:DashboardTtlSeconds` TTL, single-flight | One TTL |
 | 6 | Git bare repos | `GitRepositoryCache` under `Atoll:Git:RepositoriesPath` (`data/repos/`) | Materialized cloneable history per package | The `.atoll-head` marker is recomputed from MongoDB on every Git request; a mismatch rebuilds lazily under a per-path lock | None (checked per request); changes cost a rebuild inside request latency |
 | 7 | AUR mirror | `AurMirror` under `Atoll:Seed:Bulk:CachePath` / `Atoll:Refresh:CachePath` (`data/aur-mirror/`) | Bare shallow mirror, refs under `refs/atoll/<pkgbase>` | Shared by bulk seeding and refresh; a pkgbase is fetched again when its upstream SHA moves or the `MaxStalenessHours` (24 h) sweep fires | Refresh cadence, up to 24 h |
@@ -60,6 +70,14 @@ Accepted behaviors to know before changing this:
   it.
 - On the ranked paths a store racing a tag removal can serve stale membership for about two TTLs, since a sorted
   entry can be built late in the window from stale cached names.
+- The warm's stores (`SetAsync`) cannot cancel an in-flight build or a concurrent write: a request that captured
+  the pre-swap generation can store its ordering after the warm, and a warm that reads the name list just before a
+  `catalog` removal stores the pre-write list back. Either serves for up to one TTL. A warm that throws is logged
+  and left to the TTL; the views rebuild on the next request.
+- The seeded snapshot is the one entry the warm does not re-arm, so it still expires every `SnapshotTtlSeconds`.
+  The warm that follows the expiry normally rebuilds it inside the worker, but a request landing in between pays
+  the two collection scans (~4 s at 118k packages). That gap, at most one cycle wide per TTL, is what is left of
+  the cold-load cliff.
 
 ## Where stale data can appear
 
@@ -74,7 +92,8 @@ Ranked by how likely you are to notice.
 2. **Ranked pages on `/v1/packages`.** Totals and page counts describe the cached name list, not live Mongo; a
    package deleted between the ranking build and the page fetch shortens the page instead of re-ranking. The default
    `name asc` path pages Mongo directly and is always fresh on membership; only its enrichment comes from the index
-   snapshot. Different sorts can disagree slightly on freshness within a TTL.
+   snapshot. The sorts are rebuilt together by the warm, so they disagree with each other only in the moment after
+   a swap.
 3. **Mirror content.** Seeded file content reflects the mirror at seed/refresh time. A branch whose upstream SHA has
    not moved skips fetching; `MaxStalenessHours` (24 h) is the only force-refresh, so already-seeded packages lag
    upstream until the refresh worker runs (`Atoll:Refresh:Enabled`).
@@ -97,9 +116,9 @@ Ranked by how likely you are to notice.
 - `ConcurrentDictionary`: per-sort catalog views (inside the weak table), git per-path locks.
 - `ConditionalWeakTable<SearchIndexData, ...>`: the catalog sorted views' generation mechanism. A generation is an
   index instance; swapping the store drops entries structurally instead of tracking versions.
-- `HybridCache` (`AtollCacheKeys`): the ranked names, the seeded snapshot, and the dashboard model. One library
-  pattern, with tag-removal invalidation and `[ImmutableObject(true)]` payload records so warm L1 reads are
-  reference-shared instead of serialization-cloned.
+- `HybridCache` (`AtollCacheKeys`): the ranked names and sorted views, the seeded snapshot, and the dashboard
+  model. One library pattern, with tag-removal invalidation and `[ImmutableObject(true)]` payload records so warm
+  L1 reads are reference-shared instead of serialization-cloned.
 
 ## Verified non-cached paths
 

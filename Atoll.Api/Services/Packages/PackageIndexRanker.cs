@@ -13,7 +13,8 @@ namespace Atoll.Api.Services.Packages;
 /// Ranks the seeded-package set (Mongo <c>packages</c> names) by in-memory catalog keys. The name
 /// list and one sorted name array per sort key are entries in the shared cache, so a sorted page
 /// costs O(limit) instead of sorting the whole corpus. Everything carries the <c>catalog</c> tag:
-/// seeded-set writes drop it, and the configured TTL is the backstop.
+/// seeded-set writes drop it, the worker's warm re-stores all of it after every refresh cycle, and
+/// the configured TTL is the backstop for the cycles that fail.
 /// </summary>
 internal sealed class PackageIndexRanker(
     IPackageRepository repo,
@@ -27,6 +28,21 @@ internal sealed class PackageIndexRanker(
         LocalCacheExpiration = TimeSpan.FromSeconds(options.Value.Caching.RankTtlSeconds),
     };
 
+    // Every (sort, order) the ranked REST path serves; `name asc` pages MongoDB directly instead.
+    private static readonly (PackageIndexSortBy SortBy, PackageIndexSortOrder Order)[] ServedSorts =
+    [
+        (PackageIndexSortBy.Name, PackageIndexSortOrder.Desc),
+        (PackageIndexSortBy.Votes, PackageIndexSortOrder.Asc),
+        (PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc),
+        (PackageIndexSortBy.Popularity, PackageIndexSortOrder.Asc),
+        (PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc),
+        (PackageIndexSortBy.Version, PackageIndexSortOrder.Asc),
+        (PackageIndexSortBy.Version, PackageIndexSortOrder.Desc)
+    ];
+
+    // Shared by the read and warm paths so the two stores of one entry cannot drift apart on tags.
+    private static readonly string[] RankTags = [AtollCacheKeys.TagCatalog];
+
     private SearchIndexData CurrentIndex => indexStore.Current;
 
     /// <summary>
@@ -39,28 +55,41 @@ internal sealed class PackageIndexRanker(
     {
         var names = (await GetNamesAsync(ct)).Names;
 
-        // Captured when the array is ranked; an index swap after that is not seen until the entry
-        // TTL expires or a write drops the tag.
+        // Captured when the array is ranked; a later index swap is only seen once the worker's warm
+        // rebuilds the entry, or a write drops the tag.
         var catalog = CurrentIndex.ByNames;
         var sorted = (await cache.GetOrCreateAsync(
             AtollCacheKeys.RankSorted(sortBy, order),
             (names, catalog, sortBy, order),
             static (state, _) => new ValueTask<RankedNames>(
-                new RankedNames(Rank(state.names, state.catalog, state.sortBy, state.order))),
+                BuildRanked(state.names, state.catalog, state.sortBy, state.order)),
             _rankOptions,
-            [AtollCacheKeys.TagCatalog],
+            RankTags,
             ct)).Names;
 
         return sorted;
     }
 
     /// <summary>
-    /// Fills the cached name list, the only ranker entry that costs a repository scan. Sorted views
-    /// stay lazily built per (sort, order).
+    ///     Rebuilds every served sorted view from the current index generation, and re-stores the
+    ///     MongoDB-backed name list to re-arm its TTL: a read hit does not extend an absolute
+    ///     expiration, so a fill-only warm would let the repository scan fall back onto a request.
+    ///     Re-arming is safe here because every <c>catalog</c> writer changes the name set.
     /// </summary>
     internal async Task PrewarmAsync(CancellationToken ct)
     {
-        await GetNamesAsync(ct);
+        var ranked = await GetNamesAsync(ct);
+        await cache.SetAsync(AtollCacheKeys.RankNames, ranked, _rankOptions, RankTags, ct);
+
+        // One generation for the whole warm, so the arrays cannot disagree across a mid-warm swap.
+        var catalog = CurrentIndex.ByNames;
+        foreach (var (sortBy, order) in ServedSorts)
+            await cache.SetAsync(
+                AtollCacheKeys.RankSorted(sortBy, order),
+                BuildRanked(ranked.Names, catalog, sortBy, order),
+                _rankOptions,
+                RankTags,
+                ct);
     }
 
     private ValueTask<RankedNames> GetNamesAsync(CancellationToken ct) =>
@@ -68,7 +97,7 @@ internal sealed class PackageIndexRanker(
             AtollCacheKeys.RankNames,
             FetchNamesAsync,
             _rankOptions,
-            [AtollCacheKeys.TagCatalog],
+            RankTags,
             ct);
 
     private async ValueTask<RankedNames> FetchNamesAsync(CancellationToken ct)
@@ -76,6 +105,13 @@ internal sealed class PackageIndexRanker(
         var names = await repo.ListAsync(ct);
         return new RankedNames([.. names]);
     }
+
+    private static RankedNames BuildRanked(
+        string[] names,
+        ImmutableDictionary<string, AurPackageMetadata> catalog,
+        PackageIndexSortBy sortBy,
+        PackageIndexSortOrder order) =>
+        new(Rank(names, catalog, sortBy, order));
 
     private static string[] Rank(
         string[] names,

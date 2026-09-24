@@ -34,14 +34,17 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    private PackageCatalogService CreateService()
+    private PackageCatalogService CreateService(int snapshotTtlSeconds = 30)
     {
         return new PackageCatalogService(
             _store,
             new SeededNamesPackageService(_seededNames),
             _securityRepository,
             TestHybridCache.New(),
-            Options.Create(new AtollOptions()));
+            Options.Create(new AtollOptions
+            {
+                Caching = new CachingOptions { SnapshotTtlSeconds = snapshotTtlSeconds }
+            }));
     }
 
     [Fact]
@@ -284,6 +287,28 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
             Assert.Equal(1, packages.ListCalls);
             Assert.Equal(["shelly-bin"], searched.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
         });
+    }
+
+    [Fact]
+    public async Task PrewarmLeavesTheSnapshotToExpireSoAnUntaggedHeadPromotionStillHeals()
+    {
+        // Unlike the ranker's warm, this one only fills. A head promoted by refresh drops no tag, so
+        // its badge heals through the snapshot's expiry; re-storing the value the way the ranker does
+        // would keep it alive indefinitely.
+        var packages = new SeededNamesPackageService(["shelly-bin"]);
+        var catalog = new PackageCatalogService(
+            _store, packages, _securityRepository, TestHybridCache.New(),
+            Options.Create(new AtollOptions
+            {
+                Caching = new CachingOptions { SnapshotTtlSeconds = 1 }
+            }));
+
+        var ct = TestContext.Current.CancellationToken;
+        await catalog.PrewarmAsync(ct);
+        await Task.Delay(1400, ct);
+        await catalog.PrewarmAsync(ct);
+
+        Assert.Equal(2, packages.ListCalls);
     }
 
     [Fact]

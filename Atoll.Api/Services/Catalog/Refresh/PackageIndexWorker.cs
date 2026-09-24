@@ -17,14 +17,15 @@ public sealed class PackageIndexWorker(
         try
         {
             await manager.InitializeAsync(stoppingToken);
-            await PrewarmCachesAsync(stoppingToken);
+            await WarmCachesAsync(stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                var refreshed = await manager.DownloadAndReloadAsync(stoppingToken);
+                var outcome = await RefreshAndWarmAsync(stoppingToken);
+
                 logger.LogDebug(
-                    "Package index refresh {RefreshResult}; waiting {RefreshInterval} until the next interval.",
-                    refreshed ? "completed" : "failed", manager.RefreshInterval);
+                    "Package index refresh {RefreshOutcome}; waiting {RefreshInterval} until the next interval.",
+                    outcome, manager.RefreshInterval);
                 await Task.Delay(manager.RefreshInterval, stoppingToken);
             }
         }
@@ -34,9 +35,25 @@ public sealed class PackageIndexWorker(
         }
     }
 
-    // Runs once, before any request: the indexed caches would otherwise be built inside a visitor's
-    // request. A failure falls back to building either of them on demand.
-    private async Task PrewarmCachesAsync(CancellationToken ct)
+    /// <summary>
+    ///     One refresh cycle plus the warm that follows it. A 304 warms too: the ranker's warm re-arms
+    ///     the TTL of everything it re-stores, so skipping unchanged cycles would let those entries run
+    ///     out into a request, and a 304 cycle can still have pruned packages. Only a failed fetch
+    ///     leaves the caches alone.
+    /// </summary>
+    internal async Task<PackageIndexRefreshOutcome> RefreshAndWarmAsync(CancellationToken ct)
+    {
+        var outcome = await manager.DownloadAndReloadAsync(ct);
+        if (outcome is not PackageIndexRefreshOutcome.Failed)
+            await WarmCachesAsync(ct);
+
+        return outcome;
+    }
+
+    // Startup and post-cycle warm, before any request has to build a view. A cycle that pruned nothing
+    // leaves the seeded snapshot and the name list as cache hits; the generation-keyed sorted views
+    // are rebuilt either way. A warm that throws leaves the caches to be built on demand.
+    private async Task WarmCachesAsync(CancellationToken ct)
     {
         try
         {
@@ -45,7 +62,7 @@ public sealed class PackageIndexWorker(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Cache prewarm after the initial index load failed; requests will build the caches on demand.");
+            logger.LogWarning(ex, "Cache warm after an index change failed; requests will build the caches on demand.");
         }
     }
 }

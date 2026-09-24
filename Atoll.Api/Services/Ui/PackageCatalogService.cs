@@ -115,9 +115,11 @@ public sealed class PackageCatalogService(
     }
 
     /// <summary>
-    /// Builds the seeded snapshot and the default sorted views ahead of any request. The snapshot is
-    /// only ever filled through the cache: it changes on writes, not on an index swap, so a swap-time
-    /// caller must get a cache hit here instead of forcing a rebuild.
+    /// Builds the seeded snapshot and the default sorted views ahead of any request. Sorted views are
+    /// keyed on the index instance, so a call after a swap rebuilds them for the new generation. The
+    /// snapshot is only ever filled, never re-stored: a refresh-promoted head drops no tag, so its
+    /// badge heals through this entry's expiry, and re-arming the TTL the way the ranker's warm does
+    /// would make that lag unbounded.
     /// </summary>
     public async Task PrewarmAsync(CancellationToken ct = default)
     {

@@ -65,7 +65,11 @@ public sealed class PackageIndexUpdater(
         }
     }
 
-    public async Task<bool> DownloadAndReloadAsync(CancellationToken cancellationToken)
+    /// <summary>
+    ///     One refresh cycle. Only <see cref="PackageIndexRefreshOutcome.Refreshed" /> means the index
+    ///     generation changed, so callers can rebuild the views derived from it.
+    /// </summary>
+    public async Task<PackageIndexRefreshOutcome> DownloadAndReloadAsync(CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _attempts);
         lock (_timeLock)
@@ -88,7 +92,7 @@ public sealed class PackageIndexUpdater(
 
                 RecordSuccess();
                 logger.LogDebug("AUR package metadata has not changed.");
-                return true;
+                return PackageIndexRefreshOutcome.NotModified;
             }
 
             var snapshot = (AurMetadataResult.Snapshot)result;
@@ -127,7 +131,7 @@ public sealed class PackageIndexUpdater(
             logger.LogInformation("Package index refreshed with {PackageCount} packages.", packages.Count);
 
             RecordSuccess();
-            return true;
+            return PackageIndexRefreshOutcome.Refreshed;
         }
         catch (Exception ex)
         {
@@ -138,7 +142,7 @@ public sealed class PackageIndexUpdater(
             }
 
             logger.LogWarning(ex, "Unable to fetch and store new package data.");
-            return false;
+            return PackageIndexRefreshOutcome.Failed;
         }
     }
 

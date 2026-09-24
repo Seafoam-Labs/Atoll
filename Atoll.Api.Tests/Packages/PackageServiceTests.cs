@@ -27,11 +27,13 @@ public class PackageServiceTests
         InMemoryPackageRepository repo,
         IPackageSecurityRepository? securityRepository = null,
         PackageIndexStore? indexStore = null,
-        HybridCache? cache = null)
+        HybridCache? cache = null,
+        int rankTtlSeconds = 30)
     {
         var options = Options.Create(new AtollOptions
         {
-            Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 }
+            Mongo = new MongoOptions { MaxFileBytes = 5_242_880, MaxRevisions = 10 },
+            Caching = new CachingOptions { RankTtlSeconds = rankTtlSeconds }
         });
         return new PackageService(repo, options, securityRepository ?? new InMemoryPackageSecurityRepository(), new PkgBuildSecurityScanner(), new GitRepositoryCache(repo, securityRepository ?? new InMemoryPackageSecurityRepository(), options, NullLogger<GitRepositoryCache>.Instance), cache ?? TestHybridCache.New(), indexStore ?? new PackageIndexStore());
     }
@@ -509,8 +511,9 @@ public class PackageServiceTests
     [Fact]
     public async Task GetIndexPageAsync_serves_the_previous_ranking_after_an_index_swap_until_a_write()
     {
-        // An index swap alone no longer drops the cached ranking, so voted keys can trail the
-        // catalog by up to the entry TTL; a seeded-set write removes the catalog tag and heals it.
+        // An index swap alone does not drop the cached ranking; the worker's swap warm is what
+        // rebuilds it (see the prewarm Theory below). A seeded-set write removes the catalog tag,
+        // the healing path this test takes.
         var repo = new InMemoryPackageRepository();
         var store = await CreateIndexStoreAsync(
             """
@@ -545,6 +548,107 @@ public class PackageServiceTests
             Assert.Equal(new[] { "s-b", "s-a" }, stale.Items.Select(item => item.Name), StringComparer.Ordinal);
             Assert.Equal(new[] { "s-a", "s-b", "s-c" }, healed.Items.Select(item => item.Name), StringComparer.Ordinal);
         });
+    }
+
+    private const string FirstGeneration =
+        """
+        [
+          { "Name": "x-a", "NumVotes": 1, "Popularity": 1.0, "Version": "1.0" },
+          { "Name": "x-b", "NumVotes": 2, "Popularity": 2.0, "Version": "2.0" },
+          { "Name": "x-c", "NumVotes": 3, "Popularity": 3.0, "Version": "3.0" }
+        ]
+        """;
+
+    private const string SecondGeneration =
+        """
+        [
+          { "Name": "x-a", "NumVotes": 3, "Popularity": 3.0, "Version": "3.0" },
+          { "Name": "x-b", "NumVotes": 2, "Popularity": 2.0, "Version": "2.0" },
+          { "Name": "x-c", "NumVotes": 1, "Popularity": 1.0, "Version": "1.0" }
+        ]
+        """;
+
+    [Theory]
+    [InlineData(PackageIndexSortBy.Votes, PackageIndexSortOrder.Asc)]
+    [InlineData(PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc)]
+    [InlineData(PackageIndexSortBy.Popularity, PackageIndexSortOrder.Asc)]
+    [InlineData(PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc)]
+    [InlineData(PackageIndexSortBy.Version, PackageIndexSortOrder.Asc)]
+    [InlineData(PackageIndexSortBy.Version, PackageIndexSortOrder.Desc)]
+    public async Task PrewarmAsync_rebuilds_every_keyed_ranking_after_an_index_swap(
+        PackageIndexSortBy sortBy, PackageIndexSortOrder order)
+    {
+        // Each request before the swap builds the pair's cached array from the first generation; the
+        // swap plus Prewarm must replace it, or the same request would still serve the old ordering.
+        // The name sorts are absent because a swap cannot change the Mongo-backed names, so their
+        // rebuild has no observable effect.
+        var repo = new InMemoryPackageRepository();
+        var store = await CreateIndexStoreAsync(FirstGeneration);
+        var service = CreateService(repo, indexStore: store);
+
+        foreach (var name in new[] { "x-a", "x-b", "x-c" })
+            await service.SeedFilesAsync(name, SampleFiles);
+
+        var ct = TestContext.Current.CancellationToken;
+        var before = await service.GetIndexPageAsync(1, 10, sortBy, order, ct);
+
+        store.Replace(await LoadIndexAsync(SecondGeneration));
+        await service.PrewarmAsync(ct);
+        var after = await service.GetIndexPageAsync(1, 10, sortBy, order, ct);
+
+        var ascending = order is PackageIndexSortOrder.Asc;
+        var expectedBefore = ascending ? new[] { "x-a", "x-b", "x-c" } : new[] { "x-c", "x-b", "x-a" };
+        var expectedAfter = ascending ? new[] { "x-c", "x-b", "x-a" } : new[] { "x-a", "x-b", "x-c" };
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(expectedBefore, before.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(expectedAfter, after.Items.Select(item => item.Name), StringComparer.Ordinal);
+
+            // The swap warm re-ranks; the seeded names come from Mongo and are not rescanned.
+            Assert.Equal(1, repo.ListCalls);
+        });
+    }
+
+    [Fact]
+    public async Task A_seeded_write_evicts_the_ranked_views_stored_by_the_swap_warm()
+    {
+        // The warm stores the sorted arrays with SetAsync; the catalog tag must cover those stores
+        // exactly as it covers factory-built ones, or a seed would leave them stale for a TTL.
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo);
+        await service.SeedFilesAsync("g-a", SampleFiles);
+
+        var ct = TestContext.Current.CancellationToken;
+        await service.PrewarmAsync(ct);
+        var warmed = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
+
+        await service.SeedFilesAsync("g-b", SampleFiles);
+        var afterWrite = await service.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(new[] { "g-a" }, warmed.Items.Select(item => item.Name), StringComparer.Ordinal);
+            Assert.Equal(new[] { "g-a", "g-b" }, afterWrite.Items.Select(item => item.Name), StringComparer.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task PrewarmAsync_rearms_the_name_list_so_repeated_warms_outlive_the_ttl()
+    {
+        // Every warm lands well inside the 2 s TTL, so filling alone would still let the entry expire
+        // on its own clock and hand the repository scan to the next request. The re-store carries it.
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo, rankTtlSeconds: 2);
+        await service.SeedFilesAsync("r-a", SampleFiles);
+
+        var ct = TestContext.Current.CancellationToken;
+        await service.PrewarmAsync(ct);
+        await Task.Delay(1200, ct);
+        await service.PrewarmAsync(ct);
+        await Task.Delay(1200, ct);
+        await service.PrewarmAsync(ct);
+
+        Assert.Equal(1, repo.ListCalls);
     }
 
     [Fact]

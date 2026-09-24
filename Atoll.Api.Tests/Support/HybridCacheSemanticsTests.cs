@@ -54,6 +54,52 @@ public class HybridCacheSemanticsTests
         });
     }
 
+    // Measured: expiration is absolute, so a periodic warm that only reads does not keep an entry
+    // alive; the entry dies on its own clock and the next reader pays the factory. Storing the value
+    // back is what moves the expiry, which is what the ranker's warm relies on.
+    [Fact]
+    public async Task Expiration_is_absolute_and_only_a_re_store_extends_it()
+    {
+        var cache = TestHybridCache.New();
+        var ttl = TimeSpan.FromMilliseconds(2000);
+        var options = new HybridCacheEntryOptions { Expiration = ttl, LocalCacheExpiration = ttl };
+        var hitBuilds = 0;
+        var reStoredBuilds = 0;
+
+        ValueTask<string> HitAsync(CancellationToken _)
+        {
+            hitBuilds++;
+            return new ValueTask<string>("hit");
+        }
+
+        ValueTask<string> ReStoredAsync(CancellationToken _)
+        {
+            reStoredBuilds++;
+            return new ValueTask<string>("re-stored");
+        }
+
+        // Read at 1200 ms is a hit and leaves the 2000 ms expiry alone, so the 2400 ms read rebuilds.
+        await cache.GetOrCreateAsync("hit", HitAsync, options, ["catalog"], Ct);
+        await Task.Delay(1200, Ct);
+        await cache.GetOrCreateAsync("hit", HitAsync, options, ["catalog"], Ct);
+        await Task.Delay(1200, Ct);
+        await cache.GetOrCreateAsync("hit", HitAsync, options, ["catalog"], Ct);
+
+        // Same shape, but the 1200 ms read stores the value back, moving the expiry to 3200 ms.
+        await cache.GetOrCreateAsync("re-stored", ReStoredAsync, options, ["catalog"], Ct);
+        await Task.Delay(1200, Ct);
+        var value = await cache.GetOrCreateAsync("re-stored", ReStoredAsync, options, ["catalog"], Ct);
+        await cache.SetAsync("re-stored", value, options, ["catalog"], Ct);
+        await Task.Delay(1200, Ct);
+        await cache.GetOrCreateAsync("re-stored", ReStoredAsync, options, ["catalog"], Ct);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(2, hitBuilds);
+            Assert.Equal(1, reStoredBuilds);
+        });
+    }
+
     // Measured: an already-cancelled caller token throws before the factory runs, so a cached read
     // needs no ThrowIfCancellationRequested prologue of its own.
     [Fact]

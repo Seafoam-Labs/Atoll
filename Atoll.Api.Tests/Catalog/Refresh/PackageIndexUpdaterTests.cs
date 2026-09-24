@@ -45,12 +45,12 @@ public class PackageIndexUpdaterTests
             NullLogger<PackageIndexUpdater>.Instance,
             InertReconciler());
 
-        var ok = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
+        var outcome = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
         var status = coordinator.GetStatus();
 
         Assert.Multiple(() =>
         {
-            Assert.False(ok);
+            Assert.Equal(PackageIndexRefreshOutcome.Failed, outcome);
             Assert.Equal(1, status.Attempts);
             Assert.Equal(0, status.Successes);
             Assert.Equal(1, status.Failures);
@@ -88,8 +88,9 @@ public class PackageIndexUpdaterTests
 
         Assert.Multiple(() =>
         {
-            Assert.True(first);
-            Assert.True(second);
+            // The 304 cycle must not read as a swap: only a new generation warms the derived views.
+            Assert.Equal(PackageIndexRefreshOutcome.Refreshed, first);
+            Assert.Equal(PackageIndexRefreshOutcome.NotModified, second);
             Assert.True(handler.SawConditionalRequest);
             Assert.Equivalent(new[] { "demo" }, store.Current.ByNames.Keys, strict: true);
             Assert.Equal(2, status.Attempts);
@@ -120,13 +121,13 @@ public class PackageIndexUpdaterTests
             NullLogger<PackageIndexUpdater>.Instance,
             InertReconciler());
 
-        var ok = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
+        var outcome = await coordinator.DownloadAndReloadAsync(CancellationToken.None);
         var status = coordinator.GetStatus();
         var retained = await aurMetadata.LoadAsync(CancellationToken.None);
 
         Assert.Multiple(() =>
         {
-            Assert.False(ok);
+            Assert.Equal(PackageIndexRefreshOutcome.Failed, outcome);
             Assert.Equal(1, status.Failures);
             Assert.Equivalent(new[] { "demo" }, store.Current.ByNames.Keys, strict: true);
             Assert.Equivalent(new[] { "demo" }, retained.Select(p => p.Name), strict: true);
@@ -160,19 +161,23 @@ public class PackageIndexUpdaterTests
             NullLogger<PackageIndexUpdater>.Instance,
             reconciler);
 
-        Assert.True(await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Equal(PackageIndexRefreshOutcome.Refreshed,
+            await coordinator.DownloadAndReloadAsync(CancellationToken.None));
         Assert.Empty(packages.Deleted);
 
-        Assert.True(await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Equal(PackageIndexRefreshOutcome.Refreshed,
+            await coordinator.DownloadAndReloadAsync(CancellationToken.None));
         Assert.Empty(packages.Deleted);
 
         // The archive re-answers the retained old validators with 304; that is not the
         // confirmation download, so pruning must stay deferred.
-        Assert.True(await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Equal(PackageIndexRefreshOutcome.NotModified,
+            await coordinator.DownloadAndReloadAsync(CancellationToken.None));
         Assert.Empty(packages.Deleted);
         Assert.Equal("\"v1\"", handler.SeenValidators[2]!.Tag);
 
-        Assert.True(await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Equal(PackageIndexRefreshOutcome.Refreshed,
+            await coordinator.DownloadAndReloadAsync(CancellationToken.None));
         Assert.Multiple(() =>
         {
             Assert.Equivalent(new[] { "p10", "p6", "p7", "p8", "p9" }, packages.Deleted, strict: true);
