@@ -183,6 +183,16 @@ resource "aws_ecs_task_definition" "app" {
           # Process both proxy hops to restore the client IP.
           name  = "Atoll__Proxy__ForwardLimit"
           value = "2"
+        },
+        {
+          # TTL backstops for the ranked-name and catalog-snapshot caches. They sit above the 5-minute
+          # index swap cadence and are warmed at startup, so a warm entry does not expire into a request.
+          name  = "Atoll__Caching__RankTtlSeconds"
+          value = "600"
+        },
+        {
+          name  = "Atoll__Caching__SnapshotTtlSeconds"
+          value = "600"
         }
       ]
       secrets = [

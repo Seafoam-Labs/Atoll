@@ -10,6 +10,7 @@ public interface IPackageService
         PackageIndexSortBy sortBy = PackageIndexSortBy.Name,
         PackageIndexSortOrder? order = null,
         CancellationToken ct = default);
+    Task PrewarmAsync(CancellationToken ct = default);
     Task<bool> ExistsAsync(string packageName, CancellationToken ct = default);
     Task<PackageFiles> GetAsync(string packageName, string? commitSha = null);
     Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName);

@@ -312,6 +312,9 @@ public class PackageIndexUpdaterTests
             CancellationToken ct = default)
             => throw new NotSupportedException();
 
+        public Task PrewarmAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+
         public Task DeleteAsync(string packageName, CancellationToken ct = default)
         {
             _seeded.Remove(packageName);

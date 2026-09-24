@@ -81,6 +81,15 @@ public sealed class PackageCatalogService(
     private readonly ConditionalWeakTable<SearchIndexData, ConcurrentDictionary<CatalogSort, AurPackageMetadata[]>>
         _sortedViews = new();
 
+    // The UI's default direction per sortable column; the prewarm primes exactly these views.
+    private static readonly CatalogSort[] DefaultSorts =
+    [
+        CatalogSort.NameAsc,
+        CatalogSort.VotesDesc,
+        CatalogSort.PopularityDesc,
+        CatalogSort.LastModifiedDesc
+    ];
+
     public async Task<CatalogResult> SearchAsync(
         string? query,
         CatalogSeededFilter seededFilter,
@@ -103,6 +112,20 @@ public sealed class PackageCatalogService(
         return page > result.TotalPages
             ? CollectPage(sorted, matches, seededFilter, securityFilter, snapshot, result.TotalPages)
             : result;
+    }
+
+    /// <summary>
+    /// Builds the seeded snapshot and the default sorted views ahead of any request. The snapshot is
+    /// only ever filled through the cache: it changes on writes, not on an index swap, so a swap-time
+    /// caller must get a cache hit here instead of forcing a rebuild.
+    /// </summary>
+    public async Task PrewarmAsync(CancellationToken ct = default)
+    {
+        await GetSeededSnapshotAsync(ct);
+
+        var index = indexStore.Current;
+        foreach (var sort in DefaultSorts)
+            _ = GetSortedPackages(index, sort);
     }
 
     private static CatalogResult CollectPage(

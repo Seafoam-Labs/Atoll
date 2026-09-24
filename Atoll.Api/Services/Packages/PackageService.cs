@@ -93,6 +93,11 @@ public sealed class PackageService(
         return new PackageIndexResponse(EnrichWithCatalog(ordered, catalog), page, limit, rankedTotal, rankedPages);
     }
 
+    public Task PrewarmAsync(CancellationToken ct = default)
+    {
+        return _ranker.PrewarmAsync(ct);
+    }
+
     private static PackageIndexEntry[] EnrichWithCatalog(
         IReadOnlyList<PackageIndexEntry> items,
         ImmutableDictionary<string, AurPackageMetadata> catalog)

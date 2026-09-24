@@ -7,6 +7,9 @@ internal sealed class SeededNamesPackageService(IReadOnlyList<string> seededName
     /// <summary>Counts calls so tests can pin snapshot caching.</summary>
     internal int ListCalls { get; private set; }
 
+    /// <summary>Counts start-up prewarm calls; the fake has no ranker to fill.</summary>
+    internal int PrewarmCalls { get; private set; }
+
     public Task<IReadOnlyList<string>> ListAsync()
     {
         ListCalls++;
@@ -25,6 +28,12 @@ internal sealed class SeededNamesPackageService(IReadOnlyList<string> seededName
         PackageIndexSortOrder? order = null,
         CancellationToken ct = default)
         => throw new NotSupportedException();
+
+    public Task PrewarmAsync(CancellationToken ct = default)
+    {
+        PrewarmCalls++;
+        return Task.CompletedTask;
+    }
 
     public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
         => throw new NotSupportedException();

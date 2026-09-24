@@ -264,6 +264,29 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PrewarmBuildsTheSnapshotAheadOfTheFirstSearch()
+    {
+        var packages = new SeededNamesPackageService(["shelly-bin"]);
+        var catalog = new PackageCatalogService(
+            _store, packages, _securityRepository, TestHybridCache.New(), Options.Create(new AtollOptions()));
+
+        var ct = TestContext.Current.CancellationToken;
+        await catalog.PrewarmAsync(ct);
+        await catalog.PrewarmAsync(ct);
+
+        // Filled once and then reused, so a swap-time prewarm does not rescan the repository.
+        Assert.Equal(1, packages.ListCalls);
+
+        var searched = await SearchSeededAsync(catalog, ct);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(1, packages.ListCalls);
+            Assert.Equal(["shelly-bin"], searched.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task VotesDescendingSortOrdersByVotes()
     {
         var result = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, ct: TestContext.Current.CancellationToken);

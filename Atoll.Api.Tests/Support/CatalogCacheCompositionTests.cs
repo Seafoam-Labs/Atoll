@@ -75,6 +75,20 @@ public class CatalogCacheCompositionTests
     }
 
     [Fact]
+    public async Task Prewarming_the_ranker_covers_the_first_sorted_page()
+    {
+        await using var factory = new SecurityTestFactory();
+        var packages = factory.Services.GetRequiredService<IPackageService>();
+        var ct = TestContext.Current.CancellationToken;
+        var listsBefore = factory.Repository.ListCalls;
+
+        await packages.PrewarmAsync(ct);
+        await packages.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
+
+        Assert.Equal(1, factory.Repository.ListCalls - listsBefore);
+    }
+
+    [Fact]
     public void The_host_raises_the_payload_cap_above_the_stock_default()
     {
         // The ranker stores full-corpus name arrays (~2.5 MB at 119k names). The stock 1 MB cap does

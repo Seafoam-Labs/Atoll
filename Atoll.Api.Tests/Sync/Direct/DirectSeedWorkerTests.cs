@@ -33,6 +33,9 @@ public class DirectSeedWorkerTests
             CancellationToken ct = default)
             => throw new NotSupportedException();
 
+        public Task PrewarmAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => Task.FromResult(seededNames.Contains(packageName, StringComparer.Ordinal) || SeedCalls.Contains(packageName));
 

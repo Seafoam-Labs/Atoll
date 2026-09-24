@@ -259,6 +259,9 @@ public class StatusDashboardServiceTests
             CancellationToken ct = default)
             => throw new NotSupportedException();
 
+        public Task PrewarmAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)
             => throw new NotSupportedException();
 
@@ -294,6 +297,9 @@ public class StatusDashboardServiceTests
             PackageIndexSortBy sortBy = PackageIndexSortBy.Name,
             PackageIndexSortOrder? order = null,
             CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task PrewarmAsync(CancellationToken ct = default)
             => throw new NotSupportedException();
 
         public Task<bool> ExistsAsync(string packageName, CancellationToken ct = default)

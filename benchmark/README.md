@@ -146,9 +146,10 @@ while raising `SORT_RATE`, against
 [`results/2026-09-19-docker-local-2g-rebaseline.md`](results/2026-09-19-docker-local-2g-rebaseline.md);
 the 2026-09-08 runs predate the bound and are not comparable for this scenario.
 
-A `SORT_RATE` below about 1/s is a contract check, not a latency check: with the
-30 s view TTL every arrival then pays a cold rebuild, so `catalog_sorted`
-crosses its threshold by construction (the smoke profile above does this).
+A `SORT_RATE` below about 1/s is a contract check, not a latency check: the
+cached views carry a 600 s TTL backstop, so after the first arrival a slow run
+only serves warm pages; restart the stack to price a cold rebuild (the smoke
+profile above runs at 0.1/s).
 
 ### Excluded from the workload
 

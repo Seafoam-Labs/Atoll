@@ -37,12 +37,7 @@ internal sealed class PackageIndexRanker(
         PackageIndexSortOrder order,
         CancellationToken ct)
     {
-        var names = (await cache.GetOrCreateAsync(
-            AtollCacheKeys.RankNames,
-            FetchNamesAsync,
-            _rankOptions,
-            [AtollCacheKeys.TagCatalog],
-            ct)).Names;
+        var names = (await GetNamesAsync(ct)).Names;
 
         // Captured when the array is ranked; an index swap after that is not seen until the entry
         // TTL expires or a write drops the tag.
@@ -58,6 +53,23 @@ internal sealed class PackageIndexRanker(
 
         return sorted;
     }
+
+    /// <summary>
+    /// Fills the cached name list, the only ranker entry that costs a repository scan. Sorted views
+    /// stay lazily built per (sort, order).
+    /// </summary>
+    internal async Task PrewarmAsync(CancellationToken ct)
+    {
+        await GetNamesAsync(ct);
+    }
+
+    private ValueTask<RankedNames> GetNamesAsync(CancellationToken ct) =>
+        cache.GetOrCreateAsync(
+            AtollCacheKeys.RankNames,
+            FetchNamesAsync,
+            _rankOptions,
+            [AtollCacheKeys.TagCatalog],
+            ct);
 
     private async ValueTask<RankedNames> FetchNamesAsync(CancellationToken ct)
     {
