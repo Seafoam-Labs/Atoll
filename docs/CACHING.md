@@ -17,8 +17,9 @@ a request. The two warms differ on purpose:
 - The ranker re-stores the name list and every served sorted array, re-ranked from the current index generation,
   so its entries live as long as the worker keeps cycling. That is safe because every `catalog` writer changes the
   name set, so nothing there depends on expiry to heal.
-- The catalog only fills the seeded snapshot and primes the default sorts. A head promoted by refresh drops no
-  tag, so its badge heals through the snapshot's expiry, and re-arming that expiry would make the lag unbounded.
+- The catalog only fills the seeded snapshot and primes the default sorts. No write drops the snapshot's
+  head-status data (the `head-status` tag was removed on 2026-09-24), so badges heal through the snapshot's expiry,
+  and re-arming that expiry would make the lag unbounded.
   The sorted views need no re-arm: they are keyed on the index instance, so a swap drops them structurally and the
   warm rebuilds them.
 
@@ -29,7 +30,7 @@ a request. The two warms differ on purpose:
 | 1 | Search index snapshot | `PackageIndexStore` (`Services/Catalog/Indexing/`) | Whole AUR catalog as `SearchIndexData` (`ByNames`, `ByProvides`, `ByWords`) | Startup prime from the `aur-metadata` collection, then an atomic swap every `Atoll:DataSource:RefreshIntervalMinutes` (default 5) | Refresh interval; indefinite while dump downloads fail (the last good snapshot is kept) |
 | 2 | Ranked name views | `PackageIndexRanker` (`Services/Packages/`) | Seeded name list plus one sorted name array per (sort, order) | HybridCache keys `atoll.rank.names` and `atoll.rank.sorted/{sort}/{order}` under the `catalog` tag only: seed/delete drop it; the worker's warm re-stores all of them after every refresh cycle; `Atoll:Caching:RankTtlSeconds` is the backstop for the cycles that fail | About two TTLs when a write races an in-flight store; otherwise bounded by tag drops alone, since the warm re-arms the TTL every cycle |
 | 3 | Catalog sorted views | `PackageCatalogService._sortedViews` (UI) | `AurPackageMetadata[]` pre-sorted for each catalog sort, keyed on the index instance | Rebuilt per index generation; primed after each swap by the worker's warm; dropped structurally when the replaced `SearchIndexData` becomes unreachable | Same as #1; the default sorts are rebuilt off the request path by the warm |
-| 4 | Catalog seeded snapshot | `PackageCatalogService` (UI) | `FrozenSet` of seeded names plus a `FrozenDictionary` of head scan statuses | HybridCache key `atoll.ui.seeded-snapshot` under both `catalog` and `head-status`: seed/delete drop `catalog`; a queued head rescan and a completed or errored head scan drop `head-status`; the worker's warm fills it without re-arming, so the TTL keeps running | Immediate for seeds, deletes, rescans, and scan completions; for a refresh-promoted head, up to one TTL (600 s) of stale badge display, accepted because access gating reads live statuses; a build racing a tag removal serves its pre-write value for up to one TTL |
+| 4 | Catalog seeded snapshot | `PackageCatalogService` (UI) | `FrozenSet` of seeded names plus a `FrozenDictionary` of head scan statuses | HybridCache key `atoll.ui.seeded-snapshot` under the `catalog` tag only: seed/delete drop `catalog`; head-status changes (a queued rescan, a completed or errored head scan, a refresh-promoted head) drop nothing and heal through the TTL; the worker's warm fills it without re-arming, so the TTL keeps running | Immediate for seeds and deletes; up to one TTL (600 s) of stale badge display for any head-status change, accepted because access gating reads live statuses; a build racing a tag removal serves its pre-write value for up to one TTL |
 | 5 | Status dashboard model | `StatusDashboardService` (UI) | One assembled `StatusDashboardModel` | HybridCache key `atoll.ui.status-dashboard`, no tags, `Atoll:Caching:DashboardTtlSeconds` TTL, single-flight | One TTL |
 | 6 | Git bare repos | `GitRepositoryCache` under `Atoll:Git:RepositoriesPath` (`data/repos/`) | Materialized cloneable history per package | The `.atoll-head` marker is recomputed from MongoDB on every Git request; a mismatch rebuilds lazily under a per-path lock | None (checked per request); changes cost a rebuild inside request latency |
 | 7 | AUR mirror | `AurMirror` under `Atoll:Seed:Bulk:CachePath` / `Atoll:Refresh:CachePath` (`data/aur-mirror/`) | Bare shallow mirror, refs under `refs/atoll/<pkgbase>` | Shared by bulk seeding and refresh; a pkgbase is fetched again when its upstream SHA moves or the `MaxStalenessHours` (24 h) sweep fires | Refresh cadence, up to 24 h |
@@ -47,17 +48,16 @@ mistaken for them: `AurGitPackageSource` clones into a temp directory per direct
 The keyed caches (#2, #4, #5) share one pattern: `GetOrCreateAsync` with keys from `AtollCacheKeys`, TTLs from
 `Atoll:Caching`, and tag removals through `HybridCache.RemoveByTagAsync` directly. There is no wrapper method.
 
-- **Rule of thumb:** writes that change seeded names drop `catalog`; writes that change a head's scan status drop
-  `head-status`, guarded on `isHead` (a non-head revision can change neither). The catalog snapshot carries both
-  tags; the ranked name views carry only `catalog`, so status writes never re-rank warm pages.
-- **Drop sites:** `PackageService.SeedFilesAsync` and `DeleteAsync` drop `catalog`;
-  `PackageSecurityStatusService.QueueRescanAsync` (the UI rescan button and REST alike) and `PackageSecurityWorker`
-  after a completed or errored head scan drop `head-status`.
-- **Deliberately not invalidated:** `AppendRevisionFromUpstreamAsync` promotes heads without a tag drop, because
-  refresh appends in long bursts and the scan following each append drops `head-status` anyway, so those heads ride
-  the snapshot TTL (up to 600 s; the badge lags, access gating does not). Scan completions that store nothing (the
-  revision is gone, or the claim turned out stale) do not invalidate either. `RequeueOutdatedAsync` and the startup
-  backfill flip many statuses while the cache is cold.
+- **Rule of thumb:** writes that change seeded names drop `catalog`; nothing drops `head-status` any more. The
+  `head-status` tag was removed on 2026-09-24: every completed head scan dropped it, re-arming a ~4 s snapshot
+  rebuild for the next visitor on a near-zero-traffic site (measured live during the first-load work). Head-status
+  changes now ride the snapshot TTL on purpose. The ranked name views carry only `catalog`, so status writes never
+  re-rank warm pages.
+- **Drop sites:** `PackageService.SeedFilesAsync` and `DeleteAsync` drop `catalog`.
+- **Deliberately not invalidated:** every head-status change, not just a refresh-promoted head: a queued rescan and
+  a completed or errored scan heal through the snapshot TTL too (up to 600 s; the badge lags, access gating does
+  not). Scan completions that store nothing (the revision is gone, or the claim turned out stale) changed nothing
+  anyway. `RequeueOutdatedAsync` and the startup backfill flip many statuses while the cache is cold.
 - **Last-wins merge:** a head promotion leaves two `isHead` documents for one package until the old head is demoted,
   so the snapshot's head-status merge is deliberately last-wins instead of a duplicate-key throw.
 
@@ -65,9 +65,6 @@ Accepted behaviors to know before changing this:
 
 - A tag removal cannot cancel an in-flight factory: a build racing the removal stores its pre-write value and serves
   it for up to one TTL.
-- `head-status` drops are unthrottled, so a scan sweep with sustained catalog reads rebuilds the snapshot at the
-  head-completion rate (two collection reads per rebuild). A time-floor guard is the known follow-up if load shows
-  it.
 - On the ranked paths a store racing a tag removal can serve stale membership for about two TTLs, since a sorted
   entry can be built late in the window from stale cached names.
 - The warm's stores (`SetAsync`) cannot cancel an in-flight build or a concurrent write: a request that captured

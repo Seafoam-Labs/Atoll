@@ -117,8 +117,8 @@ public sealed class PackageCatalogService(
     /// <summary>
     /// Builds the seeded snapshot and the default sorted views ahead of any request. Sorted views are
     /// keyed on the index instance, so a call after a swap rebuilds them for the new generation. The
-    /// snapshot is only ever filled, never re-stored: a refresh-promoted head drops no tag, so its
-    /// badge heals through this entry's expiry, and re-arming the TTL the way the ranker's warm does
+    /// snapshot is only ever filled, never re-stored: no write drops its head-status data, so badges
+    /// heal through this entry's expiry, and re-arming the TTL the way the ranker's warm does
     /// would make that lag unbounded.
     /// </summary>
     public async Task PrewarmAsync(CancellationToken ct = default)
@@ -287,14 +287,14 @@ public sealed class PackageCatalogService(
         };
     }
 
-    // A build already in flight stores its result after a tag removal, so a racing head-status write
-    // can stay hidden for up to one TTL.
+    // A build already in flight stores its result after a tag removal, so a racing write can stay
+    // hidden for up to one TTL.
     private ValueTask<SeededSnapshot> GetSeededSnapshotAsync(CancellationToken ct) =>
         cache.GetOrCreateAsync(
             AtollCacheKeys.SeededSnapshot,
             BuildSnapshotAsync,
             _snapshotOptions,
-            [AtollCacheKeys.TagCatalog, AtollCacheKeys.TagHeadStatus],
+            [AtollCacheKeys.TagCatalog],
             ct);
 
     private async ValueTask<SeededSnapshot> BuildSnapshotAsync(CancellationToken ct)

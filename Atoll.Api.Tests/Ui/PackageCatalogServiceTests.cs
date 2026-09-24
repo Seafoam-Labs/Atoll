@@ -207,11 +207,11 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         packages.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
 
     [Fact]
-    public async Task HeadRescanRebuildsTheSnapshotWithoutReListingTheRankedNames()
+    public async Task HeadRescanLeavesTheSnapshotToExpireWithoutReListingTheRankedNames()
     {
         // One cache shared by the ranker's writer, the catalog, and the rescan queue, as in the
-        // host: the snapshot carries both tags, the ranker only <c>catalog</c>, so a head rescan
-        // must refresh the former and leave the latter warm.
+        // host: the snapshot carries only <c>catalog</c>, so a head rescan invalidates nothing;
+        // the list badge heals through the snapshot's expiry and the ranker stays warm.
         var cache = TestHybridCache.New();
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
@@ -229,7 +229,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
             cache,
             _store);
         var catalog = new PackageCatalogService(_store, packageService, security, cache, options);
-        var status = new PackageSecurityStatusService(repo, security, scanner, cache);
+        var status = new PackageSecurityStatusService(repo, security, scanner);
 
         var ct = TestContext.Current.CancellationToken;
         await packageService.SeedFilesAsync("shelly-bin", new Dictionary<string, string>(StringComparer.Ordinal)
@@ -251,18 +251,13 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
 
         await status.QueueRescanAsync("shelly-bin", ct: ct);
 
+        var stale = await SearchSeededAsync(catalog, ct);
         var stillWarm = await SortedPageAsync(packageService, ct);
         Assert.Multiple(() =>
         {
             Assert.Equal(2, repo.ListCalls);
+            Assert.Equal(SecurityStatus.Verified, stale.Rows.Single().Head!.Status);
             Assert.Equal(["shelly-bin"], stillWarm.Items.Select(item => item.Name), StringComparer.Ordinal);
-        });
-
-        var rebuilt = await SearchSeededAsync(catalog, ct);
-        Assert.Multiple(() =>
-        {
-            Assert.Equal(3, repo.ListCalls);
-            Assert.Equal(SecurityStatus.Pending, rebuilt.Rows.Single().Head!.Status);
         });
     }
 

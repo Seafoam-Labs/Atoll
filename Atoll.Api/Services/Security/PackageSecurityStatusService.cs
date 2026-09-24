@@ -1,7 +1,5 @@
-using Atoll.Api.Services.Caching;
 using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security.Persistence;
-using Microsoft.Extensions.Caching.Hybrid;
 
 namespace Atoll.Api.Services.Security;
 
@@ -12,8 +10,7 @@ namespace Atoll.Api.Services.Security;
 public sealed class PackageSecurityStatusService(
     IPackageRepository packages,
     IPackageSecurityRepository security,
-    IPackageSecurityScanner scanner,
-    HybridCache cache)
+    IPackageSecurityScanner scanner)
 {
     public async Task<PackageSecurityHistoryResponse?> GetHistoryAsync(
         string packageName,
@@ -85,8 +82,6 @@ public sealed class PackageSecurityStatusService(
 
         var isHead = string.Equals(revision, package.HeadRevisionId, StringComparison.Ordinal);
         await security.MarkPendingAsync(packageName, revision, isHead, scanner.PolicyVersion, ct);
-        if (isHead)
-            await cache.RemoveByTagAsync(AtollCacheKeys.TagHeadStatus, ct);
 
         return revision;
     }

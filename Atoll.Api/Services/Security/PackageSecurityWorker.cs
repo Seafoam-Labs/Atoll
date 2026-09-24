@@ -1,6 +1,4 @@
-using Atoll.Api.Services.Caching;
 using Atoll.Api.Services.Security.Persistence;
-using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
 using Atoll.Api.Services.Packages.Persistence;
 
@@ -12,7 +10,6 @@ public sealed partial class PackageSecurityWorker(
     IPackageSecurityScanner scanner,
     SecurityScanStatusStore status,
     IOptions<AtollOptions> options,
-    HybridCache cache,
     ILogger<PackageSecurityWorker> logger)
     : BackgroundService
 {
@@ -150,8 +147,6 @@ public sealed partial class PackageSecurityWorker(
             }
 
             status.RecordScanCompleted(result.Status);
-            if (claim.IsHead)
-                await cache.RemoveByTagAsync(AtollCacheKeys.TagHeadStatus, ct);
 
             if (result.Status == SecurityStatus.Flagged)
                 LogScanFlagged(logger, claim.PackageName, claim.RevisionId, result.Findings.Count);
@@ -170,8 +165,6 @@ public sealed partial class PackageSecurityWorker(
             if (await TryMarkScanErrorAsync(claim))
             {
                 status.RecordScanErrored();
-                if (claim.IsHead)
-                    await cache.RemoveByTagAsync(AtollCacheKeys.TagHeadStatus, CancellationToken.None);
             }
             else
             {

@@ -35,7 +35,7 @@ public class CatalogCacheCompositionTests
     }
 
     [Fact]
-    public async Task A_rest_rescan_through_the_host_refreshes_the_catalog_snapshot()
+    public async Task A_rest_rescan_through_the_host_leaves_the_catalog_snapshot_to_its_ttl()
     {
         await using var factory = new SecurityTestFactory();
         var catalog = factory.Services.GetRequiredService<PackageCatalogService>();
@@ -49,7 +49,7 @@ public class CatalogCacheCompositionTests
         });
         await factory.SecurityRepository.MarkHeadVerifiedAsync("shelly-bin");
 
-        // Warms the snapshot, so only an invalidation can flip the reported head status.
+        // Warms the snapshot with a Verified head.
         Assert.Equal(SecurityStatus.Verified, (await SearchSeededAsync(catalog, ct)).Rows.Single().Head!.Status);
 
         // No worker runs under this factory, so nothing scans the queued revision back.
@@ -57,7 +57,9 @@ public class CatalogCacheCompositionTests
             .PostAsync("/v1/packages/shelly-bin/security/rescan", null, ct);
         response.EnsureSuccessStatusCode();
 
-        Assert.Equal(SecurityStatus.Pending, (await SearchSeededAsync(catalog, ct)).Rows.Single().Head!.Status);
+        // The snapshot carries only the catalog tag: the rescan invalidates nothing, so the badge
+        // stays stale until the snapshot's TTL heals it.
+        Assert.Equal(SecurityStatus.Verified, (await SearchSeededAsync(catalog, ct)).Rows.Single().Head!.Status);
     }
 
     [Fact]

