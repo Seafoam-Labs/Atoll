@@ -131,38 +131,14 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
                 { "verbosity", "executionStats" }
             }), cancellationToken: TestContext.Current.CancellationToken);
 
-        var stages = ValuesNamed(explain, "stage").Select(value => value.AsString).ToArray();
-        var docsExamined = ValuesNamed(explain, "totalDocsExamined").Sum(value => value.ToInt64());
+        var stages = BsonValues.Named(explain, "stage").Select(value => value.AsString).ToArray();
+        var docsExamined = BsonValues.Named(explain, "totalDocsExamined").Sum(value => value.ToInt64());
 
         Assert.Multiple(() =>
         {
             Assert.Contains("PROJECTION_COVERED", stages, StringComparer.Ordinal);
             Assert.Equal(0, docsExamined);
         });
-    }
-
-    private static IEnumerable<BsonValue> ValuesNamed(BsonValue node, string name)
-    {
-        switch (node)
-        {
-            case BsonDocument document:
-            {
-                foreach (var element in document)
-                {
-                    if (string.Equals(element.Name, name, StringComparison.Ordinal)) yield return element.Value;
-                    foreach (var nested in ValuesNamed(element.Value, name)) yield return nested;
-                }
-
-                break;
-            }
-            case BsonArray array:
-            {
-                foreach (var item in array)
-                foreach (var nested in ValuesNamed(item, name)) yield return nested;
-
-                break;
-            }
-        }
     }
 
     [Fact]

@@ -20,8 +20,11 @@ public sealed class MongoPackageRepository : IPackageRepository
 
     public async Task<IReadOnlyList<string>> ListAsync(CancellationToken ct = default)
     {
+        // Sorting on the scanned key lets the planner pick the covered packageName_1 index scan
+        // instead of the COLLSCAN the empty filter alone wins; callers are order-insensitive.
         return await _packages
             .Find(Builders<PackageDocument>.Filter.Empty)
+            .SortBy(p => p.PackageName)
             .Project(p => p.PackageName)
             .ToListAsync(ct);
     }

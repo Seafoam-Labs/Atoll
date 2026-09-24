@@ -237,6 +237,55 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ListAsync_query_shape_is_covered_by_the_name_index_without_fetching_documents()
+    {
+        for (var i = 0; i < 25; i++)
+        {
+            var (doc, revision) = NewSeed($"pkg/pkg-{i:D2}", $"pkg-{i:D2}");
+            await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
+        }
+
+        // Exercises the query shape used by MongoPackageRepository.ListAsync.
+        var explain = await _client.GetDatabase(_database).RunCommandAsync<BsonDocument>(new BsonDocumentCommand<BsonDocument>(new BsonDocument
+            {
+                {
+                    "explain", new BsonDocument
+                    {
+                        { "find", Packages.CollectionNamespace.CollectionName },
+                        { "filter", new BsonDocument() },
+                        { "sort", new BsonDocument("packageName", 1) },
+                        { "projection", new BsonDocument { { "_id", 0 }, { "packageName", 1 } } },
+                        { "limit", 0 }
+                    }
+                },
+                { "verbosity", "executionStats" }
+            }), cancellationToken: TestContext.Current.CancellationToken);
+
+        var stages = BsonValues.Named(explain, "stage").Select(value => value.AsString).ToArray();
+        var docsExamined = BsonValues.Named(explain, "totalDocsExamined").Sum(value => value.ToInt64());
+
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("PROJECTION_COVERED", stages, StringComparer.Ordinal);
+            Assert.Equal(0, docsExamined);
+        });
+    }
+
+    [Fact]
+    public async Task ListAsync_returns_names_in_packageName_order()
+    {
+        foreach (var name in new[] { "c-carrot", "a-apple", "b-banana" })
+        {
+            var (doc, revision) = NewSeed("pkg/" + name, name);
+            await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
+        }
+
+        var names = await _repo.ListAsync(CancellationToken.None);
+
+        Assert.Equal(["a-apple", "b-banana", "c-carrot"], names, StringComparer.Ordinal);
+    }
+
+    [Fact]
     public async Task AppendRevisionAsync_evicts_revision_documents_beyond_maxRevisions()
     {
         const int maxRevisions = 5;
@@ -364,6 +413,9 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
                 Builders<BsonDocument>.Filter.Eq("packageName", packageName),
                 cancellationToken: CancellationToken.None);
     }
+
+    private IMongoCollection<PackageDocument> Packages =>
+        _client.GetDatabase(_database).GetCollection<PackageDocument>("packages");
 
     private static (PackageDocument Doc, PackageRevisionContentDocument Revision) NewSeed(
         string id,
