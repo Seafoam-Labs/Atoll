@@ -70,12 +70,13 @@ const PROVIDES = csv(__ENV.PROVIDES ||
 // kept separate from TERMS/PROVIDES and may contain spaces (encodeURIComponent
 // turns them into %20, which the relevance parser splits back into terms). It
 // spans the distinct code paths: exact name, broad prefix, name-vs-metadata,
-// interior token, short term, stop word, no-hit, and multi-term coverage.
+// interior token, short term, broad name token, no-hit, and multi-term coverage
+// with a broad second term.
 const RELEVANCE_QUERIES = csv(__ENV.RELEVANCE_QUERIES ||
-  "yay,vim,rust,browser,neovim,qt,git,brwose,vim editor,rust browser gui");
+  "yay,vim,rust,browser,neovim,qt,git,brwose,vim editor,rust browser gui,neovim git");
 
 // Which pool the relevance scenario draws from:
-//   default      RELEVANCE_QUERIES: ten hot queries spanning the code paths
+//   default      RELEVANCE_QUERIES: eleven hot queries spanning the code paths
 //   adversarial  inputs whose cost used to track the corpus rather than the result
 //   unique       a distinct prefix of a real name per request, sampled at setup()
 // `default` flatters the path if a cache is ever added; `unique` is what a
@@ -83,8 +84,9 @@ const RELEVANCE_QUERIES = csv(__ENV.RELEVANCE_QUERIES ||
 const RELEVANCE_POOL = (__ENV.RELEVANCE_POOL || "default").toLowerCase();
 const UNIQUE_POOL_SIZE = Number(__ENV.RELEVANCE_POOL_SIZE || 500);
 
-// Single-char and two-char prefixes, a stop-word prefix, allowed short terms,
-// the maximum-length term, and the maximum term count, with and without hits.
+// Single-char and two-char prefixes, a broad three-char token, allowed short
+// terms, the maximum-length term, and the maximum term count, with and without
+// hits.
 const RELEVANCE_ADVERSARIAL = [
   "a", "l", "li", "lib", "libg", "xz", "7z", "i3", "brwose",
   "z".repeat(256),

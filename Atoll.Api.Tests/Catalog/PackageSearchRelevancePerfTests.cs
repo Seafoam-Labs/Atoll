@@ -59,7 +59,7 @@ public class PackageSearchRelevancePerfTests
     private const int BrowserCandidates = BrowserPrefix + BrowserInterior + BrowserDesc;
 
     private const int QtCount = 50;     // "qt6-NNN" (P2) + "lib-qt6-NNN" (P4); "qt" is sub-minimum -> no posting
-    private const int GitCount = 50;    // "git-NNNN" (P2 only); "git" is a stop word -> no token, no P5
+    private const int GitCount = 50;    // "git-NNNN": one family earning P2, P3 and P5 on the same 50 names
     private const int TieCount = 5_000; // "tie-NNNNN", equal votes -> exercises the ordinal tiebreak at sort scale
 
     // Inputs the old full-name scan made uniformly expensive: cost was the corpus size, not the
@@ -125,7 +125,7 @@ public class PackageSearchRelevancePerfTests
         RunScenario("interior token (neovim)", "neovim", NeovimCandidates);
         RunScenario("no hit", "brwose", 0);
         RunScenario("short term (qt)", "qt", QtCount * 2);
-        RunScenario("stop word (git)", "git", GitCount);
+        RunScenario("collapsed tiers (git)", "git", GitCount);
         RunScenario("tie-heavy", "tie", TieCount);
         RunScenario("max terms, mixed coverage", "vim rust neovim browser qt git yay tie", null);
         RunScenario("max terms, no coverage", "zzzqqq zzzwww zzzrrr zzzttt zzzuuu zzzvvv zzzxxx zzzzzz", 0);

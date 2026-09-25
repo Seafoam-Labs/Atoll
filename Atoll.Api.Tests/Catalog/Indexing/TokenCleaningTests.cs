@@ -45,9 +45,13 @@ public class TokenCleaningTests
     }
 
     [Fact]
-    public void DropsStopWords()
+    public void DropsProseStopWordsButKeepsNameTokens()
     {
-        Assert.Empty(Clean("git", "the", "api"));
+        Assert.Multiple(() =>
+        {
+            Assert.Empty(Clean("the", "and", "with"));
+            Assert.Equal(["git", "api"], Clean("git", "api"));
+        });
     }
 
     [Fact]
@@ -62,7 +66,7 @@ public class TokenCleaningTests
     [InlineData("Foo", "foo")]
     [InlineData("i3", "i3")]
     [InlineData("ab", null)]
-    [InlineData("git", null)]
+    [InlineData("the", null)]
     [InlineData("1337", null)]
     [InlineData("30fps", null)]
     [InlineData("café", null)]
@@ -77,6 +81,7 @@ public class TokenCleaningTests
     [InlineData("i3")]
     [InlineData("ab")]
     [InlineData("git")]
+    [InlineData("the")]
     [InlineData("1337")]
     [InlineData("30fps")]
     [InlineData("café")]

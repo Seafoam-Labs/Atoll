@@ -63,7 +63,7 @@ public class RelevanceQueryTests
     }
 
     [Theory]
-    [InlineData("git")]
+    [InlineData("the")]
     [InlineData("qt")]
     [InlineData("1337")]
     [InlineData("café")]
@@ -83,9 +83,10 @@ public class RelevanceQueryTests
     [InlineData("linux-zen-headers", "linux-zen-headers", "linux", "zen", "headers")]
     [InlineData("portable+pro", "portable+pro", "portable", "pro")]
     [InlineData("NeovimNightly", "neovimnightly", "neovim", "nightly")]
-    // "git", "xml" and "http" are stop-listed, so those parts drop out while the whole survives.
-    [InlineData("neovim-git", "neovim-git", "neovim")]
-    [InlineData("XmlHttpRequest", "xmlhttprequest", "request")]
+    [InlineData("neovim-git", "neovim-git", "neovim", "git")]
+    [InlineData("XmlHttpRequest", "xmlhttprequest", "xml", "http", "request")]
+    // Prose stays stop-listed, so "the" drops while the name tokens around it survive.
+    [InlineData("the-git-tool", "the-git-tool", "git", "tool")]
     public void CompoundSegmentResolvesThroughItsPartsAsWellAsItsWholeForm(
         string raw, params string[] expected)
     {

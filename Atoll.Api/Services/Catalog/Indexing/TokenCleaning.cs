@@ -12,6 +12,9 @@ namespace Atoll.Api.Services.Catalog.Indexing;
 ///     Both sides of the index run through here: <see cref="SplitAndClean" /> builds the keys and
 ///     <see cref="Postings" /> normalizes a query segment by the same rules, so the query side can
 ///     only ask for keys the index side can hold.
+///     <see cref="IgnoredTerms" /> holds prose noise only. Name tokens such as "git" or "bin" are
+///     what users type, so filtering them hides the packages they name from the word and
+///     name-token tiers on both sides.
 ///     Revisit: ASCII-only filter drops accented chars; leading-digits threshold
 ///     of 2 means "30fps" is skipped but "3d" passes; <see cref="AllowedShortTerms" />
 ///     is hand-maintained and should move to config if it grows.
@@ -32,11 +35,7 @@ public static partial class TokenCleaning
         "can", "like", "more", "one", "any", "over", "non", "very", "when", "about",
         "yet", "many", "also", "most", "lets", "just", "has", "had", "was", "did",
         "get", "got", "use", "using", "used", "make", "made", "run", "set", "put",
-        "try", "see", "say", "add", "new", "own", "way", "will", "may",
-        // Indexing noise
-        "git", "svn", "bin", "www", "com", "org", "net", "http", "https", "html",
-        "php", "css", "xml", "json", "sql", "tmp", "log", "err", "var", "etc",
-        "api", "url", "src", "lib", "cfg", "dir", "env"
+        "try", "see", "say", "add", "new", "own", "way", "will", "may"
     ];
 
     /// <summary>
