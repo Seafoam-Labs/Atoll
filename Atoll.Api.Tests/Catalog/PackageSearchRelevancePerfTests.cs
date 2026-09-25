@@ -75,6 +75,14 @@ public class PackageSearchRelevancePerfTests
         new string('z', RelevanceQueryParser.MaxQueryLength)
     ];
 
+    // Eight compound segments at 232 characters: the widest legal query, and each segment truncates
+    // to MaxPostingsPerTerm, so this walks 8 x 6 vocabulary keys plus 8 name-prefix runs.
+    private static readonly string[] CompoundHeads =
+        ["python", "kernel", "crypto", "graph", "media", "shell", "text", "data"];
+
+    private static readonly string CompoundAdversarialQuery =
+        string.Join(' ', CompoundHeads.Select(head => $"{head}-core-gtk-util-web-tool"));
+
     private static readonly string[] Syllables =
         ["core", "lib", "gtk", "python", "kernel", "net", "data", "util", "graph", "media", "text", "crypto", "web", "ai", "shell", "tool"];
 
@@ -126,6 +134,7 @@ public class PackageSearchRelevancePerfTests
         foreach (var query in AdversarialQueries)
             RunScenario(Describe(query), query, null);
 
+        RunCompoundAdversarialScenario();
         RunUniqueQueryScenario();
         RunSerializationScenario();
         RunGenerationSwapScenario();
@@ -265,6 +274,23 @@ public class PackageSearchRelevancePerfTests
 
         Array.Sort(samples);
         return samples[BuildIterations / 2];
+    }
+
+    /// <summary>
+    /// The widest legal query: eight compound segments, each truncated to the per-term posting cap.
+    /// The shape is asserted so a syllable edit cannot silently narrow the walk it is measuring.
+    /// </summary>
+    private void RunCompoundAdversarialScenario()
+    {
+        var terms = RelevanceQueryParser.Parse(CompoundAdversarialQuery).Terms;
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(RelevanceQueryParser.MaxTerms, terms.Length);
+            Assert.All(terms, term => Assert.Equal(RelevanceQueryParser.MaxPostingsPerTerm, term.Postings.Length));
+        });
+
+        RunScenario("adversarial compound 8x6", CompoundAdversarialQuery, null);
     }
 
     /// <summary>

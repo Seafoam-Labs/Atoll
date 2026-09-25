@@ -119,12 +119,14 @@ public sealed class PackageSearchEngine(PackageIndexStore store)
     private static void RecordWordMatches(
         SearchIndexData snapshot, RelevanceIndex index, SearchTerm term, Dictionary<int, CandidateState> states)
     {
-        if (term.Posting is null) return;
-        if (!snapshot.ByWords.TryGetValue(term.Posting, out var names)) return;
+        foreach (var posting in term.Postings)
+        {
+            if (!snapshot.ByWords.TryGetValue(posting, out var names)) continue;
 
-        foreach (var name in names)
-            if (index.IdsByName.TryGetValue(name, out var id))
-                Record(states, index, id, term.Ordinal, SearchTier.WordPosting);
+            foreach (var name in names)
+                if (index.IdsByName.TryGetValue(name, out var id))
+                    Record(states, index, id, term.Ordinal, SearchTier.WordPosting);
+        }
     }
 
     /// <summary>
@@ -150,27 +152,44 @@ public sealed class PackageSearchEngine(PackageIndexStore store)
     }
 
     /// <summary>
-    ///     Exact-name-token and token-prefix hits in one walk over the ordinal-sorted token
-    ///     vocabulary. Vocabulary entries are already lowercased by the indexing pipeline, so the term
-    ///     is lowered to meet them; a term the pipeline rejects as a posting (too short, a stop word)
-    ///     still resolves here, which is what keeps short queries on the name tiers.
+    ///     Exact-name-token and token-prefix hits, walked once per key the term resolves through: the
+    ///     lowered raw segment plus every posting that is not already that segment. The raw one is
+    ///     walked even when the pipeline rejects it as a posting (too short, a stop word), which is
+    ///     what keeps short queries on the name tiers. Vocabulary entries are already lowercased by
+    ///     the indexing pipeline, so the keys meet them as they are.
     /// </summary>
     private static void RecordNameTokenMatches(
         RelevanceIndex index, SearchTerm term, Dictionary<int, CandidateState> states)
     {
-        var lowerTerm = term.Raw.ToLowerInvariant();
+        var loweredRaw = term.Raw.ToLowerInvariant();
+        RecordNameTokenMatches(index, loweredRaw, term.Ordinal, states);
+
+        foreach (var posting in term.Postings)
+            if (!posting.Equals(loweredRaw, StringComparison.Ordinal))
+                RecordNameTokenMatches(index, posting, term.Ordinal, states);
+    }
+
+    /// <summary>
+    ///     One vocabulary walk. Exact and prefix hits for a key occupy the same contiguous run of the
+    ///     ordinal-sorted vocabulary, so a single lower bound locates the run and the original
+    ///     predicate decides which of the two tiers each token earned. Sorting and membership testing
+    ///     use the same comparison, so the run is exactly the set the predicate accepts.
+    /// </summary>
+    private static void RecordNameTokenMatches(
+        RelevanceIndex index, string key, int ordinal, Dictionary<int, CandidateState> states)
+    {
         var tokens = index.SortedNameTokens;
 
-        for (var i = LowerBound(tokens, lowerTerm, StringComparer.Ordinal);
-             i < tokens.Length && tokens[i].StartsWith(lowerTerm, StringComparison.Ordinal);
+        for (var i = LowerBound(tokens, key, StringComparer.Ordinal);
+             i < tokens.Length && tokens[i].StartsWith(key, StringComparison.Ordinal);
              i++)
         {
-            var tier = tokens[i].Equals(lowerTerm, StringComparison.Ordinal)
+            var tier = tokens[i].Equals(key, StringComparison.Ordinal)
                 ? SearchTier.NameToken
                 : SearchTier.NameTokenPrefix;
 
             for (var posting = index.TokenOffsets[i]; posting < index.TokenOffsets[i + 1]; posting++)
-                Record(states, index, index.TokenPostings[posting], term.Ordinal, tier);
+                Record(states, index, index.TokenPostings[posting], ordinal, tier);
         }
     }
 
@@ -256,7 +275,8 @@ public sealed class PackageSearchEngine(PackageIndexStore store)
     /// <summary>
     ///     Per-candidate accumulator: the best tier earned for each term packed three bits at a time
     ///     into one word (tier + 1, so 0 means unmatched and no initialization pass is needed),
-    ///     reduced to one hit. The packing holds while the parser caps queries at ten terms.
+    ///     reduced to one hit. The packing holds ten terms; the parser caps queries at
+    ///     <see cref="RelevanceQueryParser.MaxTerms" />, so the word never overflows.
     /// </summary>
     private struct CandidateState
     {

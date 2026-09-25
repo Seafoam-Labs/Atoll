@@ -146,10 +146,11 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task RelevanceTreatsPlusAsSeparatorButPercentEncodedPlusAsLiteral()
+    public async Task RelevanceTreatsPlusAsSeparatorAndResolvesALiteralPlusThroughItsParts()
     {
-        // QueryStringEnumerable.Decode turns '+' into a space before unescaping, so "portable+pro"
-        // is two terms; "%2B" unescapes to a literal '+' that survives as one term, matching nothing.
+        // QueryStringEnumerable.Decode turns '+' into a space before unescaping, so "portable+pro" is
+        // two terms; "%2B" unescapes to a literal '+' that survives as one term, which resolves
+        // through the "portable"/"pro" postings its segment splits into and ranks on votes.
         var plusAsSeparator = await SearchNamesAsync("query=portable+pro&by=relevance");
         var plusAsLiteral = await SearchNamesAsync("query=portable%2Bpro&by=relevance");
 
@@ -157,7 +158,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
         {
             // Two-term coverage ranks portable-pro (both terms) above portable-kit (prefix only).
             Assert.Equal(["portable-pro", "portable-kit"], plusAsSeparator, StringComparer.Ordinal);
-            Assert.Empty(plusAsLiteral);
+            Assert.Equal(["portable-pro", "portable-kit"], plusAsLiteral, StringComparer.Ordinal);
         });
     }
 

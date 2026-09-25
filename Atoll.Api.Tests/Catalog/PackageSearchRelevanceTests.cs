@@ -92,6 +92,69 @@ public class PackageSearchRelevanceTests
         });
     }
 
+    [Theory]
+    [InlineData("neovim-git")]
+    [InlineData("yay-git")]
+    [InlineData("paru-git")]
+    [InlineData("visual-studio-code-bin")]
+    public void ExactCompoundNameRanksFirstAndStaysOneTerm(string name)
+    {
+        // The segment resolves through its parts too, so the wider family becomes a candidate; the
+        // exact name still wins on the raw-segment tier, and coverage stays one bit because the
+        // compound is one term rather than two.
+        var snapshot = Index(
+            Pkg("neovim-git", votes: 263), Pkg("neovim-gitsigns"), Pkg("neovim-gitsigns-git"),
+            Pkg("yay", votes: 900), Pkg("yay-git", votes: 12),
+            Pkg("paru", votes: 300), Pkg("paru-git", votes: 40),
+            Pkg("visual-studio-code-bin", votes: 800), Pkg("code-marketplace", votes: 60));
+
+        var hits = PackageSearchEngine.Rank(snapshot, name);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(name, hits[0].Package.Name);
+            Assert.Equal(SearchTier.ExactName, hits[0].Tier);
+            Assert.Equal(1, hits[0].MatchedTermCount);
+        });
+    }
+
+    [Fact]
+    public void CompoundNameAbsentFromTheCorpusReachesItsTokenFamily()
+    {
+        var snapshot = Index(
+            Pkg("arc-gtk-theme", votes: 100), Pkg("arc-gtk-theme-git", votes: 5), Pkg("gtk-theme-numix"));
+
+        var hits = PackageSearchEngine.Rank(snapshot, "gtk-theme-arc");
+
+        Assert.Equal(["arc-gtk-theme", "arc-gtk-theme-git", "gtk-theme-numix"], Names(hits));
+        Assert.All(hits, hit => Assert.Equal(SearchTier.NameToken, hit.Tier));
+    }
+
+    [Fact]
+    public void CompoundNamePrefixStillBeatsTheTokenFamily()
+    {
+        // "linux-zen-headers-bin" is a name-prefix hit on the raw segment, so it outranks the
+        // token-only matches the parts bring in.
+        var snapshot = Index(
+            Pkg("linux-zen-git-headers", votes: 30),
+            Pkg("linux-zen-headers-bin", votes: 10),
+            Pkg("linux-headers", votes: 5));
+
+        var hits = PackageSearchEngine.Rank(snapshot, "linux-zen-headers");
+
+        Assert.Equal(["linux-zen-headers-bin", "linux-zen-git-headers", "linux-headers"], Names(hits));
+    }
+
+    [Fact]
+    public void ProvidesStillReadsTheRawSegmentVerbatim()
+    {
+        var snapshot = Index(Pkg("libegl-provider", provides: ["libEGL.so"]));
+
+        var hit = Assert.Single(PackageSearchEngine.Rank(snapshot, "libEGL.so"));
+
+        Assert.Equal(SearchTier.ExactProvides, hit.Tier);
+    }
+
     [Fact]
     public void SameTierOrdersByVotesDescendingThenNameAscending()
     {

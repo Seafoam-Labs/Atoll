@@ -4,12 +4,14 @@ namespace Atoll.Api.Services.Catalog;
 
 /// <summary>
 ///     One free-text relevance term. <see cref="Raw" /> is the trimmed segment, used verbatim for
-///     case-sensitive provides lookup and case-insensitive name comparison. <see cref="Posting" /> is
-///     the lowercased index key, or <see langword="null" /> when the segment fails the indexing rules
-///     and so is unusable for word-posting and infix matching. <see cref="Ordinal" /> is the bit
-///     position in the coverage mask.
+///     case-sensitive provides lookup and case-insensitive name comparison. <see cref="Postings" /> are
+///     the lowercased index keys the segment resolves through: the cleaned whole segment first, then
+///     its separator- and camelCase-split parts, so a compound segment reaches the interior tiers as
+///     well as the name ones. Empty when the indexing rules reject the segment and every part, which
+///     leaves the term on the raw-segment tiers only. <see cref="Ordinal" /> is the bit position in the
+///     coverage mask, so one segment is one term however many postings it resolves through.
 /// </summary>
-internal readonly record struct SearchTerm(string Raw, string? Posting, int Ordinal);
+internal readonly record struct SearchTerm(string Raw, string[] Postings, int Ordinal);
 
 /// <summary>The bounded, normalized term set for one relevance query.</summary>
 internal sealed record RelevanceQuery(SearchTerm[] Terms)
@@ -25,6 +27,12 @@ internal static class RelevanceQueryParser
 {
     internal const int MaxQueryLength = 256;
     internal const int MaxTerms = 8;
+
+    /// <summary>
+    ///     Postings resolved per term. Six covers 99.4% of corpus names; longer compounds keep their
+    ///     leading parts rather than being rejected, because 400ing a pasted name is hostile.
+    /// </summary>
+    internal const int MaxPostingsPerTerm = 6;
 
     // Whitespace plus the comma, which the binder uses to join repeated ?query= values.
     private static readonly char[] Separators = [' ', '\t', '\n', '\v', '\f', '\r', ','];
@@ -48,13 +56,14 @@ internal static class RelevanceQueryParser
 
         foreach (var segment in segments)
         {
-            var posting = TokenCleaning.NormalizePosting(segment);
+            var postings = TokenCleaning.Postings(segment);
+            if (postings.Length > MaxPostingsPerTerm) postings = postings[..MaxPostingsPerTerm];
 
-            // De-duplicate on the posting key, falling back to the raw segment when unusable, so
+            // De-duplicate on the leading posting, falling back to the raw segment when unusable, so
             // "Vim vim" collapses to one term and the coverage mask stays dense.
-            if (!seen.Add(posting ?? segment)) continue;
+            if (!seen.Add(postings.Length > 0 ? postings[0] : segment)) continue;
 
-            terms.Add(new SearchTerm(segment, posting, terms.Count));
+            terms.Add(new SearchTerm(segment, postings, terms.Count));
         }
 
         return new RelevanceQuery([.. terms]);

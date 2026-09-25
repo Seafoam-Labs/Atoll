@@ -9,6 +9,9 @@ namespace Atoll.Api.Services.Catalog.Indexing;
 ///     → stop-word filter → deduplication.
 /// </summary>
 /// <remarks>
+///     Both sides of the index run through here: <see cref="SplitAndClean" /> builds the keys and
+///     <see cref="Postings" /> normalizes a query segment by the same rules, so the query side can
+///     only ask for keys the index side can hold.
 ///     Revisit: ASCII-only filter drops accented chars; leading-digits threshold
 ///     of 2 means "30fps" is skipped but "3d" passes; <see cref="AllowedShortTerms" />
 ///     is hand-maintained and should move to config if it grows.
@@ -61,11 +64,17 @@ public static partial class TokenCleaning
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var token in source)
+        foreach (var lowered in Split(token))
+            if (seen.Add(lowered)) yield return lowered;
+    }
+
+    private static IEnumerable<string> Split(string token)
+    {
         foreach (var split in SeparatorsRegex.Split(token))
         foreach (var part in CamelCaseRegex.Split(split))
         {
             var lowered = NormalizePosting(part);
-            if (lowered is not null && seen.Add(lowered)) yield return lowered;
+            if (lowered is not null) yield return lowered;
         }
     }
 
@@ -73,7 +82,7 @@ public static partial class TokenCleaning
     ///     Applies the indexing filters to one already-split segment and returns the lowercased
     ///     posting key, or <see langword="null" /> when the segment is rejected (too short and not
     ///     an allowed short term, non-ASCII, leading two digits, all digits, or a stop word). Shared
-    ///     by <see cref="SplitAndClean" /> and the relevance parser so both sides clean identically.
+    ///     by <see cref="Split" /> and <see cref="Postings" /> so both sides clean identically.
     /// </summary>
     internal static string? NormalizePosting(string segment)
     {
@@ -86,6 +95,27 @@ public static partial class TokenCleaning
         if (IgnoredTerms.Contains(lowered)) return null;
 
         return lowered;
+    }
+
+    /// <summary>
+    ///     The index keys one raw query segment resolves through: the segment's own normalized form
+    ///     when that survives, then the parts <see cref="SplitAndClean" /> would have produced from it.
+    ///     Keeping the whole form alongside the parts makes this a superset of the single-posting
+    ///     lookup, so a separator-free segment yields exactly the posting it yields today and a
+    ///     compound one ("neovim-git", "XmlHttpRequest") also reaches the interior tiers.
+    /// </summary>
+    internal static string[] Postings(string segment)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var postings = new List<string>();
+
+        var whole = NormalizePosting(segment);
+        if (whole is not null && seen.Add(whole)) postings.Add(whole);
+
+        foreach (var part in Split(segment))
+            if (seen.Add(part)) postings.Add(part);
+
+        return [.. postings];
     }
 
     /// <summary>U+0020–U+007F only; drop if internationalized content is needed.</summary>
