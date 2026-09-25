@@ -13,9 +13,10 @@
 // The AWS web ACL rate-limits per source IP (terraform/waf.tf); raise
 // `waf_rate_limit` before pointing this script at a real deployment.
 //
-// Tunables via env: TARGET, PACKAGES, TERMS, PROVIDES, RELEVANCE_QUERIES, VUS,
-// GIT_RATE, SORT_RATE, RELEVANCE_RATE, UI_VUS, WARMUP, HOLD, COOLDOWN,
-// GIT_DURATION, VERIFY_SECURITY.
+// Tunables via env: TARGET, PACKAGES, TERMS, PROVIDES, RELEVANCE_QUERIES,
+// RELEVANCE_POOL, RELEVANCE_POOL_SIZE, VUS, GIT_RATE, SORT_RATE,
+// RELEVANCE_RATE, UI_VUS, WARMUP, HOLD, COOLDOWN, GIT_DURATION,
+// VERIFY_SECURITY.
 //
 // PACKAGES is the request mix, not the corpus: every name-keyed read (RPC,
 // detail, versions, UI, Git) and every exact-name search draws from it, while
@@ -29,6 +30,9 @@ import { check, fail, sleep } from "k6";
 let TARGET = __ENV.TARGET || "http://localhost:8080";
 while (TARGET.endsWith("/")) TARGET = TARGET.slice(0, -1);
 const VUS = Number(__ENV.VUS || 25);
+// 0 deregisters the scenario and its thresholds entirely (k6 rejects a zero
+// arrival rate), which is what an isolated run of another scenario needs: at
+// its 1/s floor git_fetch alone eats much of a single core.
 const GIT_RATE = Number(__ENV.GIT_RATE || 2);
 const SORT_RATE = Number(__ENV.SORT_RATE || 10);
 // Relevance is opt-in: at the default 0 the scenario and its thresholds are not
@@ -69,6 +73,24 @@ const PROVIDES = csv(__ENV.PROVIDES ||
 // interior token, short term, stop word, no-hit, and multi-term coverage.
 const RELEVANCE_QUERIES = csv(__ENV.RELEVANCE_QUERIES ||
   "yay,vim,rust,browser,neovim,qt,git,brwose,vim editor,rust browser gui");
+
+// Which pool the relevance scenario draws from:
+//   default      RELEVANCE_QUERIES: ten hot queries spanning the code paths
+//   adversarial  inputs whose cost used to track the corpus rather than the result
+//   unique       a distinct prefix of a real name per request, sampled at setup()
+// `default` flatters the path if a cache is ever added; `unique` is what a
+// sustained public rate should be derived from.
+const RELEVANCE_POOL = (__ENV.RELEVANCE_POOL || "default").toLowerCase();
+const UNIQUE_POOL_SIZE = Number(__ENV.RELEVANCE_POOL_SIZE || 500);
+
+// Single-char and two-char prefixes, a stop-word prefix, allowed short terms,
+// the maximum-length term, and the maximum term count, with and without hits.
+const RELEVANCE_ADVERSARIAL = [
+  "a", "l", "li", "lib", "libg", "xz", "7z", "i3", "brwose",
+  "z".repeat(256),
+  "lib lib- libg libgtk",
+  "zzzqqq zzzwww zzzrrr zzzttt zzzuuu zzzvvv zzzxxx zzzzzz",
+];
 
 // Real `yay` runs ask for many packages at once and the RPC silently truncates
 // batches past 200 args, so tiers stay at or below that ceiling; tiers larger
@@ -139,16 +161,6 @@ const scenarios = {
     stages: rampStages(UI_VUS),
     gracefulRampDown: "10s",
   },
-  git_fetch: {
-    executor: "constant-arrival-rate",
-    exec: "gitFetch",
-    rate: GIT_RATE,
-    timeUnit: "1s",
-    duration: GIT_DURATION,
-    preAllocatedVUs: 4,
-    maxVUs: 12,
-    gracefulStop: "10s",
-  },
 };
 
 const thresholds = {
@@ -158,14 +170,29 @@ const thresholds = {
   "http_req_duration{scenario:catalog}": ["p(95)<600"],
   "http_req_duration{scenario:catalog_sorted}": ["p(95)<600"],
   "http_req_duration{scenario:ui}": ["p(95)<1000"],
-  "http_req_duration{scenario:git_fetch}": ["p(95)<2000"],
   "checks{scenario:search}": ["rate>0.99"],
   "checks{scenario:rpc}": ["rate>0.99"],
   "checks{scenario:catalog}": ["rate>0.99"],
   "checks{scenario:catalog_sorted}": ["rate>0.99"],
   "checks{scenario:ui}": ["rate>0.99"],
-  "checks{scenario:git_fetch}": ["rate>0.99"],
 };
+
+// Registered only when measured, so an isolated run of another scenario is not
+// paying for `git upload-pack` in the background.
+if (GIT_RATE > 0) {
+  scenarios.git_fetch = {
+    executor: "constant-arrival-rate",
+    exec: "gitFetch",
+    rate: GIT_RATE,
+    timeUnit: "1s",
+    duration: GIT_DURATION,
+    preAllocatedVUs: 4,
+    maxVUs: 12,
+    gracefulStop: "10s",
+  };
+  thresholds["http_req_duration{scenario:git_fetch}"] = ["p(95)<2000"];
+  thresholds["checks{scenario:git_fetch}"] = ["rate>0.99"];
+}
 
 // Registered only when measured, so the default profile stays byte-identical to
 // the recorded baseline. A new per-request-expensive public path (a full rank
@@ -224,7 +251,66 @@ export function setup() {
     if (VERIFY_SECURITY) verifyServableHead(name);
   }
 
-  return { packages: PACKAGES, terms: TERMS, provides: PROVIDES, relevance: RELEVANCE_QUERIES };
+  return { packages: PACKAGES, terms: TERMS, provides: PROVIDES, relevance: relevancePool() };
+}
+
+function relevancePool() {
+  if (RELEVANCE_POOL === "adversarial") return RELEVANCE_ADVERSARIAL;
+  if (RELEVANCE_POOL !== "unique") return RELEVANCE_QUERIES;
+
+  const names = sampleIndexNames();
+  if (names.length === 0) fail("RELEVANCE_POOL=unique sampled no package names from /v1/search");
+
+  const pool = uniqueRelevancePool(names, UNIQUE_POOL_SIZE);
+  if (pool.length < UNIQUE_POOL_SIZE) {
+    fail(`RELEVANCE_POOL=unique built ${pool.length} of ${UNIQUE_POOL_SIZE} queries from ${names.length} names`);
+  }
+  return pool;
+}
+
+// Names come from the in-memory index rather than /v1/packages, which is
+// Mongo-backed and holds only the seeded pool on the isolated stack.
+function sampleIndexNames() {
+  const names = new Set();
+
+  for (const term of [...TERMS, ...PROVIDES]) {
+    const res = http.get(`${TARGET}/v1/search?query=${encodeURIComponent(term)}&by=words`, {
+      tags: { name: "GET /v1/search (relevance pool setup)" },
+    });
+    if (res.status !== 200) continue;
+
+    const body = res.json();
+    if (!Array.isArray(body)) continue;
+    for (const pkg of body) if (pkg && pkg.name) names.add(pkg.name);
+  }
+
+  return [...names];
+}
+
+// Seeded so a relevance-off/on pair ranks the identical query set.
+function uniqueRelevancePool(names, size) {
+  const rnd = mulberry32(98765);
+  const prefix = (name) => name.slice(0, 2 + Math.floor(rnd() * Math.max(1, name.length - 1)));
+  const pickName = () => names[Math.floor(rnd() * names.length)];
+  const pool = new Set();
+
+  // Bounded so an exhausted prefix space fails the run instead of spinning setup().
+  for (let attempt = 0; pool.size < size && attempt < size * 50; attempt++) {
+    const name = pickName();
+    pool.add(rnd() < 0.2 ? `${prefix(name)} ${prefix(pickName())}` : prefix(name));
+  }
+
+  return [...pool];
+}
+
+function mulberry32(seed) {
+  let state = seed;
+  return function () {
+    state = (state + 0x6D2B79F5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 function waitForHealth() {

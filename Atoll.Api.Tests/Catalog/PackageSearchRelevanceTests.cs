@@ -15,20 +15,62 @@ public class PackageSearchRelevanceTests
             Pkg("vim-extra"),
             Pkg("foo-vim-bar"),
             Pkg("foo-vimtool"),
-            Pkg("editor-plus", description: "vim editor"),
-            Pkg("neovim-git"));
+            Pkg("editor-plus", description: "vim editor"));
 
         var hits = PackageSearchEngine.Rank(snapshot, "vim");
 
         Assert.Equal(
-            ["vim", "editor-x", "vim-extra", "foo-vim-bar", "foo-vimtool", "editor-plus", "neovim-git"],
+            ["vim", "editor-x", "vim-extra", "foo-vim-bar", "foo-vimtool", "editor-plus"],
             Names(hits));
         Assert.Equal(
             [
                 SearchTier.ExactName, SearchTier.ExactProvides, SearchTier.NamePrefix, SearchTier.NameToken,
-                SearchTier.NameTokenPrefix, SearchTier.WordPosting, SearchTier.NameInfix
+                SearchTier.NameTokenPrefix, SearchTier.WordPosting
             ],
             [.. hits.Select(hit => hit.Tier)]);
+    }
+
+    [Fact]
+    public void BareInfixNamesAreNotCandidates()
+    {
+        // A substring that is neither a name prefix nor a cleaned name token resolves nothing: the
+        // infix tier was dropped when retrieval moved onto the index structures.
+        var snapshot = Index(Pkg("neovim-git"), Pkg("crust-git"), Pkg("vim"), Pkg("rust"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(["vim"], Names(PackageSearchEngine.Rank(snapshot, "vim")));
+            Assert.Equal(["rust"], Names(PackageSearchEngine.Rank(snapshot, "rust")));
+        });
+    }
+
+    [Fact]
+    public void EveryCaseVariantOfANameResolvesAsExact()
+    {
+        // Case variants compare equal in the sorted-name order, so the exact run has to be walked in
+        // full rather than stopped at the binary search's landing slot.
+        var snapshot = Index(Pkg("Vim"), Pkg("vim"), Pkg("VIM"));
+
+        var hits = PackageSearchEngine.Rank(snapshot, "vim");
+
+        Assert.Equal(["VIM", "Vim", "vim"], Names(hits));
+        Assert.All(hits, hit => Assert.Equal(SearchTier.ExactName, hit.Tier));
+    }
+
+    [Fact]
+    public void NameMatchingDoesNotFoldBeyondOrdinalIgnoreCase()
+    {
+        // OrdinalIgnoreCase folds a dotted i to I but keeps dotless ı and dotted İ apart. The sorted
+        // run is located with the same comparison the walk re-tests, so the index cannot widen or
+        // narrow the served set relative to the predicate it replaced.
+        var snapshot = Index(Pkg("İstanbul-theme"), Pkg("istanbul-theme"), Pkg("ıspanak-theme"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(["istanbul-theme"], Names(PackageSearchEngine.Rank(snapshot, "istanbul")));
+            Assert.Equal(["istanbul-theme"], Names(PackageSearchEngine.Rank(snapshot, "I")));
+            Assert.Equal(["ıspanak-theme"], Names(PackageSearchEngine.Rank(snapshot, "ıspanak")));
+        });
     }
 
     [Fact]

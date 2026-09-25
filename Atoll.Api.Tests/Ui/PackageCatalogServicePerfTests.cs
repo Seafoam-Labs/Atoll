@@ -76,7 +76,9 @@ public class PackageCatalogServicePerfTests
         }
 
         var store = new PackageIndexStore();
-        store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
+        // The ranked scenario reads the derived relevance structures, so build through the builder
+        // rather than hand-assembling a snapshot that would rank nothing.
+        store.Replace(PackageIndexBuilder.BuildFromPackages(names.Values));
 
         _service = new PackageCatalogService(
             new PackageSearchEngine(store),

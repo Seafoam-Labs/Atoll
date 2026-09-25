@@ -50,7 +50,9 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     /// <summary>Serves a synthetic name corpus instead of the three-package sample index.</summary>
     private PackageCatalogService CreateService(ImmutableDictionary<string, AurPackageMetadata> names)
     {
-        _store.Replace(SearchIndexData.Empty with { ByNames = names });
+        // Ranked retrieval reads the derived relevance structures, so build through the builder
+        // rather than hand-assembling a snapshot that would rank nothing.
+        _store.Replace(PackageIndexBuilder.BuildFromPackages(names.Values));
         return CreateService();
     }
 
@@ -551,7 +553,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         Assert.Equal(["pkg-a"], before.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
 
         names["pkg-b"] = CreateMetadata("pkg-b");
-        _store.Replace(SearchIndexData.Empty with { ByNames = names.ToImmutable() });
+        _store.Replace(PackageIndexBuilder.BuildFromPackages(names.Values));
 
         var after = await service.SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
         Assert.Equal(["pkg-a", "pkg-b"], after.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);

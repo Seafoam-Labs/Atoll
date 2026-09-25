@@ -27,7 +27,7 @@ a request. The two warms differ on purpose:
 
 | # | Cache | Location | Contents | Refresh / invalidation | Max staleness |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Search index snapshot | `PackageIndexStore` (`Services/Catalog/Indexing/`) | Whole AUR catalog as `SearchIndexData` (`ByNames`, `ByProvides`, `ByWords`) | Startup prime from the `aur-metadata` collection, then an atomic swap every `Atoll:DataSource:RefreshIntervalMinutes` (default 5) | Refresh interval; indefinite while dump downloads fail (the last good snapshot is kept) |
+| 1 | Search index snapshot | `PackageIndexStore` (`Services/Catalog/Indexing/`) | Whole AUR catalog as `SearchIndexData` (`ByNames`, `ByProvides`, `ByWords`, plus the `RelevanceIndex` lookups ranked retrieval resolves through) | Startup prime from the `aur-metadata` collection, then an atomic swap every `Atoll:DataSource:RefreshIntervalMinutes` (default 5) | Refresh interval; indefinite while dump downloads fail (the last good snapshot is kept) |
 | 2 | Ranked name views | `PackageIndexRanker` (`Services/Packages/`) | Seeded name list plus one sorted name array per (sort, order) | HybridCache keys `atoll.rank.names` and `atoll.rank.sorted/{sort}/{order}` under the `catalog` tag only: seed/delete drop it; the worker's warm re-stores all of them after every refresh cycle; `Atoll:Caching:RankTtlSeconds` is the backstop for the cycles that fail | About two TTLs when a write races an in-flight store; otherwise bounded by tag drops alone, since the warm re-arms the TTL every cycle |
 | 3 | Catalog sorted views | `PackageCatalogService._sortedViews` (UI) | `AurPackageMetadata[]` pre-sorted for each catalog sort, keyed on the index instance | Rebuilt per index generation; primed after each swap by the worker's warm; dropped structurally when the replaced `SearchIndexData` becomes unreachable | Same as #1; the default sorts are rebuilt off the request path by the warm |
 | 4 | Catalog seeded snapshot | `PackageCatalogService` (UI) | `FrozenSet` of seeded names plus a `FrozenDictionary` of head scan statuses | HybridCache key `atoll.ui.seeded-snapshot` under the `catalog` tag only: seed/delete drop `catalog`; head-status changes (a queued rescan, a completed or errored head scan, a refresh-promoted head) drop nothing and heal through the TTL; the worker's warm fills it without re-arming, so the TTL keeps running | Immediate for seeds and deletes; up to one TTL (600 s) of stale badge display for any head-status change, accepted because access gating reads live statuses; a build racing a tag removal serves its pre-write value for up to one TTL |
@@ -109,6 +109,9 @@ Ranked by how likely you are to notice.
 ## Structures mapped to meaning
 
 - `ImmutableDictionary` / `ImmutableHashSet` (`SearchIndexData`): the immutable search index snapshot.
+- Sorted arrays, CSR postings, and a `FrozenDictionary` (`RelevanceIndex`): the derived lookups ranked retrieval
+  resolves every tier through, built with the snapshot rather than per request so no query traverses the name set.
+  Measured at 120k packages: 68 ms of an ~1 s build, 3 MB of arrays, ~44 MB retained for the whole generation.
 - `FrozenSet` / `FrozenDictionary` (`SeededSnapshot`): point-in-time seeded names and head scan statuses.
 - `ConcurrentDictionary`: per-sort catalog views (inside the weak table), git per-path locks.
 - `ConditionalWeakTable<SearchIndexData, ...>`: the catalog sorted views' generation mechanism. A generation is an

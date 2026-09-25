@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Atoll.Api.Services.Catalog.Indexing;
 
 namespace Atoll.Api.Services.Catalog;
@@ -8,7 +9,9 @@ namespace Atoll.Api.Services.Catalog;
 /// </summary>
 public sealed class PackageSearchEngine(PackageIndexStore store)
 {
-    private static readonly char[] NameSeparators = ['-', '_'];
+    // Inverted ranking order, so a PriorityQueue built on it keeps the worst surviving hit at the top.
+    private static readonly Comparer<PackageSearchHit> WorstFirst =
+        Comparer<PackageSearchHit>.Create(static (x, y) => CompareHits(y, x));
 
     /// <summary>The only store read; every primitive below takes the captured snapshot.</summary>
     public SearchIndexData Capture() => store.Current;
@@ -74,120 +77,165 @@ public sealed class PackageSearchEngine(PackageIndexStore store)
     public IEnumerable<AurPackageMetadata> All(SearchIndexData snapshot) => snapshot.ByNames.Values;
 
     /// <summary>
-    ///     Ranked relevance retrieval. Parses the raw query, collects candidates from exactly three
-    ///     sources (a linear name scan, per-term word postings, per-term provides postings), keeps the
-    ///     best tier each candidate earned per term, and returns everything sorted. Tier and score stay
-    ///     internal; the adapter projects the packages and applies the response cap. Static because the
+    ///     Ranked relevance retrieval. Parses the raw query, resolves every tier through the
+    ///     generation's <see cref="RelevanceIndex" /> lookups rather than traversing the name set,
+    ///     keeps the best tier each candidate earned per term, and returns the ranking. Tier and score
+    ///     stay internal; the adapter projects the packages and applies the response cap. A
+    ///     <paramref name="limit" /> keeps only the best N, byte-identical to the first N of the
+    ///     unlimited ranking because <see cref="CompareHits" /> is a total order. Static because the
     ///     internal return type bars the public-instance shape the other primitives use.
     /// </summary>
-    internal static PackageSearchHit[] Rank(SearchIndexData snapshot, string rawQuery)
+    internal static PackageSearchHit[] Rank(SearchIndexData snapshot, string rawQuery, int? limit = null)
     {
         var query = RelevanceQueryParser.Parse(rawQuery);
         if (query.IsEmpty) return [];
 
-        var termCount = query.Terms.Length;
-        var lowerTerms = new string[termCount];
-        foreach (var term in query.Terms) lowerTerms[term.Ordinal] = term.Raw.ToLowerInvariant();
+        var index = snapshot.Relevance;
+        if (index.Count == 0) return [];
 
-        var candidates = new Dictionary<string, Candidate>(StringComparer.Ordinal);
-        RecordProvidesMatches(snapshot, query, candidates);
-        RecordNameMatches(snapshot, query, lowerTerms, candidates);
-        RecordWordMatches(snapshot, query, candidates);
+        var states = new Dictionary<int, CandidateState>();
 
-        var hits = new List<PackageSearchHit>(candidates.Count);
-        foreach (var candidate in candidates.Values) hits.Add(candidate.ToHit());
+        foreach (var term in query.Terms)
+        {
+            RecordProvidesMatches(snapshot, index, term, states);
+            RecordNameMatches(index, term, states);
+            RecordWordMatches(snapshot, index, term, states);
+            RecordNameTokenMatches(index, term, states);
+        }
 
-        hits.Sort(CompareHits);
-        return [.. hits];
+        return limit is { } cap ? SelectTop(states, cap) : SelectAll(states);
     }
 
     private static void RecordProvidesMatches(
-        SearchIndexData snapshot, RelevanceQuery query, Dictionary<string, Candidate> candidates)
+        SearchIndexData snapshot, RelevanceIndex index, SearchTerm term, Dictionary<int, CandidateState> states)
     {
-        foreach (var term in query.Terms)
-        {
-            if (!snapshot.ByProvides.TryGetValue(term.Raw, out var names)) continue;
+        if (!snapshot.ByProvides.TryGetValue(term.Raw, out var names)) return;
 
-            foreach (var name in names)
-            {
-                var package = snapshot.ByNames.GetValueOrDefault(name);
-                if (package is null) continue;
-                GetOrAdd(candidates, name, package, query.Terms.Length).Record(term.Ordinal, SearchTier.ExactProvides);
-            }
-        }
+        foreach (var name in names)
+            if (index.IdsByName.TryGetValue(name, out var id))
+                Record(states, index, id, term.Ordinal, SearchTier.ExactProvides);
     }
 
     private static void RecordWordMatches(
-        SearchIndexData snapshot, RelevanceQuery query, Dictionary<string, Candidate> candidates)
+        SearchIndexData snapshot, RelevanceIndex index, SearchTerm term, Dictionary<int, CandidateState> states)
     {
-        foreach (var term in query.Terms)
-        {
-            if (term.Posting is null) continue;
-            if (!snapshot.ByWords.TryGetValue(term.Posting, out var names)) continue;
+        if (term.Posting is null) return;
+        if (!snapshot.ByWords.TryGetValue(term.Posting, out var names)) return;
 
-            foreach (var name in names)
-            {
-                var package = snapshot.ByNames.GetValueOrDefault(name);
-                if (package is null) continue;
-                GetOrAdd(candidates, name, package, query.Terms.Length).Record(term.Ordinal, SearchTier.WordPosting);
-            }
-        }
+        foreach (var name in names)
+            if (index.IdsByName.TryGetValue(name, out var id))
+                Record(states, index, id, term.Ordinal, SearchTier.WordPosting);
     }
 
-    private static void RecordNameMatches(
-        SearchIndexData snapshot, RelevanceQuery query, string[] lowerTerms, Dictionary<string, Candidate> candidates)
+    /// <summary>
+    ///     Exact-name and name-prefix hits in one walk. Both occupy the same contiguous run of the
+    ///     ignore-case-sorted names, so a single lower bound locates the run and the original
+    ///     predicate decides which of the two tiers each name earned. Sorting and membership testing
+    ///     use the same comparison, so the run is exactly the set the predicate accepts.
+    /// </summary>
+    private static void RecordNameMatches(RelevanceIndex index, SearchTerm term, Dictionary<int, CandidateState> states)
     {
-        foreach (var (name, package) in snapshot.ByNames)
-        {
-            string[]? tokens = null;
+        var names = index.SortedNames;
 
-            foreach (var term in query.Terms)
-            {
-                var tier = ClassifyName(name, term, lowerTerms[term.Ordinal], ref tokens);
-                if (tier is not null)
-                    GetOrAdd(candidates, name, package, query.Terms.Length).Record(term.Ordinal, tier.Value);
-            }
+        for (var i = LowerBound(names, term.Raw, StringComparer.OrdinalIgnoreCase);
+             i < names.Length && names[i].StartsWith(term.Raw, StringComparison.OrdinalIgnoreCase);
+             i++)
+        {
+            var tier = names[i].Equals(term.Raw, StringComparison.OrdinalIgnoreCase)
+                ? SearchTier.ExactName
+                : SearchTier.NamePrefix;
+
+            Record(states, index, index.SortedIds[i], term.Ordinal, tier);
         }
     }
 
     /// <summary>
-    ///     Best name-based tier for one (name, term) pair, or null when the name does not match. The
-    ///     Contains prefilter gates the tokenizer: every name-side tier implies the name contains the
-    ///     term, so a single traversal of <c>ByNames</c> tokenizes only the handful of names that
-    ///     survive. <paramref name="tokens" /> is materialized once per name and reused across its terms.
+    ///     Exact-name-token and token-prefix hits in one walk over the ordinal-sorted token
+    ///     vocabulary. Vocabulary entries are already lowercased by the indexing pipeline, so the term
+    ///     is lowered to meet them; a term the pipeline rejects as a posting (too short, a stop word)
+    ///     still resolves here, which is what keeps short queries on the name tiers.
     /// </summary>
-    private static SearchTier? ClassifyName(string name, SearchTerm term, string lowerTerm, ref string[]? tokens)
+    private static void RecordNameTokenMatches(
+        RelevanceIndex index, SearchTerm term, Dictionary<int, CandidateState> states)
     {
-        if (name.Equals(term.Raw, StringComparison.OrdinalIgnoreCase)) return SearchTier.ExactName;
-        if (name.StartsWith(term.Raw, StringComparison.OrdinalIgnoreCase)) return SearchTier.NamePrefix;
-        if (!name.Contains(term.Raw, StringComparison.OrdinalIgnoreCase)) return null;
+        var lowerTerm = term.Raw.ToLowerInvariant();
+        var tokens = index.SortedNameTokens;
 
-        tokens ??= Tokenize(name);
+        for (var i = LowerBound(tokens, lowerTerm, StringComparer.Ordinal);
+             i < tokens.Length && tokens[i].StartsWith(lowerTerm, StringComparison.Ordinal);
+             i++)
+        {
+            var tier = tokens[i].Equals(lowerTerm, StringComparison.Ordinal)
+                ? SearchTier.NameToken
+                : SearchTier.NameTokenPrefix;
 
-        foreach (var token in tokens)
-            if (token.Equals(lowerTerm, StringComparison.Ordinal)) return SearchTier.NameToken;
-
-        foreach (var token in tokens)
-            if (token.StartsWith(lowerTerm, StringComparison.Ordinal)) return SearchTier.NameTokenPrefix;
-
-        return term.Posting is not null ? SearchTier.NameInfix : null;
+            for (var posting = index.TokenOffsets[i]; posting < index.TokenOffsets[i + 1]; posting++)
+                Record(states, index, index.TokenPostings[posting], term.Ordinal, tier);
+        }
     }
 
-    private static string[] Tokenize(string name) =>
-        [.. TokenCleaning.SplitAndClean(name.Split(NameSeparators, StringSplitOptions.None))];
-
-    private static Candidate GetOrAdd(
-        Dictionary<string, Candidate> candidates, string name, AurPackageMetadata package, int termCount)
+    private static void Record(
+        Dictionary<int, CandidateState> states, RelevanceIndex index, int id, int ordinal, SearchTier tier)
     {
-        if (candidates.TryGetValue(name, out var candidate)) return candidate;
+        ref var state = ref CollectionsMarshal.GetValueRefOrAddDefault(states, id, out var exists);
+        if (!exists) state.Package = index.PackagesById[id];
+        state.Record(ordinal, tier);
+    }
 
-        candidate = new Candidate(package, termCount);
-        candidates[name] = candidate;
-        return candidate;
+    private static int LowerBound(string[] sorted, string target, StringComparer comparer)
+    {
+        var low = 0;
+        var high = sorted.Length;
+
+        while (low < high)
+        {
+            var middle = low + (high - low) / 2;
+            if (comparer.Compare(sorted[middle], target) < 0) low = middle + 1;
+            else high = middle;
+        }
+
+        return low;
+    }
+
+    private static PackageSearchHit[] SelectAll(Dictionary<int, CandidateState> states)
+    {
+        var hits = new PackageSearchHit[states.Count];
+        var filled = 0;
+        foreach (var state in states.Values) hits[filled++] = state.ToHit();
+
+        Array.Sort(hits, CompareHits);
+        return hits;
+    }
+
+    /// <summary>
+    ///     Bounded top-N: the queue holds the best <paramref name="limit" /> hits seen so far with the
+    ///     worst of them at the top, so a better arrival replaces that one in a single shift-down
+    ///     instead of re-sorting the candidate set.
+    /// </summary>
+    private static PackageSearchHit[] SelectTop(Dictionary<int, CandidateState> states, int limit)
+    {
+        if (limit <= 0) return [];
+        if (states.Count <= limit) return SelectAll(states);
+
+        var best = new PriorityQueue<PackageSearchHit, PackageSearchHit>(limit, WorstFirst);
+
+        foreach (var state in states.Values)
+        {
+            var hit = state.ToHit();
+            if (best.Count < limit) best.Enqueue(hit, hit);
+            else if (CompareHits(hit, best.Peek()) < 0) best.EnqueueDequeue(hit, hit);
+        }
+
+        // Dequeue yields the worst of the survivors first, so fill from the back.
+        var top = new PackageSearchHit[limit];
+        for (var i = limit - 1; i >= 0; i--) top[i] = best.Dequeue();
+
+        return top;
     }
 
     // Total order: the chain ends in the ordinal package name, which is unique across ByNames. If that
-    // final tiebreak is ever dropped, List<T>.Sort is unstable and relevance order becomes nondeterministic.
+    // final tiebreak is ever dropped, Array.Sort and the PriorityQueue are both unstable and relevance
+    // order becomes nondeterministic.
     private static int CompareHits(PackageSearchHit x, PackageSearchHit y)
     {
         var comparison = y.MatchedTermCount.CompareTo(x.MatchedTermCount);
@@ -205,24 +253,28 @@ public sealed class PackageSearchEngine(PackageIndexStore store)
         return string.CompareOrdinal(x.Package.Name, y.Package.Name);
     }
 
-    /// <summary>Per-candidate accumulator: the best tier earned for each term, reduced to one hit.</summary>
-    private sealed class Candidate
+    /// <summary>
+    ///     Per-candidate accumulator: the best tier earned for each term packed three bits at a time
+    ///     into one word (tier + 1, so 0 means unmatched and no initialization pass is needed),
+    ///     reduced to one hit. The packing holds while the parser caps queries at ten terms.
+    /// </summary>
+    private struct CandidateState
     {
-        private readonly int[] _tierByTerm;
+        private const uint SlotMask = 0b111;
+        private const int BitsPerTerm = 3;
 
-        public Candidate(AurPackageMetadata package, int termCount)
-        {
-            Package = package;
-            _tierByTerm = new int[termCount];
-            Array.Fill(_tierByTerm, -1);
-        }
+        public AurPackageMetadata Package;
 
-        public AurPackageMetadata Package { get; }
+        private uint _tiers;
 
         public void Record(int ordinal, SearchTier tier)
         {
-            var incoming = (int)tier;
-            if (_tierByTerm[ordinal] < 0 || incoming < _tierByTerm[ordinal]) _tierByTerm[ordinal] = incoming;
+            var shift = ordinal * BitsPerTerm;
+            var incoming = (uint)tier + 1;
+            var current = (_tiers >> shift) & SlotMask;
+
+            if (current == 0 || incoming < current)
+                _tiers = (_tiers & ~(SlotMask << shift)) | (incoming << shift);
         }
 
         public PackageSearchHit ToHit()
@@ -231,9 +283,12 @@ public sealed class PackageSearchEngine(PackageIndexStore store)
             var sum = 0;
             var best = int.MaxValue;
 
-            foreach (var tier in _tierByTerm)
+            for (var shift = 0; shift < sizeof(uint) * 8; shift += BitsPerTerm)
             {
-                if (tier < 0) continue;
+                var slot = (_tiers >> shift) & SlotMask;
+                if (slot == 0) continue;
+
+                var tier = (int)slot - 1;
                 matched++;
                 sum += tier;
                 if (tier < best) best = tier;
@@ -252,8 +307,7 @@ internal enum SearchTier
     NamePrefix,
     NameToken,
     NameTokenPrefix,
-    WordPosting,
-    NameInfix
+    WordPosting
 }
 
 /// <summary>A ranked relevance result. Tier and score are internal; only <see cref="Package" /> is served.</summary>

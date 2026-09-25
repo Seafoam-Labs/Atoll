@@ -29,10 +29,12 @@ in [`results/`](results/), newest first.
 
 ## Workload
 
-Six always-on scenarios cover the contracts real AUR clients and browser users
-exercise; keeping them separate stops a slow path from hiding in the aggregate.
-A seventh, `relevance`, is opt-in (`RELEVANCE_RATE > 0`) so the default profile
-stays byte-identical to the recorded baseline.
+Five scenarios are always on and cover the contracts real AUR clients and browser
+users exercise; keeping them separate stops a slow path from hiding in the
+aggregate. `git_fetch` and `relevance` are registered only when their rate is
+above zero, so `GIT_RATE=0` gives another scenario clean isolation on a small
+node, and the `relevance` default of `0` keeps the default profile
+byte-identical to the recorded baseline.
 
 | Scenario | Executor | Path | Threshold |
 | --- | --- | --- | --- |
@@ -41,8 +43,8 @@ stays byte-identical to the recorded baseline.
 | `catalog` | ramping-vus, 12 VUs | `GET /v1/packages?page=` (Mongo), plus sampled `/versions` and detail reads | p95 < 600 ms |
 | `catalog_sorted` | constant-arrival-rate, 10 requests/s | `GET /v1/packages?sortBy=votes/popularity/version` | p95 < 600 ms |
 | `ui` | ramping-vus, 5 VUs | `GET /` and `GET /package/{name}` (server-rendered Blazor) | p95 < 1 s |
-| `git_fetch` | constant-arrival-rate, 2 fetches/s | Full Git Smart HTTP fetch: `info/refs` advertisement → one-shot `want`/`done` → `git-upload-pack` | p95 < 2 s |
-| `relevance` (opt-in) | constant-arrival-rate, `RELEVANCE_RATE` requests/s | `GET /v1/search?query=&by=relevance`: free-text ranked retrieval, one full rank over the in-memory index, bare array capped at 50; queries draw from `RELEVANCE_QUERIES` | p95 < 300 ms |
+| `git_fetch` (`GIT_RATE > 0`) | constant-arrival-rate, 2 fetches/s | Full Git Smart HTTP fetch: `info/refs` advertisement → one-shot `want`/`done` → `git-upload-pack` | p95 < 2 s |
+| `relevance` (`RELEVANCE_RATE > 0`) | constant-arrival-rate, `RELEVANCE_RATE` requests/s | `GET /v1/search?query=&by=relevance`: free-text ranked retrieval over the in-memory index, bare array capped at 50; queries draw from the `RELEVANCE_POOL` | p95 < 300 ms |
 
 The two rate-driven scenarios are capped instead of VU-driven because each is
 expensive per request: Git fetching shells out to `git upload-pack` server-side,
@@ -83,9 +85,16 @@ code behind `relevance`: a log-only cost measurement of `PackageSearchEngine.Ran
 over a 120k-package index shape-matched to the live corpus (deterministic name
 families reproduce the measured prefix/contains/token counts per term, asserted
 before measuring so a generator edit cannot silently invalidate the comparison).
-It reports median/p95/min latency, allocations, candidate count, and 50-row
-serialized bytes per scenario. `dotnet test` hides `ITestOutputHelper`, so read
-the numbers by running the MTP executable directly:
+It reports the index build cost and retained footprint, then per scenario the
+candidate count, median/p95/min latency, allocations, and 50-row serialized bytes,
+measured both unlimited (the catalog ranks the whole membership to page it) and
+capped at 50 (what REST serves). Three pools cover the shapes a served rate has to
+survive: the fixed evidence queries, a 500-query pool of distinct prefixes of real
+names so nothing is repeat-query warmth, and an adversarial pool of one/two-char
+prefixes, a stop-word prefix, the maximum-length term, and the maximum term count.
+`dotnet test` hides `ITestOutputHelper` and runs other classes in parallel, which
+inflates the allocation columns (the counter is process-wide), so read the numbers
+by running the MTP executable directly:
 
 ```sh
 dotnet build Atoll.Api.Tests/Atoll.Api.Tests.csproj -c Release -p:SkipTailwind=true
@@ -132,10 +141,12 @@ returns a package's whole file contents, not metadata.
 | `PACKAGES` | `yay,paru,visual-studio-code-bin,slack-desktop,xpipe-ptb,duckstation-gpl` | Request mix for the name-keyed scenarios; spans median documents and the size/depth tail. Rotate it (see above). Every name must be seedable — `setup()` aborts on one that is not |
 | `TERMS` | 22 validated words, hot to unmatched | Queries for `by=words` and RPC suggestions |
 | `PROVIDES` | 9 validated provided tokens | Queries for `by=provides` |
-| `RELEVANCE_QUERIES` | `yay,vim,rust,browser,neovim,qt,git,brwose,vim editor,rust browser gui` | Free-text queries for `by=relevance`; may contain spaces (sent as `%20`). Spans the distinct relevance code paths: exact, prefix, name-vs-metadata, interior token, short, stop word, no-hit, multi-term |
+| `RELEVANCE_QUERIES` | `yay,vim,rust,browser,neovim,qt,git,brwose,vim editor,rust browser gui` | Free-text queries for `by=relevance`; may contain spaces (sent as `%20`). Spans the distinct relevance code paths: exact, prefix, name-vs-metadata, interior token, short, stop word, no-hit, multi-term. Used by `RELEVANCE_POOL=default` |
+| `RELEVANCE_POOL` | `default` | Which queries `relevance` sends: `default` (`RELEVANCE_QUERIES`, ten hot queries), `adversarial` (one/two-char and stop-word prefixes, allowed short terms, a 256-char term, max term count, with and without hits), or `unique` (a seeded pool of distinct prefixes of names sampled from the in-memory index at `setup()`, so no request repeats a query). Derive a sustained rate from `unique` or `adversarial`; `default` flatters the path |
+| `RELEVANCE_POOL_SIZE` | `500` | Size of the `unique` pool; `setup()` fails rather than silently looping the pool |
 | `VUS` | `25` | Peak VUs per VU-driven scenario |
 | `UI_VUS` | `5` | Peak VUs requesting server-rendered HTML |
-| `GIT_RATE` | `2` | Git fetches per second |
+| `GIT_RATE` | `2` | Git fetches per second; `0` omits the `git_fetch` scenario and its thresholds, which is what isolating another scenario on a small node needs |
 | `SORT_RATE` | `10` | Sorted package pages per second |
 | `RELEVANCE_RATE` | `0` | Relevance requests per second; `0` omits the `relevance` scenario and its thresholds entirely, leaving the default profile unchanged |
 | `WARMUP` / `HOLD` / `COOLDOWN` | `20s` / `1m` / `15s` | Ramp-up, steady-state, ramp-down stage durations |

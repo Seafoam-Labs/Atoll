@@ -53,6 +53,78 @@ public class PackageIndexBuilderTests
         });
     }
 
+    [Fact]
+    public void RelevanceIndexMirrorsTheNameSet()
+    {
+        var relevance = PackageIndexBuilder.BuildFromPackages(SamplePackages()).Relevance;
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(3, relevance.Count);
+
+            for (var id = 0; id < relevance.Count; id++)
+                Assert.Equal(id, relevance.IdsByName[relevance.PackagesById[id].Name]);
+
+            Assert.Equal(relevance.Count, relevance.SortedNames.Length);
+            Assert.Equal(relevance.Count, relevance.SortedIds.Length);
+
+            for (var i = 0; i < relevance.SortedNames.Length; i++)
+            {
+                Assert.Equal(relevance.PackagesById[relevance.SortedIds[i]].Name, relevance.SortedNames[i]);
+
+                if (i > 0)
+                    Assert.True(string.Compare(
+                        relevance.SortedNames[i - 1], relevance.SortedNames[i],
+                        StringComparison.OrdinalIgnoreCase) <= 0);
+            }
+        });
+    }
+
+    [Fact]
+    public void NameTokenPostingsCarryOnlyNameTokens()
+    {
+        var indexes = PackageIndexBuilder.BuildFromPackages(SamplePackages());
+        var relevance = indexes.Relevance;
+
+        // "handheld" is a description and keyword token but no name token: ByWords unions the
+        // sources and cannot attribute them, which is why ranked retrieval needs its own vocabulary.
+        Assert.Multiple(() =>
+        {
+            Assert.True(indexes.ByWords.ContainsKey("handheld"));
+            Assert.DoesNotContain("handheld", relevance.SortedNameTokens, StringComparer.Ordinal);
+            Assert.Equal([relevance.IdsByName["shelly-bin"]], Postings(relevance, "shelly"));
+            Assert.Equal([relevance.IdsByName["portable-kit"]], Postings(relevance, "kit"));
+        });
+    }
+
+    [Fact]
+    public void RepeatedNameKeepsOneIdAndTheLastPackage()
+    {
+        var indexes = PackageIndexBuilder.BuildFromPackages(
+        [
+            SamplePackage("dup", "first", []),
+            SamplePackage("other", "other", []),
+            SamplePackage("dup", "second", [])
+        ]);
+
+        var id = indexes.Relevance.IdsByName["dup"];
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(2, indexes.Relevance.Count);
+            Assert.Same(indexes.ByNames["dup"], indexes.Relevance.PackagesById[id]);
+            Assert.Equal("second", indexes.Relevance.PackagesById[id].Description);
+        });
+    }
+
+    private static int[] Postings(RelevanceIndex relevance, string token)
+    {
+        var position = Array.BinarySearch(relevance.SortedNameTokens, token, StringComparer.Ordinal);
+        Assert.True(position >= 0, $"{token} is not in the name-token vocabulary");
+
+        return relevance.TokenPostings[relevance.TokenOffsets[position]..relevance.TokenOffsets[position + 1]];
+    }
+
     private static void AssertIndexesMatchSample(SearchIndexData indexes)
     {
         Assert.Multiple(() =>

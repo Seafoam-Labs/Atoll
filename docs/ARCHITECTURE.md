@@ -38,7 +38,7 @@ history, provides fast in-memory search, and exposes each package as a cloneable
 | Framework | ASP.NET Core Minimal API | Low-overhead routing; no controller boilerplate needed |
 | Web UI | Blazor (Interactive Server + SSR) + Tailwind CSS v4 | Built-in web interface for catalog search, file inspection, and status dashboard |
 | Database | MongoDB 8 (via MongoDB.Driver) | Flexible document model suits package metadata + per-revision content documents |
-| In-memory index | ImmutableDictionary (ByNames / ByWords / ByProvides) | Fast reads with a consistent per-request snapshot, no external cache tier |
+| In-memory index | ImmutableDictionary (ByNames / ByWords / ByProvides) plus derived sorted-array and posting lookups (`RelevanceIndex`) | Fast reads with a consistent per-request snapshot, no external cache tier |
 | Git subprocess | CliWrap + system `git` | Reuses the `git upload-pack` implementation |
 | Containerization | Docker / Docker Compose | Single `compose.yaml` spins up API + MongoDB |
 | Cloud infra | Terraform (`terraform/`) | Cloud infrastructure definitions |

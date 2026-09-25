@@ -43,11 +43,7 @@ public sealed class PackageSearchService(PackageSearchEngine engine)
         var snapshot = engine.Capture();
         Interlocked.Increment(ref _requestCount);
 
-        return
-        [
-            .. PackageSearchEngine.Rank(snapshot, rawQuery)
-                .Take(50)
-                .Select(hit => hit.Package)
-        ];
+        // The cap is a rank bound, not a post-sort Take: selection stops at the best 50 candidates.
+        return [.. PackageSearchEngine.Rank(snapshot, rawQuery, 50).Select(hit => hit.Package)];
     }
 }
