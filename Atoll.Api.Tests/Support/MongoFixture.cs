@@ -21,7 +21,7 @@ public sealed class MongoFixture : IAsyncLifetime
     {
         try
         {
-            Container = new MongoDbBuilder("mongo:8.3.7")
+            Container = new MongoDbBuilder("mongo:8.3.11")
                 .WithEnvironment("GLIBC_TUNABLES", "glibc.pthread.rseq=1") // https://jira.mongodb.org/browse/SERVER-121912
                 .Build();
 

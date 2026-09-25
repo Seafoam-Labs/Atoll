@@ -55,7 +55,7 @@
       start_period: 30s
 
   mongo:
-    image: mongo:8.3.7
+    image: mongo:8.3.11
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -77,7 +77,7 @@
   # OpenTelemetry backend for development: OTel Collector, Prometheus, Loki, Tempo, Pyroscope, and Grafana in one image.
   # Grafana: http://localhost:3000 (admin/admin); the "Atoll" dashboard is provisioned and set as home.
   lgtm:
-    image: grafana/otel-lgtm:0.30.0@sha256:46ca028e294bd728e8e930a28e887f640a8f2a9533cc283f79bcc6ab73d2ffd8
+    image: grafana/otel-lgtm:0.34.0@sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c
     profiles: [ "observability" ]
     restart: unless-stopped
     ports:
