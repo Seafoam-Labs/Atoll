@@ -33,7 +33,8 @@ public enum CatalogSearchMode
 {
     Name,
     Words,
-    Provides
+    Provides,
+    Relevance
 }
 
 public enum CatalogSort
@@ -45,7 +46,10 @@ public enum CatalogSort
     PopularityAsc,
     PopularityDesc,
     LastModifiedAsc,
-    LastModifiedDesc
+    LastModifiedDesc,
+
+    // The ranked query's "no explicit sort" state; never reaches the sorted views or PackageComparer.
+    Relevance
 }
 
 public sealed record CatalogRow(
@@ -102,8 +106,33 @@ public sealed class PackageCatalogService(
         if (page < 1) page = 1;
 
         var index = engine.Capture();
-        var sorted = GetSortedPackages(index, sort);
-        var matches = BuildPredicate(mode, query);
+        AurPackageMetadata[] sorted;
+        Func<AurPackageMetadata, bool>? matches;
+
+        if (mode == CatalogSearchMode.Relevance && !string.IsNullOrWhiteSpace(query))
+        {
+            var hits = PackageSearchEngine.Rank(index, query);
+
+            if (sort == CatalogSort.Relevance)
+            {
+                sorted = [.. hits.Select(hit => hit.Package)];
+                matches = null;
+            }
+            else
+            {
+                // A user sort overrides rank order; relevance decides membership only.
+                sorted = GetSortedPackages(index, sort);
+                var rankedNames = new HashSet<string>(hits.Select(hit => hit.Package.Name), StringComparer.Ordinal);
+                matches = package => rankedNames.Contains(package.Name);
+            }
+        }
+        else
+        {
+            // Relevance ordering needs a ranked query; a legacy mode or blank query gets name order.
+            sorted = GetSortedPackages(index, sort == CatalogSort.Relevance ? CatalogSort.NameAsc : sort);
+            matches = BuildPredicate(mode, query);
+        }
+
         var snapshot = await GetSeededSnapshotAsync(ct);
 
         var result = CollectPage(sorted, matches, seededFilter, securityFilter, snapshot, page);

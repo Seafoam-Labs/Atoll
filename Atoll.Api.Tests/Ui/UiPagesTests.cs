@@ -172,6 +172,53 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
+    public async Task RootPageRanksWithBestMatchByDefault()
+    {
+        var body = await GetBodyAsync("/?q=portable");
+
+        // portable-pro matches provides exactly; portable-kit only starts with the term.
+        Assert.True(body.IndexOf("href=\"/package/portable-pro\"", StringComparison.Ordinal)
+            < body.IndexOf("href=\"/package/portable-kit\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RootPageExplicitLegacyModeKeepsNameOrder()
+    {
+        var body = await GetBodyAsync("/?q=portable&mode=name");
+
+        Assert.True(body.IndexOf("href=\"/package/portable-kit\"", StringComparison.Ordinal)
+            < body.IndexOf("href=\"/package/portable-pro\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RootPageShowsEmptyStateForUnmatchedRankedQuery()
+    {
+        var body = await GetBodyAsync("/?q=brwose");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("0 packages", body, StringComparison.Ordinal);
+            Assert.Contains("No packages found", body, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task RootPageOffersBestMatchMode()
+    {
+        var body = await GetBodyAsync("/");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("value=\"Relevance\"", body, StringComparison.Ordinal);
+            Assert.Contains("Best match", body, StringComparison.Ordinal);
+            // The legacy matchers stay selectable as explicit modes.
+            Assert.Contains("value=\"Name\"", body, StringComparison.Ordinal);
+            Assert.Contains("value=\"Words\"", body, StringComparison.Ordinal);
+            Assert.Contains("value=\"Provides\"", body, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task RootPageCompressesResponseWithGzip()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");

@@ -20,6 +20,10 @@ Accept: application/json
 GET {{baseUrl}}/v1/search?query=shelly&by=provides
 Accept: application/json
 
+### Search Packages by Relevance (free text, ranked, capped at 50)
+GET {{baseUrl}}/v1/search?query=rust&by=relevance
+Accept: application/json
+
 ### List Packages (paged, defaults: page 1, 50 per page)
 GET {{baseUrl}}/v1/packages
 Accept: application/json

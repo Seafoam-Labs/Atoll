@@ -121,6 +121,12 @@ public class PackageCatalogServicePerfTests
         await RunScenarioAsync("narrow query (single hit, NameAsc)",
             _singleHitQuery, CatalogSeededFilter.All, CatalogSecurityFilter.Any,
             CatalogSearchMode.Name, CatalogSort.NameAsc, expectedTotal: 1);
+
+        // The catalog's default for a query: one linear name scan plus candidate aggregation and
+        // sorting, then the same page slice and projection as the legacy modes.
+        await RunScenarioAsync("ranked query (q=lib-, Best match)",
+            "lib-", CatalogSeededFilter.All, CatalogSecurityFilter.Any,
+            CatalogSearchMode.Relevance, CatalogSort.Relevance, expectedTotal: null);
     }
 
     private async Task RunScenarioAsync(

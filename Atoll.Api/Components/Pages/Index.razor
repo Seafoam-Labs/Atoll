@@ -49,6 +49,7 @@
 
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:flex-1 lg:flex-wrap">
         <select class="field col-span-2 sm:col-span-1 lg:max-w-42.5" @bind="_mode" @bind:after="ReloadNow" aria-label="Search by">
+            <option value="@CatalogSearchMode.Relevance">Best match</option>
             <option value="@CatalogSearchMode.Name">Name / description</option>
             <option value="@CatalogSearchMode.Words">Words</option>
             <option value="@CatalogSearchMode.Provides">Provides</option>
@@ -306,16 +307,26 @@ else if (_result is not null)
 
     private void ToggleSort(CatalogSort primary, CatalogSort secondary)
     {
-        _sort = _sort == primary ? secondary : primary;
+        // In Best match a header cycles Relevance -> primary -> secondary -> Relevance, so the ranked
+        // order stays reachable; the legacy modes keep the two-state toggle.
+        var ranked = _mode == CatalogSearchMode.Relevance && !string.IsNullOrWhiteSpace(_query);
+
+        if (_sort == primary)
+            _sort = secondary;
+        else if (ranked && _sort == secondary)
+            _sort = CatalogSort.Relevance;
+        else
+            _sort = primary;
+
         ReloadNow();
     }
 
-    // Same "equals its default, so it is absent from the URL" conditions as CatalogState.ToUri.
+    // Same "equals its effective default, so it is absent from the URL" conditions as CatalogState.
     private bool _filtersActive =>
-        _mode != CatalogSearchMode.Name
+        _mode != CatalogState.DefaultModeFor(_query)
         || _seededFilter != CatalogSeededFilter.All
         || _securityFilter != CatalogSecurityFilter.Any
-        || _sort != CatalogSort.NameAsc;
+        || _sort != CatalogState.DefaultSortFor(_mode, _query);
 
     private void ClearFilters()
     {
@@ -390,71 +401,6 @@ else if (_result is not null)
         {
             if (version == _searchVersion)
                 _loading = false;
-        }
-    }
-
-    private readonly record struct CatalogState(
-        string Query,
-        int Page,
-        CatalogSearchMode Mode,
-        CatalogSeededFilter Seeded,
-        CatalogSecurityFilter Security,
-        CatalogSort Sort)
-    {
-        public static CatalogState Default { get; } = new(
-            "", 1, CatalogSearchMode.Name, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSort.NameAsc);
-
-        public static CatalogState FromQuery(
-            string? q,
-            int? page,
-            string? mode,
-            string? seeded,
-            string? security,
-            string? sort) => new(
-                q ?? "",
-                Math.Max(1, page ?? 1),
-                Parse(mode, CatalogSearchMode.Name),
-                Parse(seeded, CatalogSeededFilter.All),
-                Parse(security, CatalogSecurityFilter.Any),
-                Parse(sort, CatalogSort.NameAsc));
-
-        public string ToUri(NavigationManager nav)
-        {
-            return nav.GetUriWithQueryParameters(new Dictionary<string, object?>
-            {
-                ["q"] = string.IsNullOrWhiteSpace(Query) ? null : Query,
-                ["page"] = Page > 1 ? Page : null,
-                ["mode"] = Mode == CatalogSearchMode.Name ? null : Kebab(Mode),
-                ["seeded"] = Seeded == CatalogSeededFilter.All ? null : Kebab(Seeded),
-                ["security"] = Security == CatalogSecurityFilter.Any ? null : Kebab(Security),
-                ["sort"] = Sort == CatalogSort.NameAsc ? null : Kebab(Sort)
-            });
-        }
-
-        private static T Parse<T>(string? value, T fallback) where T : struct, Enum
-        {
-            var text = value?.Replace("-", "");
-            return text is not null
-                   && Enum.TryParse<T>(text, ignoreCase: true, out var parsed)
-                   && Enum.IsDefined(parsed)
-                ? parsed
-                : fallback;
-        }
-
-        // e.g. VotesDesc -> votes-desc
-        private static string Kebab<T>(T value) where T : struct, Enum
-        {
-            var name = value.ToString();
-            var chars = new char[name.Length * 2];
-            var length = 0;
-            foreach (var ch in name)
-            {
-                if (char.IsUpper(ch) && length > 0)
-                    chars[length++] = '-';
-                chars[length++] = char.ToLowerInvariant(ch);
-            }
-
-            return new string(chars, 0, length);
         }
     }
 }

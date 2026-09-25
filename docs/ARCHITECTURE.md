@@ -177,10 +177,17 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 
 `/v1/search` accepts two query parameters:
 
-- `query` - a comma-separated list of values (e.g. `?query=linux,zen`). An omitted or empty query deliberately returns
-  `200` with no results rather than `400`.
-- `by` - `name` (exact match), `words` (token intersection over Name/Description/Keywords, ordered by votes, capped at
-  50), or `provides` (currently no cap or defined ordering - asymmetry worth resolving). Defaults to `name`.
+- `query` - the search text. The legacy modes (`name`, `words`, `provides`) read it as a comma-separated batch of
+  values (e.g. `?query=linux,zen`); `relevance` reads it as free text split on whitespace and commas. An omitted or
+  empty query deliberately returns `200` with no results rather than `400`.
+- `by` - `name` (exact match), `words` (token intersection over Name/Description/Keywords, ordered by votes),
+  `provides` (exact provides match), or `relevance` (deterministic tiered ranking over exact names, provides, name
+  prefixes/tokens, and word postings; no typo tolerance). Defaults to `name`.
+- Caps are deliberate per mode: `name` and `provides` are uncapped hydration lookups bounded only by URL length (the
+  paged index feed hydrates ≤ 100 names at a time through them), while `words` and `relevance` cap at 50.
+- `relevance` accepts at most 256 decoded characters and 8 terms; an over-bound query is rejected with `400`
+  `ProblemDetails`. It returns a bare `AurPackageMetadata[]` with no per-hit score, ordered by coverage, match
+  quality, votes, then name.
 
 ### Package index
 
@@ -229,7 +236,7 @@ external UI clients:
 | --- | --- | --- |
 | GET/HEAD | `/health` | Liveness only - does not check MongoDB or index readiness (version-neutral) |
 | GET | `/metrics` | OpenTelemetry metrics in Prometheus format (see Operations; version-neutral) |
-| GET | `/v1/search?query=…&by=name\|words\|provides` | In-memory package search (comma-separated values) |
+| GET | `/v1/search?query=…&by=name\|words\|provides\|relevance` | In-memory package search (legacy modes take comma-separated values, `relevance` free text) |
 | GET/POST | `/rpc` | aurweb-compatible RPC v5 endpoint for yay/paru (version-neutral) |
 | GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint (version-neutral) |
 | GET | `/v1/packages?page=…&limit=…&sortBy=…&order=…` | Paged seeded-package listing for UI clients (default 50, max 200 per page; `sortBy` one of `name`\|`votes`\|`popularity`\|`version` with `order` `asc`\|`desc`, defaulting to `asc`; rows carry nullable catalog fields `description`/`version`/`numVotes`/`popularity`/`outOfDate`/`url`/`maintainer`/`packageBase`/`firstSubmitted`/`lastModified`/`license`/`depends`/`makeDepends`/`optDepends`/`provides` joined from the live index) |
@@ -249,7 +256,7 @@ external UI clients:
 
 | Path | Render Mode | Description |
 | --- | --- | --- |
-| `/` | Interactive Server | Package catalog search, live filtering (all/seeded/unseeded), and sorting |
+| `/` | Interactive Server | Package catalog search - a query without `mode` runs ranked Best match, `?mode=name\|words\|provides` keeps the legacy matchers - with live filtering (all/seeded/unseeded) and sorting |
 | `/package/{name}` | Static SSR | Package details, metadata, relationships, clone block, security banner |
 | `/package/{name}/files` | Static SSR | PKGBUILD and source file viewer across revisions (client-side syntax coloring via self-hosted highlight.js) |
 | `/package/{name}/revisions` | Static SSR | Revision history list and static security analysis findings |
@@ -272,7 +279,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 
 | Decision | Rationale | Trade-offs | Status |
 | --- | --- | --- | --- |
-| In-memory search index (no Elasticsearch) | Fast reads (< 10 ms); full AUR metadata fits easily in RAM (~100 MB). | Must rebuild on restart; no fuzzy scoring. | Active |
+| In-memory search index (no Elasticsearch) | Fast reads (< 10 ms); full AUR metadata fits easily in RAM (~100 MB). | Must rebuild on restart; no typo tolerance (deterministic tier ranking only). | Active |
 | Normalized `package-revisions` storage | Avoids 16 MiB document growth as revisions accumulate; keeps `packages` documents lean. | Content reads take an extra indexed query; two-document writes on append without distributed transactions. | Active |
 | Subprocess execution for `git upload-pack` | Reuses complete and standard Git smart HTTP protocol implementation. | Requires `git` binary in container; small process-spawn overhead per Git fetch. | Active |
 | Atomic snapshot swap in `PackageIndexStore` | Lock-free, zero-contention reads; consistent view per query. | Full index rebuild on refresh; temporary 2× peak memory during rebuild. | Active |

@@ -108,6 +108,89 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RelevanceModeRanksProvidesAheadOfNamePrefixes()
+    {
+        var result = await CreateService().SearchAsync("portable", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
+
+        // portable-pro matches a provides value exactly; portable-kit only starts with the term.
+        Assert.Equal(["portable-pro", "portable-kit"],
+            result.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task RelevanceModeBreaksWordPostingTiesByVotes()
+    {
+        var result = await CreateService().SearchAsync("handheld", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
+
+        // Both rows match on the keyword posting alone; votes decide, against name order.
+        Assert.Equal(["portable-pro", "portable-kit"],
+            result.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task RelevanceModeMatchesNameTokensAndReturnsNothingForUnknownQueries()
+    {
+        var service = CreateService();
+
+        var token = await service.SearchAsync("kit", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
+        var noHit = await service.SearchAsync("brwose", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(["portable-kit"],
+            token.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+        Assert.Empty(noHit.Rows);
+    }
+
+    [Fact]
+    public async Task ExplicitSortsOrderTheRankedMembershipWithoutWideningIt()
+    {
+        // VotesAsc reverses rank order (portable-pro first) while TotalMatches still counts the ranked
+        // membership, not the whole catalog.
+        var result = await CreateService().SearchAsync("portable", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.VotesAsc, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(["portable-kit", "portable-pro"],
+            result.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+        Assert.Equal(2, result.TotalMatches);
+    }
+
+    [Fact]
+    public async Task RelevanceSortFallsBackToNameOrderWithoutARankedQuery()
+    {
+        var service = CreateService();
+
+        var blank = await service.SearchAsync("", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
+        var legacy = await service.SearchAsync("portable", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(["portable-kit", "portable-pro", "shelly-bin"],
+                blank.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+            Assert.Equal(["portable-kit", "portable-pro"],
+                legacy.Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task RankedResultsPageAndClampLikeTheLegacyModes()
+    {
+        // Every generated name starts with the queried prefix, so the ranked membership is the corpus.
+        var service = CreateService(Corpus(124));
+
+        var page1 = await service.SearchAsync("pkg", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
+        var clamped = await service.SearchAsync("pkg", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, page: 99, ct: TestContext.Current.CancellationToken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(124, page1.TotalMatches);
+            Assert.Equal(3, page1.TotalPages);
+            Assert.Equal(PackageCatalogService.PageSize, page1.Rows.Count);
+            Assert.Equal("pkg-0000", page1.Rows[0].Package.Name);
+            Assert.Equal(3, clamped.Page);
+            Assert.Equal(24, clamped.Rows.Count);
+            Assert.Equal("pkg-0123", clamped.Rows[^1].Package.Name);
+        });
+    }
+
+    [Fact]
     public async Task SeededFilterNarrowsToSeededOrIndexOnlyRows()
     {
         _seededNames = ["shelly-bin"];
