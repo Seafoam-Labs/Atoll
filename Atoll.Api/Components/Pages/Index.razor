@@ -261,7 +261,7 @@ else if (_result is not null)
 @code {
     private string _query = "";
     private string _appliedQuery = "";
-    private CatalogSearchMode _mode = CatalogSearchMode.Name;
+    private CatalogSearchMode _mode = CatalogSearchMode.Relevance;
     private CatalogSeededFilter _seededFilter = CatalogSeededFilter.All;
     private CatalogSecurityFilter _securityFilter = CatalogSecurityFilter.Any;
     private CatalogSort _sort = CatalogSort.NameAsc;
@@ -331,7 +331,7 @@ else if (_result is not null)
     private void ClearFilters()
     {
         _query = "";
-        _mode = CatalogSearchMode.Name;
+        _mode = CatalogSearchMode.Relevance;
         _seededFilter = CatalogSeededFilter.All;
         _securityFilter = CatalogSecurityFilter.Any;
         _sort = CatalogSort.NameAsc;
