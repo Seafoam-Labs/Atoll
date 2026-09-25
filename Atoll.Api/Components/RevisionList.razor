@@ -1,7 +1,9 @@
-@* Revision history rows - stacked-list layout (SHA + badges, message, author/date meta, files action). *@
+@* Revision history rows - stacked-list layout (SHA + badges, message, author/date meta, row actions). *@
 <ul class="rev-list" role="list">
-    @foreach (var rev in Revisions)
+    @for (var index = 0; index < Revisions.Count; index++)
     {
+        var rev = Revisions[index];
+        var previous = index + 1 < Revisions.Count ? Revisions[index + 1] : null;
         <li class="rev-item">
             <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -29,6 +31,9 @@
                 </div>
             </div>
             <div class="flex-none flex gap-2">
+                <a class="btn" href="@($"/package/{Name}/diff?to={rev.Sha}")">
+                    Diff<span class="sr-only">@DiffHint(previous)</span>
+                </a>
                 <a class="btn" href="@($"/package/{Name}/files?rev={rev.Sha}")">
                     Files<span class="sr-only"> at revision @UiFormatting.Truncate(rev.Sha)</span>
                 </a>
@@ -43,4 +48,15 @@
 @code {
     [Parameter] public string Name { get; set; } = "";
     [Parameter] public IReadOnlyList<RevisionRow> Revisions { get; set; } = [];
+
+    /// <summary>Whether <see cref="Revisions" /> is a capped prefix, so its last row may still have an older parent.</summary>
+    [Parameter] public bool Truncated { get; set; }
+
+    // The diff link opens the row against the revision stored before it, so the hint names that base rather
+    // than repeating the row's own SHA like the Files and Snapshot hints do.
+    private string DiffHint(RevisionRow? previous) => previous is not null
+        ? $" against the previous revision at {UiFormatting.Truncate(previous.Sha)}"
+        : Truncated
+            ? " against the revision stored before it"
+            : " - the oldest stored revision, so every file reads as added";
 }

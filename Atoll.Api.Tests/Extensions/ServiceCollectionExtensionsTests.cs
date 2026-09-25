@@ -5,6 +5,7 @@ using Atoll.Api.Services.Sync.Mirror;
 using Atoll.Api.Services.Sync.Refresh;
 using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
+using Atoll.Api.Tests.Support;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -43,6 +44,7 @@ public class ServiceCollectionExtensionsTests
 
                 // Stop the workers from running; this probe only observes registrations.
                 services.RemoveAll<IHostedService>();
+                services.UseInMemoryRepositories();
             });
         }
     }

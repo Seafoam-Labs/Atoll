@@ -1,6 +1,4 @@
 using Atoll.Api.Services.Catalog.Indexing;
-using Atoll.Api.Services.Catalog.Persistence;
-using Atoll.Api.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,13 +20,12 @@ internal sealed class ApiTestFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<IHostedService>();
             services.RemoveAll<PackageIndexStore>();
-            services.RemoveAll<IAurMetadataRepository>();
+            services.UseInMemoryRepositories();
 
             var store = new PackageIndexStore();
             store.Replace(Index ?? TestData.LoadSampleIndexes());
 
             services.AddSingleton(store);
-            services.AddSingleton<IAurMetadataRepository>(_ => new InMemoryAurMetadataRepository());
         });
     }
 }

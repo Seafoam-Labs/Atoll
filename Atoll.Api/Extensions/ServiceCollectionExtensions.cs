@@ -199,6 +199,7 @@ internal static class ServiceCollectionExtensions
         {
             services.AddSingleton<IGitRepositoryCache, GitRepositoryCache>();
             services.AddSingleton<IGitTransferService, GitTransferService>();
+            services.AddSingleton<ITextDiffer, GitTextDiffer>();
             return services;
         }
 

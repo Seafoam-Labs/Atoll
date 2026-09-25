@@ -29,6 +29,12 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
     /// <summary>Set false to gate the manual seed/rescan mutations (REST 403 + hidden UI buttons).</summary>
     public bool MutationsEnabled { get; init; } = true;
 
+    /// <summary>
+    ///     Diff engine backing the diff tab. Defaults to a stub so the fast tier never spawns a git process;
+    ///     pass <c>new GitTextDiffer()</c> to exercise the real CLI.
+    /// </summary>
+    public ITextDiffer Differ { get; init; } = new FakeTextDiffer();
+
     /// <summary>Optional override for the public base URL rendered in UI clone blocks.</summary>
     public string? ExternalBaseUrl { get; init; }
 
@@ -63,6 +69,7 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
             services.RemoveAll<IPackageSecurityRepository>();
             services.RemoveAll<IAurMetadataRepository>();
             services.RemoveAll<ISeedExclusionRepository>();
+            services.RemoveAll<ITextDiffer>();
 
             var store = new PackageIndexStore();
             if (LoadSampleIndex)
@@ -75,6 +82,7 @@ internal sealed class SecurityTestFactory : WebApplicationFactory<Program>
             services.AddSingleton<IAurMetadataRepository>(_ => new InMemoryAurMetadataRepository());
             services.AddSingleton<IPackageService, PackageService>();
             services.AddSingleton<IGitTransferService, GitTransferService>();
+            services.AddSingleton(Differ);
         });
     }
 

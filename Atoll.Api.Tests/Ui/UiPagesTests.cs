@@ -626,9 +626,73 @@ public sealed partial class UiPagesTests : IDisposable
     {
         var revisions = await _client.GetAsync("/package/no-such-package/revisions", TestContext.Current.CancellationToken);
         var files = await _client.GetAsync("/package/no-such-package/files", TestContext.Current.CancellationToken);
+        var diff = await _client.GetAsync("/package/no-such-package/diff", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, revisions.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, files.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, diff.StatusCode);
+    }
+
+    [Fact]
+    public async Task DiffTabShowsSameRevisionForIdenticalRange()
+    {
+        await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
+
+        var response = await _client.GetAsync(
+            "/package/shelly-bin/diff?from=rev-1&to=rev-1", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("These are the same revision", body, StringComparison.Ordinal);
+            // Short-circuited before the differ, so no code block is rendered at all.
+            Assert.DoesNotContain("language-diff", body, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task DiffTabShowsUnseededStateForIndexOnlyPackage()
+    {
+        var response = await _client.GetAsync("/package/portable-kit/diff", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("not seeded", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DiffTabFallsBackToHeadForUnknownRevision()
+    {
+        await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
+
+        var unknownBase = await GetBodyAsync("/package/shelly-bin/diff?from=garbage&to=rev-2");
+        var unknownTarget = await GetBodyAsync("/package/shelly-bin/diff?from=rev-1&to=nonsense");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("Revision not found", unknownBase, StringComparison.Ordinal);
+            // The banner names the side that did not resolve, not whichever query value happens to be set.
+            Assert.Contains("no revision <code>garbage</code>", unknownBase, StringComparison.Ordinal);
+            Assert.Contains("no revision <code>nonsense</code>", unknownTarget, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task RevisionsTabLinksEachRowToItsDiff()
+    {
+        await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
+
+        var response = await _client.GetAsync("/package/shelly-bin/revisions", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // A single click compares a revision against the one before it, like cgit's commit view.
+        Assert.Contains("href=\"/package/shelly-bin/diff?to=rev-2\"", body, StringComparison.Ordinal);
+        Assert.Contains("href=\"/package/shelly-bin/diff?to=rev-1\"", body, StringComparison.Ordinal);
+        // The hint names the base the link resolves to, not the row's own SHA.
+        Assert.Contains("against the previous revision at rev-1", body, StringComparison.Ordinal);
+        Assert.Contains("the oldest stored revision, so every file reads as added", body, StringComparison.Ordinal);
     }
 
     private async Task<string> GetBodyAsync(string path)
@@ -643,6 +707,7 @@ public sealed partial class UiPagesTests : IDisposable
     [InlineData("/package/shelly-bin", "shelly-bin - Atoll")]
     [InlineData("/package/shelly-bin/files", "Files - shelly-bin - Atoll")]
     [InlineData("/package/shelly-bin/revisions", "Revisions - shelly-bin - Atoll")]
+    [InlineData("/package/shelly-bin/diff", "Diff - shelly-bin - Atoll")]
     [InlineData("/not-found", "Not found - Atoll")]
     [InlineData("/some/unknown/route", "Not found - Atoll")]
     [InlineData("/package/no-such-package", "Not found - Atoll")]
@@ -663,6 +728,7 @@ public sealed partial class UiPagesTests : IDisposable
     [InlineData("/package/shelly-bin", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
     [InlineData("/package/shelly-bin/files", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
     [InlineData("/package/shelly-bin/revisions", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
+    [InlineData("/package/shelly-bin/diff", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
     [InlineData("/not-found", "Nothing lives at this address")]
     public async Task EveryRouteServesAMetaDescription(string path, string expectedDescription)
     {
@@ -685,7 +751,8 @@ public sealed partial class UiPagesTests : IDisposable
         {
             "/package/shelly-bin",
             "/package/shelly-bin/files",
-            "/package/shelly-bin/revisions"
+            "/package/shelly-bin/revisions",
+            "/package/shelly-bin/diff"
         };
         foreach (var path in routes)
         {

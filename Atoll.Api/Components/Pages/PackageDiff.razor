@@ -1,0 +1,238 @@
+@page "/package/{Name}/diff"
+@inject PackageDetailsService Details
+@inject IOptions<UiOptions> Ui
+
+@if (!_loaded)
+{
+    <p class="text-ink-faint">Loading…</p>
+}
+else if (_details is null || _diff is null || _revisions is null)
+{
+    <NotFound/>
+}
+else
+{
+    var description = UiFormatting.PackageMetaDescription(Ui.Value.BrandName, _details.Metadata.Description);
+    var rows = _revisions.Rows;
+
+    <PageMeta Title="@($"Diff - {Name}")" Description="@description" CanonicalPath="@($"/package/{Name}/diff")"/>
+
+    <PackageHeader Details="@_details"/>
+
+    <PackageTabs Name="@Name" RevisionCount="@(_details.Head?.Revisions.Count ?? 0)" Current="revisions"/>
+
+    @if (!_details.IsSeeded)
+    {
+        <div class="card text-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"
+                 class="mx-auto size-12 text-ink-faint">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/>
+            </svg>
+            <h2 class="mt-2 mb-0 text-sm font-semibold text-ink">Nothing to compare</h2>
+            <p class="mt-1 mb-0 text-sm text-ink-soft">
+                This package is not seeded - Atoll stores no revisions for it. Seed it from the
+                overview page to capture the AUR sources.
+            </p>
+            <div class="mt-6">
+                <a class="btn" href="@($"/package/{Name}")">Go to overview</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <form class="card my-4 flex flex-wrap items-end gap-3" method="get" action="@($"/package/{Name}/diff")">
+            <div class="min-w-0">
+                <label class="block text-xs text-ink-faint" for="diff-from">Base</label>
+                <select class="mt-1" id="diff-from" name="from">
+                    <option value="" selected="@(_diff.FromRevisionId.Length == 0)">no earlier revision</option>
+                    @foreach (var row in rows)
+                    {
+                        <option value="@row.Sha" selected="@(string.Equals(row.Sha, _diff.FromRevisionId, StringComparison.Ordinal))">
+                            @row.Date.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC · @UiFormatting.Truncate(row.Sha)
+                        </option>
+                    }
+                </select>
+            </div>
+            <div class="min-w-0">
+                <label class="block text-xs text-ink-faint" for="diff-to">Target</label>
+                <select class="mt-1" id="diff-to" name="to">
+                    @foreach (var row in rows)
+                    {
+                        <option value="@row.Sha" selected="@(string.Equals(row.Sha, _diff.ToRevisionId, StringComparison.Ordinal))">
+                            @row.Date.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC · @UiFormatting.Truncate(row.Sha)
+                        </option>
+                    }
+                </select>
+            </div>
+            <button class="btn" type="submit">Compare</button>
+        </form>
+
+        @if (_revisions.IsTruncated)
+        {
+            <div class="mb-4 text-[13px] text-ink-faint">
+                Only the newest @PackageDetailsService.RevisionRenderCap of @_revisions.TotalRevisions stored
+                revisions are selectable here.
+            </div>
+        }
+
+        @if (_diff.FromFellBack || _diff.ToFellBack)
+        {
+            <div class="status-banner status-banner-pending mb-5">
+                <strong>Revision not found</strong>
+                <span class="text-ink-soft"> - no revision <code>@MissingRevision</code> exists for this package; comparing the head revision instead.</span>
+            </div>
+        }
+
+        @if (!_diff.Access.Allowed)
+        {
+            <FlaggedRevisionBanner Access="@_diff.Access"/>
+        }
+
+        @if (_diff.Identical)
+        {
+            <div class="card text-center">
+                <h2 class="mt-0 mb-0 text-sm font-semibold text-ink">These are the same revision</h2>
+                <p class="mt-1 mb-0 text-sm text-ink-soft">
+                    <code>@UiFormatting.Truncate(_diff.ToRevisionId)</code> is both the base and the target, so there is nothing to compare.
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="my-4 text-sm text-ink-soft flex flex-wrap items-center gap-x-2">
+                @if (_diff.FromRevisionId.Length == 0)
+                {
+                    <span>no earlier revision</span>
+                }
+                else
+                {
+                    <code class="text-atoll-light">@UiFormatting.Truncate(_diff.FromRevisionId)</code>
+                }
+                <span>→</span>
+                <code class="text-atoll-light">@UiFormatting.Truncate(_diff.ToRevisionId)</code>
+                <span>·</span>
+                <span>@_diff.ChangedFileCount file@(_diff.ChangedFileCount == 1 ? "" : "s") changed</span>
+            </div>
+
+            @if (_diff.Truncated)
+            {
+                <div class="status-banner status-banner-pending mb-4">
+                    <strong>Diff truncated</strong>
+                    <span class="text-ink-soft"> - too many changed files or too much text to render every diff here; the remaining files are listed without one. Clone the repository for the full patch.</span>
+                </div>
+            }
+
+            @if (_diff.DiffUnavailable)
+            {
+                <div class="status-banner status-banner-pending mb-4">
+                    <strong>Diffs unavailable</strong>
+                    <span class="text-ink-soft"> - the diff could not be rendered on this server. The changed files are still listed below with their sizes.</span>
+                </div>
+            }
+
+            @if (_diff.Files.Count == 0)
+            {
+                <div class="card text-center">
+                    <h2 class="mt-0 mb-0 text-sm font-semibold text-ink">No content changes</h2>
+                    <p class="mt-1 mb-0 text-sm text-ink-soft">Both revisions store the same files.</p>
+                </div>
+            }
+            else
+            {
+                <div class="grid gap-5">
+                    @foreach (var file in _diff.Files)
+                    {
+                        <div class="min-w-0">
+                            <div class="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                                <h2 class="mt-0 mb-0 font-mono text-sm text-ink wrap-anywhere">@file.Path</h2>
+                                <span class="flex flex-none items-center gap-2 text-xs text-ink-faint font-mono">
+                                    <span class="badge @KindBadgeClass(file.Kind)">@file.Kind.ToString().ToLowerInvariant()</span>
+                                    <span>+@file.NewSize -@file.OldSize</span>
+                                </span>
+                            </div>
+                            @if (HasHunk(file.UnifiedDiff))
+                            {
+                                @* No .code-nums gutter: a unified diff carries its own @@ ranges. highlight.js
+                                   colors language-diff client-side from wwwroot/js/file-highlighting.js. *@
+                                <div class="code-view">
+                                    <pre class="code-body"><code class="language-diff">@file.UnifiedDiff</code></pre>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="card text-sm text-ink-soft">@NoDiffReason(file)</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+    }
+
+    <p class="mt-6"><a href="/">← Back to the package catalog</a></p>
+}
+
+@code {
+    [Parameter] public string Name { get; set; } = "";
+
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    [SupplyParameterFromQuery(Name = "from")]
+    private string? From { get; set; }
+
+    [SupplyParameterFromQuery(Name = "to")]
+    private string? To { get; set; }
+
+    private PackageDetails? _details;
+    private PackageDiffView? _diff;
+    private RevisionListResult? _revisions;
+    private bool _loaded;
+    private int _loadVersion;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var version = Interlocked.Increment(ref _loadVersion);
+        var details = await Details.GetAsync(Name);
+        var revisions = await Details.GetRevisionsAsync(Name);
+        var diff = await Details.GetDiffAsync(Name, From, To);
+        if (version != _loadVersion) return; // a newer navigation superseded this load
+        _details = details;
+        _revisions = revisions;
+        _diff = diff;
+        _loaded = true;
+
+        if (_details is null)
+            HttpContext?.Response.StatusCode = StatusCodes.Status404NotFound;
+    }
+
+    // The id the fallback banner names. A fell-back side always had a query value supplied - an empty one
+    // resolves to the parent or to head without falling back - so the flags pick which value to show.
+    private string MissingRevision => _diff switch
+    {
+        { FromFellBack: true, ToFellBack: true } => $"{From} or {To}",
+        { ToFellBack: true } => To ?? string.Empty,
+        { FromFellBack: true } => From ?? string.Empty,
+        _ => string.Empty
+    };
+
+    // An added or removed *empty* file yields a header with no @@ hunk, and git produces no text at all for
+    // entries it considers unchanged - both render as a one-line explanation instead of an empty code block.
+    private static bool HasHunk(string? unifiedDiff) =>
+        unifiedDiff is not null && unifiedDiff.Contains("@@", StringComparison.Ordinal);
+
+    private static string NoDiffReason(DiffFileView file) => file.Kind switch
+    {
+        DiffChangeKind.Binary => "Binary file - no text diff is rendered for it.",
+        DiffChangeKind.TooLarge => "Too large to diff - the file exceeds the per-file render cap.",
+        // Covers an added or removed file with no content, for which git reports no hunk at all.
+        _ => "No text hunk to show for this file."
+    };
+
+    private static string KindBadgeClass(DiffChangeKind kind) => kind switch
+    {
+        DiffChangeKind.Added => "badge-seeded",
+        DiffChangeKind.Removed => "badge-error",
+        _ => ""
+    };
+}

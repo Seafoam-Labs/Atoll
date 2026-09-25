@@ -45,6 +45,36 @@ public static class GitClient
         }
     }
 
+    /// <summary>
+    ///     Runs git and returns stdout, tolerating the exit codes in <paramref name="successExitCodes" />.
+    ///     <c>git diff --no-index</c> exits 1 to mean "differences found", which is a result, not a failure,
+    ///     so <see cref="ExecuteAsync" />'s zero-exit-code validation would throw on the success path.
+    /// </summary>
+    public static async Task<string> ExecuteAllowingAsync(
+        string workingDirectory,
+        string[] arguments,
+        IReadOnlyCollection<int> successExitCodes,
+        CancellationToken cancellationToken = default)
+    {
+        var output = new StringBuilder();
+        var error = new StringBuilder();
+
+        using var commandTask = Cli.Wrap("git")
+            .WithWorkingDirectory(workingDirectory)
+            .WithArguments(arguments)
+            .WithValidation(None)
+            .WithStandardOutputPipe(PipeTarget.ToStringBuilder(output))
+            .WithStandardErrorPipe(PipeTarget.ToStringBuilder(error))
+            .ExecuteAsync(cancellationToken);
+        var result = await commandTask.Task;
+
+        if (!successExitCodes.Contains(result.ExitCode))
+            throw new InvalidOperationException(
+                $"git {string.Join(' ', arguments)} failed: {error.ToString().Trim()}");
+
+        return output.ToString();
+    }
+
     public static async Task CloneAsync(
         string sourceUrl,
         string targetPath,

@@ -47,7 +47,7 @@ else
     }
     else
     {
-        <RevisionList Name="@Name" Revisions="_revisions.Rows"/>
+        <RevisionList Name="@Name" Revisions="_revisions.Rows" Truncated="_revisions.IsTruncated"/>
 
         @if (_revisions.IsTruncated)
         {

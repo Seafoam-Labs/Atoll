@@ -105,9 +105,9 @@ flowchart TD
 Request paths of note (everything else is standard Minimal API routing with `GlobalExceptionHandler` converting
 unhandled exceptions to RFC 9457 `ProblemDetails`):
 
-- **Web UI:** Blazor routes (`/`, `/package/{name}`, `/package/{name}/files`, `/package/{name}/revisions`, `/status`)
-  map to Razor components rendering interactive and static SSR pages directly backed by `PackageCatalogService`,
-  `PackageDetailsService`, and `StatusDashboardService`.
+- **Web UI:** Blazor routes (`/`, `/package/{name}`, `/package/{name}/files`, `/package/{name}/revisions`,
+  `/package/{name}/diff`, `/status`) map to Razor components rendering interactive and static SSR pages directly
+  backed by `PackageCatalogService`, `PackageDetailsService`, and `StatusDashboardService`.
 - **Search:** `PackageSearchService` reads the current immutable `PackageIndexStore` snapshot and returns results with
   no I/O.
 - **Package CRUD:** `PackageService` delegates to `MongoPackageRepository`; seeding is orchestrated by
@@ -264,6 +264,7 @@ external UI clients:
 | `/package/{name}` | Static SSR | Package details, metadata, relationships, clone block, security banner |
 | `/package/{name}/files` | Static SSR | PKGBUILD and source file viewer across revisions (client-side syntax coloring via self-hosted highlight.js) |
 | `/package/{name}/revisions` | Static SSR | Revision history list and static security analysis findings |
+| `/package/{name}/diff` | Static SSR | cgit-style comparison of two stored revisions (`?from=`/`?to=`, defaulting to the target's parent). Content is read from Mongo and diffed server-side by the `git` CLI via `ITextDiffer`, so no revision is ever resolved from the rebuildable bare-repo cache |
 | `/status` | Static SSR | Operational dashboard: index sync, workers, security scans, exclusions |
 
 Helper setup and RPC/Git compatibility details are documented in [Using yay and paru](AUR_HELPERS.md).

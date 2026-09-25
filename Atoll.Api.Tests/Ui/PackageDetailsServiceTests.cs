@@ -28,7 +28,8 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
             _store,
             _repository,
             _securityRepository,
-            new PackageSecurityAccess(_repository, _securityRepository, Options.Create(new AtollOptions())));
+            new PackageSecurityAccess(_repository, _securityRepository, Options.Create(new AtollOptions())),
+            new FakeTextDiffer());
 
         return ValueTask.CompletedTask;
     }
