@@ -9,7 +9,7 @@ namespace Atoll.Api.Tests.Catalog;
 /// <summary>
 /// In-process cost probe for <see cref="PackageSearchEngine.Rank"/> at the measured corpus scale
 /// (119,808 docs; rounded to 120,000 here). Shape-matched: the candidate-set size that drives sort
-/// and serialization cost is reproduced from the search.md Evidence table by injecting four
+/// and serialization cost is reproduced from measured live-corpus counts by injecting four
 /// deterministic name families per term, then asserted, so a generator edit cannot silently
 /// invalidate the comparison.
 ///

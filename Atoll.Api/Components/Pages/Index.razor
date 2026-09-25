@@ -34,7 +34,7 @@
                _filtersActive is known server-side. Without the second half the control would
                vanish exactly when only filters need clearing. *@
             <button type="button"
-                    class="col-start-1 row-start-1 mr-2 size-7 self-center justify-self-end @(_filtersActive ? "flex" : "hidden") items-center justify-center rounded text-ink-faint transition-colors duration-150 hover:text-atoll focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-atoll peer-not-placeholder-shown:flex"
+                    class="col-start-1 row-start-1 mr-2 size-7 self-center justify-self-end @(FiltersActive ? "flex" : "hidden") items-center justify-center rounded text-ink-faint transition-colors duration-150 hover:text-atoll focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-atoll peer-not-placeholder-shown:flex"
                     aria-label="Clear search and filters"
                     title="Clear search and filters"
                     @onclick="ClearFilters">
@@ -322,7 +322,7 @@ else if (_result is not null)
     }
 
     // Same "equals its effective default, so it is absent from the URL" conditions as CatalogState.
-    private bool _filtersActive =>
+    private bool FiltersActive =>
         _mode != CatalogState.DefaultModeFor(_query)
         || _seededFilter != CatalogSeededFilter.All
         || _securityFilter != CatalogSecurityFilter.Any

@@ -177,6 +177,15 @@ while raising `SORT_RATE`, against
 [`results/2026-09-19-docker-local-2g-rebaseline.md`](results/2026-09-19-docker-local-2g-rebaseline.md);
 the 2026-09-08 runs predate the bound and are not comparable for this scenario.
 
+Recorded runs split by corpus and the two groups are never comparable. The
+production-shaped baseline above prices sort and clone cost over a full seeded
+catalog;
+[`results/2026-09-25-isolated-baseline.md`](results/2026-09-25-isolated-baseline.md)
+is the isolated-corpus baseline and holds the current search and relevance
+profile, the served per-query costs, the relevance rate ladder, and the
+documented 50/s sustained relevance rate. Compare a new run against the
+baseline taken on the same corpus.
+
 A `SORT_RATE` below about 1/s is a contract check, not a latency check: the
 cached views carry a 600 s TTL backstop, so after the first arrival a slow run
 only serves warm pages; restart the stack to price a cold rebuild (the smoke
