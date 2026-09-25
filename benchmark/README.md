@@ -44,7 +44,7 @@ byte-identical to the recorded baseline.
 | `catalog_sorted` | constant-arrival-rate, 10 requests/s | `GET /v1/packages?sortBy=votes/popularity/version` | p95 < 600 ms |
 | `ui` | ramping-vus, 5 VUs | `GET /` and `GET /package/{name}` (server-rendered Blazor) | p95 < 1 s |
 | `git_fetch` (`GIT_RATE > 0`) | constant-arrival-rate, 2 fetches/s | Full Git Smart HTTP fetch: `info/refs` advertisement → one-shot `want`/`done` → `git-upload-pack` | p95 < 2 s |
-| `relevance` (`RELEVANCE_RATE > 0`) | constant-arrival-rate, `RELEVANCE_RATE` requests/s | `GET /v1/search?query=&by=relevance`: free-text ranked retrieval over the in-memory index, bare array capped at 50; queries draw from the `RELEVANCE_POOL` | p95 < 300 ms |
+| `relevance` (`RELEVANCE_RATE > 0`) | constant-arrival-rate, `RELEVANCE_RATE` requests/s | `GET /v1/search?query=&by=relevance`: free-text ranked retrieval over the in-memory index, bare array capped at `MAX_RANKED_RESULTS`; queries draw from the `RELEVANCE_POOL` | p95 < 300 ms |
 
 The two rate-driven scenarios are capped instead of VU-driven because each is
 expensive per request: Git fetching shells out to `git upload-pack` server-side,
@@ -88,7 +88,9 @@ before measuring so a generator edit cannot silently invalidate the comparison).
 It reports the index build cost and retained footprint, then per scenario the
 candidate count, median/p95/min latency, allocations, and 50-row serialized bytes,
 measured both unlimited (the catalog ranks the whole membership to page it) and
-capped at 50 (the REST default). Three pools cover the shapes a served rate has to
+capped at 50 (a fixed probe cap, held at the class default so the recorded
+rank-cost table stays comparable; deployments serve `Atoll:Search:MaxRankedResults`).
+Three pools cover the shapes a served rate has to
 survive: the fixed evidence queries, a 500-query pool of distinct prefixes of real
 names so nothing is repeat-query warmth, and an adversarial pool of one/two-char
 prefixes, a stop-word prefix, the maximum-length term, and the maximum term count.
@@ -144,6 +146,7 @@ returns a package's whole file contents, not metadata.
 | `RELEVANCE_QUERIES` | `yay,vim,rust,browser,neovim,qt,git,brwose,vim editor,rust browser gui,neovim git` | Free-text queries for `by=relevance`; may contain spaces (sent as `%20`). Spans the distinct relevance code paths: exact, prefix, name-vs-metadata, interior token, short, broad name token, no-hit, multi-term. Used by `RELEVANCE_POOL=default` |
 | `RELEVANCE_POOL` | `default` | Which queries `relevance` sends: `default` (`RELEVANCE_QUERIES`, eleven hot queries), `adversarial` (one/two-char prefixes and a broad three-char token, allowed short terms, a 256-char term, max term count, with and without hits), or `unique` (a seeded pool of distinct prefixes of names sampled from the in-memory index at `setup()`, so no request repeats a query). Derive a sustained rate from `unique` or `adversarial`; `default` flatters the path |
 | `RELEVANCE_POOL_SIZE` | `500` | Size of the `unique` pool; `setup()` fails rather than silently looping the pool |
+| `MAX_RANKED_RESULTS` | `200` | Row cap the target serves (`Atoll:Search:MaxRankedResults`); the `relevance` scenario asserts no response exceeds it, so set it to the target's configured cap |
 | `VUS` | `25` | Peak VUs per VU-driven scenario |
 | `UI_VUS` | `5` | Peak VUs requesting server-rendered HTML |
 | `GIT_RATE` | `2` | Git fetches per second; `0` omits the `git_fetch` scenario and its thresholds, which is what isolating another scenario on a small node needs |

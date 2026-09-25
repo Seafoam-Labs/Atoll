@@ -84,6 +84,10 @@ const RELEVANCE_QUERIES = csv(__ENV.RELEVANCE_QUERIES ||
 const RELEVANCE_POOL = (__ENV.RELEVANCE_POOL || "default").toLowerCase();
 const UNIQUE_POOL_SIZE = Number(__ENV.RELEVANCE_POOL_SIZE || 500);
 
+// The row cap the target serves (`Atoll:Search:MaxRankedResults`). Follows the
+// deployment so the row assertion stays valid against any configured cap.
+const MAX_RANKED_RESULTS = Number(__ENV.MAX_RANKED_RESULTS || 200);
+
 // Single-char and two-char prefixes, a broad three-char token, allowed short
 // terms, the maximum-length term, and the maximum term count, with and without
 // hits.
@@ -366,13 +370,14 @@ export function search(data) {
 
 export function relevance(data) {
   // Free-text ranked retrieval: one full rank over the in-memory index, served
-  // as a bare array capped at 50. Distinct tag so it never folds into `search`.
+  // as a bare array capped at MAX_RANKED_RESULTS. Distinct tag so it never
+  // folds into `search`.
   const query = `${TARGET}/v1/search?query=${encodeURIComponent(pick(data.relevance))}&by=relevance`;
   const res = http.get(query, { tags: { name: "GET /v1/search (relevance)" } });
   check(res, {
     "relevance returns 200": (r) => r.status === 200,
     "relevance returns a JSON array": (r) => Array.isArray(r.json()),
-    "relevance caps at 50 rows": (r) => r.json().length <= 50,
+    [`relevance caps at ${MAX_RANKED_RESULTS} rows`]: (r) => r.json().length <= MAX_RANKED_RESULTS,
   });
 }
 

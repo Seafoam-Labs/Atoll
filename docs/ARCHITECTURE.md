@@ -185,8 +185,10 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   prefixes/tokens, and word postings; no typo tolerance). Defaults to `name`.
 - Caps are deliberate per mode: `name` and `provides` are uncapped hydration lookups bounded only by URL length (the
   paged index feed hydrates ≤ 100 names at a time through them), while `words` and `relevance` cap at
-  `Atoll:Search:MaxRankedResults` (default `50`, range 1-1000). Raising it grows every ranked response; the
-  `relevance` rate gate in [benchmark](../benchmark/README.md) was measured at the default.
+  `Atoll:Search:MaxRankedResults` (range 1-1000; class default `50`, served as `200` by `appsettings.json` and the
+  AWS task definition). Because `/v1/search` has no paging, the cap is the whole result set a REST client can reach.
+  Raising it grows every ranked response; the recorded `relevance` rate gate in
+  [benchmark](../benchmark/README.md) was measured at `50`.
 - `relevance` accepts at most 256 decoded characters and 8 terms; an over-bound query is rejected with `400`
   `ProblemDetails`. It returns a bare `AurPackageMetadata[]` with no per-hit score, ordered by coverage, match
   quality, votes, then name.

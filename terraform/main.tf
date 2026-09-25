@@ -193,6 +193,12 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "Atoll__Caching__SnapshotTtlSeconds"
           value = "600"
+        },
+        {
+          # Row cap for the ranked search modes. /v1/search has no paging, so this is the whole
+          # result set a REST client sees; 200 matches the /v1/packages limit ceiling.
+          name  = "Atoll__Search__MaxRankedResults"
+          value = "200"
         }
       ]
       secrets = [
