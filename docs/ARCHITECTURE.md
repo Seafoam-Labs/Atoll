@@ -256,7 +256,7 @@ external UI clients:
 
 | Path | Render Mode | Description |
 | --- | --- | --- |
-| `/` | Interactive Server | Package catalog search - a query without `mode` runs ranked Best match, `?mode=name\|words\|provides` keeps the legacy matchers - with live filtering (all/seeded/unseeded) and sorting |
+| `/` | Interactive Server | Package catalog search - Best match is the default mode, `?mode=name\|words\|provides` keeps the legacy matchers, a blank query lists everything in name order - with live filtering (all/seeded/unseeded) and sorting |
 | `/package/{name}` | Static SSR | Package details, metadata, relationships, clone block, security banner |
 | `/package/{name}/files` | Static SSR | PKGBUILD and source file viewer across revisions (client-side syntax coloring via self-hosted highlight.js) |
 | `/package/{name}/revisions` | Static SSR | Revision history list and static security analysis findings |

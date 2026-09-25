@@ -323,7 +323,7 @@ else if (_result is not null)
 
     // Same "equals its effective default, so it is absent from the URL" conditions as CatalogState.
     private bool FiltersActive =>
-        _mode != CatalogState.DefaultModeFor(_query)
+        _mode != CatalogState.DefaultMode
         || _seededFilter != CatalogSeededFilter.All
         || _securityFilter != CatalogSecurityFilter.Any
         || _sort != CatalogState.DefaultSortFor(_mode, _query);

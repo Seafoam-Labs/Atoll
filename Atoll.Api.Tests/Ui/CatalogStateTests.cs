@@ -6,15 +6,16 @@ namespace Atoll.Api.Tests.Ui;
 public sealed class CatalogStateTests
 {
     [Theory]
-    [InlineData(null, null, null, CatalogSearchMode.Name, CatalogSort.NameAsc)]
+    [InlineData(null, null, null, CatalogSearchMode.Relevance, CatalogSort.NameAsc)]
+    [InlineData("", "name", null, CatalogSearchMode.Name, CatalogSort.NameAsc)]
     [InlineData("x", null, null, CatalogSearchMode.Relevance, CatalogSort.Relevance)]
     [InlineData("x", "name", null, CatalogSearchMode.Name, CatalogSort.NameAsc)]
     [InlineData("x", null, "votes-desc", CatalogSearchMode.Relevance, CatalogSort.VotesDesc)]
     [InlineData("x", "relevance", "relevance", CatalogSearchMode.Relevance, CatalogSort.Relevance)]
     [InlineData("x", "words", "relevance", CatalogSearchMode.Words, CatalogSort.NameAsc)]
     [InlineData("", "relevance", null, CatalogSearchMode.Relevance, CatalogSort.NameAsc)]
-    [InlineData("  ", null, null, CatalogSearchMode.Name, CatalogSort.NameAsc)]
-    public void FromQueryResolvesQueryDependentDefaults(
+    [InlineData("  ", null, null, CatalogSearchMode.Relevance, CatalogSort.NameAsc)]
+    public void FromQueryResolvesTheDefaults(
         string? q, string? mode, string? sort, CatalogSearchMode expectedMode, CatalogSort expectedSort)
     {
         var state = CatalogState.FromQuery(q, null, mode, null, null, sort);
@@ -80,17 +81,16 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void BlankQueryWithRelevanceModeKeepsTheModeButDropsTheSort()
+    public void BlankQueryWithRelevanceModeSerializesBare()
     {
         var state = CatalogState.FromQuery("", null, "relevance", null, null, null);
         var parameters = state.ToQueryParameters();
 
         Assert.Multiple(() =>
         {
+            Assert.Equal(CatalogSearchMode.Relevance, state.Mode);
             Assert.Equal(CatalogSort.NameAsc, state.Sort);
-            Assert.Null(parameters["q"]);
-            Assert.Equal("relevance", Assert.IsType<string>(parameters["mode"]));
-            Assert.Null(parameters["sort"]);
+            Assert.All(parameters.Values, value => Assert.Null(value));
         });
     }
 

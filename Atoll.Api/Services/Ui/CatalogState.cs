@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Components;
 namespace Atoll.Api.Services.Ui;
 
 /// <summary>
-///     The catalog page's query-string state, the single source of truth for the page. The defaults
-///     are query-dependent: a non-blank query runs the ranked mode ("Best match"), the relevance sort
-///     exists only for that mode, and a value equal to its effective default is omitted from the URL.
+///     The catalog page's query-string state, the single source of truth for the page. Best match is
+///     the default mode for every URL, the relevance sort exists only for a non-blank ranked query,
+///     and a value equal to its effective default is omitted from the URL.
 /// </summary>
 public sealed record CatalogState(
     string Query,
@@ -16,11 +16,10 @@ public sealed record CatalogState(
     CatalogSort Sort)
 {
     public static CatalogState Default { get; } = new(
-        "", 1, CatalogSearchMode.Name, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSort.NameAsc);
+        "", 1, CatalogSearchMode.Relevance, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSort.NameAsc);
 
-    /// <summary>The mode a bare URL resolves to: Best match once a query is present, else Name.</summary>
-    public static CatalogSearchMode DefaultModeFor(string query) =>
-        string.IsNullOrWhiteSpace(query) ? CatalogSearchMode.Name : CatalogSearchMode.Relevance;
+    /// <summary>The mode a bare URL resolves to: Best match, with or without a query.</summary>
+    public static CatalogSearchMode DefaultMode => CatalogSearchMode.Relevance;
 
     /// <summary>The sort a bare URL resolves to: the ranked order for a ranked query, else name order.</summary>
     public static CatalogSort DefaultSortFor(CatalogSearchMode mode, string query) =>
@@ -37,7 +36,7 @@ public sealed record CatalogState(
         string? sort)
     {
         var query = q ?? "";
-        var resolvedMode = Parse(mode, DefaultModeFor(query));
+        var resolvedMode = Parse(mode, DefaultMode);
         var parsedSort = Parse(sort, DefaultSortFor(resolvedMode, query));
 
         // A relevance sort cannot order a legacy mode or a blank query; those fall back to name order.
@@ -69,7 +68,7 @@ public sealed record CatalogState(
         {
             ["q"] = string.IsNullOrWhiteSpace(Query) ? null : Query,
             ["page"] = Page > 1 ? Page : null,
-            ["mode"] = Mode == DefaultModeFor(Query) ? null : Kebab(Mode),
+            ["mode"] = Mode == DefaultMode ? null : Kebab(Mode),
             ["seeded"] = Seeded == CatalogSeededFilter.All ? null : Kebab(Seeded),
             ["security"] = Security == CatalogSecurityFilter.Any ? null : Kebab(Security),
             ["sort"] = sort == DefaultSortFor(Mode, Query) ? null : Kebab(sort)
