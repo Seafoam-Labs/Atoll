@@ -191,6 +191,24 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
+    public async Task RootPageShowsSortArrowsOnlyForNonRankedOrders()
+    {
+        var ranked = await GetBodyAsync("/?q=portable");
+        var blank = await GetBodyAsync("/");
+        var explicitName = await GetBodyAsync("/?q=portable&sort=name-asc");
+
+        Assert.Multiple(() =>
+        {
+            // The ranked order is not a column sort, so no header carries an arrow.
+            Assert.DoesNotContain("class=\"arrow\"", ranked, StringComparison.Ordinal);
+            // A blank query lists everything in name order, so the Name header keeps its arrow.
+            Assert.Contains("class=\"arrow\"", blank, StringComparison.Ordinal);
+            // An explicit sort still wins over the ranked default.
+            Assert.Contains("class=\"arrow\"", explicitName, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task RootPageShowsEmptyStateForUnmatchedRankedQuery()
     {
         var body = await GetBodyAsync("/?q=brwose");

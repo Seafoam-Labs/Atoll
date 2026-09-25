@@ -136,11 +136,11 @@ else if (_result is not null)
                             <th scope="col" class="w-40 sm:w-64">
                                 <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.NameAsc, CatalogSort.NameDesc))">
                                     Name
-                                    @if (_sort == CatalogSort.NameAsc)
+                                    @if (EffectiveSort == CatalogSort.NameAsc)
                                     {
                                         <span class="arrow">▼</span>
                                     }
-                                    else if (_sort == CatalogSort.NameDesc)
+                                    else if (EffectiveSort == CatalogSort.NameDesc)
                                     {
                                         <span class="arrow">▲</span>
                                     }
@@ -151,11 +151,11 @@ else if (_result is not null)
                             <th scope="col" class="hidden sm:table-cell">
                                 <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.VotesDesc, CatalogSort.VotesAsc))">
                                     Votes
-                                    @if (_sort == CatalogSort.VotesDesc)
+                                    @if (EffectiveSort == CatalogSort.VotesDesc)
                                     {
                                         <span class="arrow">▼</span>
                                     }
-                                    else if (_sort == CatalogSort.VotesAsc)
+                                    else if (EffectiveSort == CatalogSort.VotesAsc)
                                     {
                                         <span class="arrow">▲</span>
                                     }
@@ -164,11 +164,11 @@ else if (_result is not null)
                             <th scope="col" class="hidden lg:table-cell">
                                 <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.PopularityDesc, CatalogSort.PopularityAsc))">
                                     Popularity
-                                    @if (_sort == CatalogSort.PopularityDesc)
+                                    @if (EffectiveSort == CatalogSort.PopularityDesc)
                                     {
                                         <span class="arrow">▼</span>
                                     }
-                                    else if (_sort == CatalogSort.PopularityAsc)
+                                    else if (EffectiveSort == CatalogSort.PopularityAsc)
                                     {
                                         <span class="arrow">▲</span>
                                     }
@@ -177,11 +177,11 @@ else if (_result is not null)
                             <th scope="col" class="hidden md:table-cell">
                                 <button class="sort" @onclick="@(() => ToggleSort(CatalogSort.LastModifiedDesc, CatalogSort.LastModifiedAsc))">
                                     Last modified
-                                    @if (_sort == CatalogSort.LastModifiedDesc)
+                                    @if (EffectiveSort == CatalogSort.LastModifiedDesc)
                                     {
                                         <span class="arrow">▼</span>
                                     }
-                                    else if (_sort == CatalogSort.LastModifiedAsc)
+                                    else if (EffectiveSort == CatalogSort.LastModifiedAsc)
                                     {
                                         <span class="arrow">▲</span>
                                     }
@@ -264,7 +264,10 @@ else if (_result is not null)
     private CatalogSearchMode _mode = CatalogSearchMode.Relevance;
     private CatalogSeededFilter _seededFilter = CatalogSeededFilter.All;
     private CatalogSecurityFilter _securityFilter = CatalogSecurityFilter.Any;
-    private CatalogSort _sort = CatalogSort.NameAsc;
+
+    // CatalogSort.Relevance is the "no sort clicked" sentinel: the order follows the mode/query
+    // default, so a query edit re-derives it instead of pinning the blank page's name order.
+    private CatalogSort _sort = CatalogSort.Relevance;
     private CatalogResult? _result;
     private bool _loading;
     private string? _error;
@@ -300,7 +303,12 @@ else if (_result is not null)
         _mode = state.Mode;
         _seededFilter = state.Seeded;
         _securityFilter = state.Security;
-        _sort = state.Sort;
+
+        // The URL omits a sort equal to its effective default, so a default-valued sort is not a
+        // choice: keep the sentinel and let a changed query or mode re-derive the default.
+        _sort = state.Sort == CatalogState.DefaultSortFor(state.Mode, state.Query)
+            ? CatalogSort.Relevance
+            : state.Sort;
 
         await ReloadAsync();
     }
@@ -309,11 +317,12 @@ else if (_result is not null)
     {
         // In Best match a header cycles Relevance -> primary -> secondary -> Relevance, so the ranked
         // order stays reachable; the legacy modes keep the two-state toggle.
+        var current = EffectiveSort;
         var ranked = _mode == CatalogSearchMode.Relevance && !string.IsNullOrWhiteSpace(_query);
 
-        if (_sort == primary)
+        if (current == primary)
             _sort = secondary;
-        else if (ranked && _sort == secondary)
+        else if (ranked && current == secondary)
             _sort = CatalogSort.Relevance;
         else
             _sort = primary;
@@ -321,12 +330,17 @@ else if (_result is not null)
         ReloadNow();
     }
 
+    // The order the table shows: the sentinel resolves to the mode/query default.
+    private CatalogSort EffectiveSort => _sort == CatalogSort.Relevance
+        ? CatalogState.DefaultSortFor(_mode, _query)
+        : _sort;
+
     // Same "equals its effective default, so it is absent from the URL" conditions as CatalogState.
     private bool FiltersActive =>
         _mode != CatalogState.DefaultMode
         || _seededFilter != CatalogSeededFilter.All
         || _securityFilter != CatalogSecurityFilter.Any
-        || _sort != CatalogState.DefaultSortFor(_mode, _query);
+        || EffectiveSort != CatalogState.DefaultSortFor(_mode, _query);
 
     private void ClearFilters()
     {
@@ -334,7 +348,7 @@ else if (_result is not null)
         _mode = CatalogSearchMode.Relevance;
         _seededFilter = CatalogSeededFilter.All;
         _securityFilter = CatalogSecurityFilter.Any;
-        _sort = CatalogSort.NameAsc;
+        _sort = CatalogSort.Relevance;
         ReloadNow();
     }
 
@@ -344,7 +358,7 @@ else if (_result is not null)
 
     private void ApplyCurrent(int page)
     {
-        var state = new CatalogState(_query, page, _mode, _seededFilter, _securityFilter, _sort);
+        var state = new CatalogState(_query, page, _mode, _seededFilter, _securityFilter, EffectiveSort);
         var uri = state.ToUri(Nav);
         if (uri == Nav.Uri)
         {
@@ -384,7 +398,7 @@ else if (_result is not null)
 
         try
         {
-            var result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, _sort, _page);
+            var result = await Catalog.SearchAsync(_query, _seededFilter, _securityFilter, _mode, EffectiveSort, _page);
             if (version != _searchVersion) return;
 
             _result = result;
