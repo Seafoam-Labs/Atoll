@@ -1,6 +1,7 @@
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Tests.Support;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Atoll.Api.Tests.Catalog;
@@ -10,9 +11,7 @@ public class PackageSearchServiceTests
     [Fact]
     public void QueryByProvidesAndWordsMatchesExpectedPackages()
     {
-        var store = new PackageIndexStore();
-        store.Replace(TestData.LoadSampleIndexes());
-        var query = new PackageSearchService(new PackageSearchEngine(store));
+        var query = CreateService();
 
         var byProvides = query.FindByProvides(new HashSet<string>(["shelly"], StringComparer.Ordinal));
         var byWords = query.FindByWords(new HashSet<string>(["handheld", "portable"], StringComparer.Ordinal));
@@ -27,9 +26,7 @@ public class PackageSearchServiceTests
     [Fact]
     public void QueryByNameIgnoresUnknownEntries()
     {
-        var store = new PackageIndexStore();
-        store.Replace(TestData.LoadSampleIndexes());
-        var query = new PackageSearchService(new PackageSearchEngine(store));
+        var query = CreateService();
 
         var result = query.FindByNames(new HashSet<string>(["portable-kit", "not-real"], StringComparer.Ordinal));
 
@@ -67,10 +64,7 @@ public class PackageSearchServiceTests
     [Fact]
     public void QueryByWordsCapsResultsAtFiftyOrderedByVotes()
     {
-        var packages = Enumerable.Range(0, 60)
-            .Select(i => TestData.Package($"pkg-{i:00}", votes: i))
-            .ToArray();
-        var query = CreateService(PackageIndexBuilder.BuildFromPackages(packages));
+        var query = CreateService(VoteRankedIndex(60));
 
         var results = query.FindByWords(Query("pkg"));
 
@@ -80,12 +74,24 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
+    public void QueryByWordsHonorsTheConfiguredCap()
+    {
+        var query = CreateService(VoteRankedIndex(60), maxRankedResults: 20);
+
+        var results = query.FindByWords(Query("pkg"));
+
+        Assert.Equal(20, results.Length);
+        Assert.Equal("pkg-59", results[0].Name);
+        Assert.Equal("pkg-40", results[^1].Name);
+    }
+
+    [Fact]
     public void QueryByNamesAndProvidesStayUncappedForPageHydration()
     {
         // /v1/packages rows hydrate their remaining fields through by=name batches of up to 100
-        // names, so the Words cap must not be generalized to the other two modes.
+        // names, so the ranked cap must not be generalized to the other two modes.
         var names = Enumerable.Range(0, 60).Select(i => $"pkg-{i:00}").ToArray();
-        var query = CreateService(TestData.IndexFromNames(names));
+        var query = CreateService(TestData.IndexFromNames(names), maxRankedResults: 1);
 
         Assert.Equal(60, query.FindByNames(Query(names)).Length);
         Assert.Equal(60, query.FindByProvides(Query(names)).Length);
@@ -129,12 +135,20 @@ public class PackageSearchServiceTests
         Assert.Empty(unknown);
     }
 
-    private static PackageSearchService CreateService(SearchIndexData? index = null)
+    private static PackageSearchService CreateService(SearchIndexData? index = null, int maxRankedResults = 50)
     {
         var store = new PackageIndexStore();
         store.Replace(index ?? TestData.LoadSampleIndexes());
-        return new PackageSearchService(new PackageSearchEngine(store));
+
+        return new PackageSearchService(
+            new PackageSearchEngine(store),
+            Options.Create(new AtollOptions { Search = new SearchOptions { MaxRankedResults = maxRankedResults } }));
     }
+
+    /// <summary>Equal-tier names whose only ranking signal is votes, so a cap cuts a known suffix.</summary>
+    private static SearchIndexData VoteRankedIndex(int count) =>
+        PackageIndexBuilder.BuildFromPackages(
+            [.. Enumerable.Range(0, count).Select(i => TestData.Package($"pkg-{i:00}", votes: i))]);
 
     private static HashSet<string> Query(params string[] values) => new(values, StringComparer.Ordinal);
 

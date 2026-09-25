@@ -184,7 +184,9 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   `provides` (exact provides match), or `relevance` (deterministic tiered ranking over exact names, provides, name
   prefixes/tokens, and word postings; no typo tolerance). Defaults to `name`.
 - Caps are deliberate per mode: `name` and `provides` are uncapped hydration lookups bounded only by URL length (the
-  paged index feed hydrates ≤ 100 names at a time through them), while `words` and `relevance` cap at 50.
+  paged index feed hydrates ≤ 100 names at a time through them), while `words` and `relevance` cap at
+  `Atoll:Search:MaxRankedResults` (default `50`, range 1-1000). Raising it grows every ranked response; the
+  `relevance` rate gate in [benchmark](../benchmark/README.md) was measured at the default.
 - `relevance` accepts at most 256 decoded characters and 8 terms; an over-bound query is rejected with `400`
   `ProblemDetails`. It returns a bare `AurPackageMetadata[]` with no per-hit score, ordered by coverage, match
   quality, votes, then name.

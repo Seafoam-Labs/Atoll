@@ -19,6 +19,7 @@ public sealed class AtollOptions
     [ValidateObjectMembers] public ProxyOptions Proxy { get; init; } = new();
     [ValidateObjectMembers] public UiOptions Ui { get; init; } = new();
     [ValidateObjectMembers] public CachingOptions Caching { get; init; } = new();
+    [ValidateObjectMembers] public SearchOptions Search { get; init; } = new();
 }
 
 public enum SeedMode
@@ -169,4 +170,15 @@ public sealed class CachingOptions
     [Range(1, 3600)] public int SnapshotTtlSeconds { get; init; } = 30;
 
     [Range(1, 3600)] public int DashboardTtlSeconds { get; init; } = 5;
+}
+
+public sealed class SearchOptions
+{
+    /// <summary>
+    ///     Results kept by the ranked <c>by=words</c> and <c>by=relevance</c> modes. The exact-match
+    ///     <c>name</c>/<c>provides</c> modes stay uncapped: they are hydration lookups whose batch size
+    ///     is set by the caller, not by relevance.
+    /// </summary>
+    [Range(1, 1000)]
+    public int MaxRankedResults { get; init; } = 50;
 }

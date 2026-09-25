@@ -1,5 +1,6 @@
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Atoll.Api.Tests.Catalog;
@@ -219,12 +220,8 @@ public class PackageSearchRelevanceTests
     public void ServiceCapsRankedResultsAtFifty()
     {
         // 60 name-prefix matches, identical tier/coverage/votes: the total order ends on ordinal name.
-        var packages = Enumerable.Range(0, 60).Select(i => Pkg($"pkg-{i:00}")).ToArray();
-        var store = new PackageIndexStore();
-        store.Replace(Index(packages));
-        var service = new PackageSearchService(new PackageSearchEngine(store));
-
-        var results = service.FindByRelevance("pkg");
+        var results = CreateService(Enumerable.Range(0, 60).Select(i => Pkg($"pkg-{i:00}")).ToArray())
+            .FindByRelevance("pkg");
 
         Assert.Multiple(() =>
         {
@@ -232,6 +229,32 @@ public class PackageSearchRelevanceTests
             Assert.Equal("pkg-00", results[0].Name);
             Assert.Equal("pkg-49", results[^1].Name);
         });
+    }
+
+    [Fact]
+    public void ServiceCapsRankedResultsAtTheConfiguredLimit()
+    {
+        var results = CreateService(
+                [.. Enumerable.Range(0, 60).Select(i => Pkg($"pkg-{i:00}"))],
+                maxRankedResults: 20)
+            .FindByRelevance("pkg");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(20, results.Length);
+            Assert.Equal("pkg-00", results[0].Name);
+            Assert.Equal("pkg-19", results[^1].Name);
+        });
+    }
+
+    private static PackageSearchService CreateService(AurPackageMetadata[] packages, int maxRankedResults = 50)
+    {
+        var store = new PackageIndexStore();
+        store.Replace(Index(packages));
+
+        return new PackageSearchService(
+            new PackageSearchEngine(store),
+            Options.Create(new AtollOptions { Search = new SearchOptions { MaxRankedResults = maxRankedResults } }));
     }
 
     private static SearchIndexData Index(params AurPackageMetadata[] packages) =>

@@ -88,7 +88,7 @@ before measuring so a generator edit cannot silently invalidate the comparison).
 It reports the index build cost and retained footprint, then per scenario the
 candidate count, median/p95/min latency, allocations, and 50-row serialized bytes,
 measured both unlimited (the catalog ranks the whole membership to page it) and
-capped at 50 (what REST serves). Three pools cover the shapes a served rate has to
+capped at 50 (the REST default). Three pools cover the shapes a served rate has to
 survive: the fixed evidence queries, a 500-query pool of distinct prefixes of real
 names so nothing is repeat-query warmth, and an adversarial pool of one/two-char
 prefixes, a stop-word prefix, the maximum-length term, and the maximum term count.

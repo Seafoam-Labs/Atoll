@@ -29,6 +29,7 @@ public class AtollOptionsTests
             Assert.Equal(30, options.Caching.RankTtlSeconds);
             Assert.Equal(4, options.Seed.Bulk.Parallelism);
             Assert.Equal("packages", options.Mongo.Collections.Packages);
+            Assert.Equal(50, options.Search.MaxRankedResults);
         });
     }
 
@@ -45,6 +46,8 @@ public class AtollOptionsTests
     [InlineData("Atoll:Security:ScannerConcurrency", "0")]
     [InlineData("Atoll:Ui:ExternalBaseUrl", "not-a-url")]
     [InlineData("Atoll:Caching:DashboardTtlSeconds", "0")]
+    [InlineData("Atoll:Search:MaxRankedResults", "0")]
+    [InlineData("Atoll:Search:MaxRankedResults", "1001")]
     public void Nested_annotations_are_enforced(string key, string value)
     {
         Assert.Throws<OptionsValidationException>(() => Resolve(new Dictionary<string, string?>(StringComparer.Ordinal) { [key] = value }));
@@ -54,6 +57,7 @@ public class AtollOptionsTests
     [InlineData("Atoll:Caching:RankTtlSeconds", "0", "AtollOptions.Caching", "RankTtlSeconds")]
     [InlineData("Atoll:Mongo:Collections:SeedExclusions", "", "AtollOptions.Mongo.Collections", "SeedExclusions")]
     [InlineData("Atoll:Seed:Bulk:Parallelism", "0", "AtollOptions.Seed.Bulk", "Parallelism")]
+    [InlineData("Atoll:Search:MaxRankedResults", "0", "AtollOptions.Search", "MaxRankedResults")]
     public void Nested_failure_names_the_qualifying_path(string key, string value, string sectionPath, string memberName)
     {
         var exception = Assert.Throws<OptionsValidationException>(

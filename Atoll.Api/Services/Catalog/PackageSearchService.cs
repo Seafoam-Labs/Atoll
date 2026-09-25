@@ -1,7 +1,11 @@
+using Microsoft.Extensions.Options;
+
 namespace Atoll.Api.Services.Catalog;
 
-public sealed class PackageSearchService(PackageSearchEngine engine)
+public sealed class PackageSearchService(PackageSearchEngine engine, IOptions<AtollOptions> options)
 {
+    private readonly int _maxRankedResults = options.Value.Search.MaxRankedResults;
+
     private long _requestCount;
 
     public long RequestCount => Interlocked.Read(ref _requestCount);
@@ -34,7 +38,7 @@ public sealed class PackageSearchService(PackageSearchEngine engine)
         [
             .. engine.Hydrate(snapshot, matchingNames)
                 .OrderByDescending(package => package.NumVotes)
-                .Take(50)
+                .Take(_maxRankedResults)
         ];
     }
 
@@ -43,7 +47,10 @@ public sealed class PackageSearchService(PackageSearchEngine engine)
         var snapshot = engine.Capture();
         Interlocked.Increment(ref _requestCount);
 
-        // The cap is a rank bound, not a post-sort Take: selection stops at the best 50 candidates.
-        return [.. PackageSearchEngine.Rank(snapshot, rawQuery, 50).Select(hit => hit.Package)];
+        // The cap is a rank bound, not a post-sort Take: selection stops at the best N candidates.
+        return
+        [
+            .. PackageSearchEngine.Rank(snapshot, rawQuery, _maxRankedResults).Select(hit => hit.Package)
+        ];
     }
 }
