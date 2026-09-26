@@ -20,8 +20,8 @@ namespace Atoll.Api.Tests.Packages.Git;
 [Trait("Category", "RequiresGit")]
 public sealed class GitCommitFixtureTests : IAsyncLifetime
 {
-    private const string Commit1 = "05cf997338ec40468b61cd3c0bdabd138b69a39e";
-    private const string Commit2 = "646ba0035f252f4668a17676698dda616f96856a";
+    private const string Commit1 = "0107149ed7eec5896f1d8e7f35ed86d88f31afe0";
+    private const string Commit2 = "e515ecb3c26595938848ce18f710742c0a288395";
 
     // Exercises trimming and removal of characters Git forbids in author identities.
     private const string WeirdAuthor = "weird <au>thor\nx";

@@ -53,7 +53,7 @@ public class GitRepositoryCacheTests
 
         Assert.Multiple(() =>
         {
-            Assert.Equal("git-v3\nrev-3\nrev-1\nrev-2\nrev-3", without);
+            Assert.Equal("git-v4\nrev-3\nrev-1\nrev-2\nrev-3", without);
             Assert.Equal(without, with);
         });
     }
@@ -70,7 +70,7 @@ public class GitRepositoryCacheTests
             ["rev-3"] = SecurityStatus.Flagged
         };
 
-        Assert.Equal("git-v3\nrev-3\nrev-1:Pending\nrev-2:Verified\nrev-3:Flagged",
+        Assert.Equal("git-v4\nrev-3\nrev-1:Pending\nrev-2:Verified\nrev-3:Flagged",
             GitRepositoryCache.ComputeHistoryMarker(doc, true, statuses));
     }
 
