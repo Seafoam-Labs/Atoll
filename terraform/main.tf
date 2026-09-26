@@ -199,6 +199,10 @@ resource "aws_ecs_task_definition" "app" {
           # result set a REST client sees; 200 matches the /v1/packages limit ceiling.
           name  = "Atoll__Search__MaxRankedResults"
           value = "200"
+        },
+        {
+          name  = "Atoll__Mongo__MaxRevisions"
+          value = "5"
         }
       ]
       secrets = [
