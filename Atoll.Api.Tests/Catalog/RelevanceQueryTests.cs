@@ -9,13 +9,13 @@ public class RelevanceQueryTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void EmptyOrWhitespaceProducesNoTerms(string? raw)
+    public void Parse_EmptyOrWhitespace_IsEmpty(string? raw)
     {
         Assert.True(RelevanceQueryParser.Parse(raw).IsEmpty);
     }
 
     [Fact]
-    public void SplitsOnWhitespaceAndComma()
+    public void Parse_WhitespaceAndCommaSeparators_SplitIntoSegments()
     {
         var query = RelevanceQueryParser.Parse("vim editor,gui");
 
@@ -23,7 +23,7 @@ public class RelevanceQueryTests
     }
 
     [Fact]
-    public void TrimsSegmentsAndDropsEmptyOnes()
+    public void Parse_PaddedSegments_AreTrimmedAndEmptyDropped()
     {
         var query = RelevanceQueryParser.Parse("  vim ,, editor  ");
 
@@ -31,7 +31,7 @@ public class RelevanceQueryTests
     }
 
     [Fact]
-    public void DeduplicatesOnPostingIgnoringCase()
+    public void Parse_CaseVariantSegments_CollapseToOneTerm()
     {
         var query = RelevanceQueryParser.Parse("Vim vim VIM");
 
@@ -39,7 +39,7 @@ public class RelevanceQueryTests
     }
 
     [Fact]
-    public void TermCarriesRawAndPostingsAndDenseOrdinal()
+    public void Parse_Terms_CarryRawPostingsAndDenseOrdinal()
     {
         var terms = RelevanceQueryParser.Parse("Foo bar").Terms;
 
@@ -57,7 +57,7 @@ public class RelevanceQueryTests
     [InlineData("vim")]
     [InlineData("i3")]
     [InlineData("3dfoo")]
-    public void SinglePartSegmentKeepsTheOnePostingItHadBefore(string raw)
+    public void Parse_SinglePartSegment_KeepsOneLowercasedPosting(string raw)
     {
         Assert.Equal([raw.ToLowerInvariant()], Postings(raw));
     }
@@ -67,7 +67,7 @@ public class RelevanceQueryTests
     [InlineData("qt")]
     [InlineData("1337")]
     [InlineData("café")]
-    public void UnusableSegmentKeepsRawWithNoPostings(string raw)
+    public void Parse_UnusableSegment_KeepsRawWithNoPostings(string raw)
     {
         var term = Assert.Single(RelevanceQueryParser.Parse(raw).Terms);
 
@@ -87,14 +87,14 @@ public class RelevanceQueryTests
     [InlineData("XmlHttpRequest", "xmlhttprequest", "xml", "http", "request")]
     // Prose stays stop-listed, so "the" drops while the name tokens around it survive.
     [InlineData("the-git-tool", "the-git-tool", "git", "tool")]
-    public void CompoundSegmentResolvesThroughItsPartsAsWellAsItsWholeForm(
+    public void Parse_CompoundSegment_ResolvesWholeFormAndParts(
         string raw, params string[] expected)
     {
         Assert.Equal(expected, Postings(raw));
     }
 
     [Fact]
-    public void CompoundSegmentIsStillOneTerm()
+    public void Parse_HyphenatedCompoundSegment_RemainsOneTerm()
     {
         var term = Assert.Single(RelevanceQueryParser.Parse("neovim-git").Terms);
 
@@ -102,13 +102,13 @@ public class RelevanceQueryTests
     }
 
     [Fact]
-    public void DuplicateCompoundSegmentsCollapseToOneTerm()
+    public void Parse_CaseVariantCompoundSegments_CollapseToOneTerm()
     {
         Assert.Equal(["neovim-git"], Raw(RelevanceQueryParser.Parse("neovim-git Neovim-Git")));
     }
 
     [Fact]
-    public void SubPostingsTruncateAtThePerTermCap()
+    public void Parse_SubPostings_TruncateAtPerTermCap()
     {
         var postings = Postings("aaa-bbb-ccc-ddd-eee-fff-ggg");
 
@@ -120,7 +120,7 @@ public class RelevanceQueryTests
     }
 
     [Fact]
-    public void QueryAtMaxLengthIsAccepted()
+    public void Parse_QueryAtMaxLength_IsAccepted()
     {
         var query = RelevanceQueryParser.Parse(new string('a', RelevanceQueryParser.MaxQueryLength));
 
@@ -128,7 +128,7 @@ public class RelevanceQueryTests
     }
 
     [Fact]
-    public void QueryOverMaxLengthThrows()
+    public void Parse_QueryOverMaxLength_Throws()
     {
         var raw = new string('a', RelevanceQueryParser.MaxQueryLength + 1);
 
@@ -136,7 +136,7 @@ public class RelevanceQueryTests
     }
 
     [Fact]
-    public void EightTermsAreAccepted()
+    public void Parse_TermsAtMax_AreAccepted()
     {
         var query = RelevanceQueryParser.Parse("aaa bbb ccc ddd eee fff ggg hhh");
 
@@ -144,7 +144,7 @@ public class RelevanceQueryTests
     }
 
     [Fact]
-    public void NineTermsThrow()
+    public void Parse_TermsOverMax_Throw()
     {
         Assert.Throws<ArgumentOutOfRangeException>(
             () => RelevanceQueryParser.Parse("aaa bbb ccc ddd eee fff ggg hhh iii"));

@@ -115,7 +115,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageRendersCatalogWithPackages()
+    public async Task RootPage_RendersCatalogWithPackages()
     {
         var response = await _client.GetAsync("/", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -134,7 +134,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageSearchFormCannotNavigateNatively()
+    public async Task RootPage_SearchFormCannotNavigateNatively()
     {
         var body = await (await _client.GetAsync("/", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
@@ -158,7 +158,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageRendersPaginationFooter()
+    public async Task RootPage_RendersPaginationFooter()
     {
         var body = await (await _client.GetAsync("/", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
@@ -172,7 +172,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageRanksWithBestMatchByDefault()
+    public async Task RootPage_RanksWithBestMatchByDefault()
     {
         var body = await GetBodyAsync("/?q=portable");
 
@@ -182,7 +182,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageExplicitLegacyModeKeepsNameOrder()
+    public async Task RootPage_ExplicitLegacyModeKeepsNameOrder()
     {
         var body = await GetBodyAsync("/?q=portable&mode=name");
 
@@ -191,7 +191,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageShowsSortArrowsOnlyForNonRankedOrders()
+    public async Task RootPage_ShowsSortArrowsOnlyForNonRankedOrders()
     {
         var ranked = await GetBodyAsync("/?q=portable");
         var blank = await GetBodyAsync("/");
@@ -209,7 +209,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageShowsEmptyStateForUnmatchedRankedQuery()
+    public async Task RootPage_ShowsEmptyStateForUnmatchedRankedQuery()
     {
         var body = await GetBodyAsync("/?q=brwose");
 
@@ -221,7 +221,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageOffersBestMatchMode()
+    public async Task RootPage_OffersBestMatchMode()
     {
         var body = await GetBodyAsync("/");
 
@@ -237,7 +237,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageCompressesResponseWithGzip()
+    public async Task RootPage_CompressesResponseWithGzip()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");
         request.Headers.AcceptEncoding.ParseAdd("gzip");
@@ -249,7 +249,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageCompressesResponseWithBrotli()
+    public async Task RootPage_CompressesResponseWithBrotli()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");
         request.Headers.AcceptEncoding.ParseAdd("br");
@@ -261,7 +261,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageCompressesResponseOverForwardedHttps()
+    public async Task RootPage_CompressesResponseOverForwardedHttps()
     {
         // The deployed proxy terminates TLS and forwards the https scheme, so the app observes
         // HTTPS on every request and the framework's EnableForHttps default would silently
@@ -277,7 +277,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RootPageDecoratesRowsWithBadges()
+    public async Task RootPage_DecoratesRowsWithBadges()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
         await SeedAsync("portable-pro", SecurityStatus.Flagged);
@@ -296,7 +296,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackageDetailsRenderMetadataForKnownUnseededPackage()
+    public async Task PackageDetails_RendersMetadataForKnownUnseededPackage()
     {
         var response = await _client.GetAsync("/package/portable-kit", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -312,7 +312,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task Mutations_disabled_hides_seed_button_for_unseeded_package()
+    public async Task PackageDetails_HidesSeedButtonWhenMutationsDisabled()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
@@ -327,7 +327,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task Mutations_disabled_hides_rescan_button_for_seeded_package()
+    public async Task PackageDetails_HidesRescanButtonWhenMutationsDisabled()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
@@ -346,7 +346,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackageDetailsRenderCloneBlockAndFindingsWhenSeededAndVerified()
+    public async Task PackageDetails_RendersCloneBlockAndFindingsWhenSeededAndVerified()
     {
         var findings = new[]
         {
@@ -371,7 +371,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackageDetailsRendersCustomExternalBaseUrlInCloneBlock()
+    public async Task PackageDetails_RendersCustomExternalBaseUrlInCloneBlock()
     {
         await using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com" };
         using var client = factory.CreateClient();
@@ -390,7 +390,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackageDetailsTrimsTrailingSlashFromExternalBaseUrlInCloneBlock()
+    public async Task PackageDetails_TrimsTrailingSlashFromExternalBaseUrlInCloneBlock()
     {
         await using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
         using var client = factory.CreateClient();
@@ -410,7 +410,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackageDetailsRenderBlockedBannerWhenFlagged()
+    public async Task PackageDetails_RendersBlockedBannerWhenFlagged()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);
 
@@ -428,7 +428,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task UnknownPackageReturnsNotFound()
+    public async Task PackageDetails_UnknownPackage_ReturnsNotFound()
     {
         var response = await _client.GetAsync("/package/no-such-package", TestContext.Current.CancellationToken);
 
@@ -436,7 +436,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task UnknownRouteReturnsNotFound()
+    public async Task NotFoundPage_UnknownRoute_ReturnsNotFound()
     {
         var response = await _client.GetAsync("/some/unknown/route", TestContext.Current.CancellationToken);
 
@@ -444,7 +444,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackageDetailsRenderTabLinks()
+    public async Task PackageDetails_RendersTabLinks()
     {
         var response = await _client.GetAsync("/package/portable-kit", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -459,7 +459,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RevisionsTabRendersHistoryRowsWithBadges()
+    public async Task RevisionsTab_RendersHistoryRowsWithBadges()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Flagged, SecurityStatus.Verified);
 
@@ -481,7 +481,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RevisionsTabShowsUnseededStateForIndexOnlyPackage()
+    public async Task RevisionsTab_ShowsUnseededStateForIndexOnlyPackage()
     {
         var response = await _client.GetAsync("/package/portable-kit/revisions", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -491,7 +491,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task FilesTabShowsWarningBannerAndFilesForFlaggedRevision()
+    public async Task FilesTab_ShowsWarningBannerAndFilesForFlaggedRevision()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Flagged);
 
@@ -509,7 +509,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task FilesTabRendersTreeAndKeepsSelectionInUrl()
+    public async Task FilesTab_RendersTreeAndKeepsSelectionInUrl()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
 
@@ -530,7 +530,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task FilesTabRendersSelectedFileContent()
+    public async Task FilesTab_RendersSelectedFileContent()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
 
@@ -554,7 +554,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task FilesTabFallsBackToHeadForUnknownRevision()
+    public async Task FilesTab_FallsBackToHeadForUnknownRevision()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
 
@@ -570,7 +570,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task FilesTabMarksMissingPathAsNotFound()
+    public async Task FilesTab_MarksMissingPathAsNotFound()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
 
@@ -582,7 +582,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackageOverviewPinsToRevisionAndShowsItsScan()
+    public async Task PackageOverview_PinsToRevisionAndShowsItsScan()
     {
         var findings = new[]
         {
@@ -606,7 +606,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackageOverviewFallsBackToHeadForUnknownRevision()
+    public async Task PackageOverview_FallsBackToHeadForUnknownRevision()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);
 
@@ -622,7 +622,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task UnknownPackageOnPhase2TabsReturnsNotFound()
+    public async Task PackageDetails_UnknownPackageOnPhase2Tabs_ReturnsNotFound()
     {
         var revisions = await _client.GetAsync("/package/no-such-package/revisions", TestContext.Current.CancellationToken);
         var files = await _client.GetAsync("/package/no-such-package/files", TestContext.Current.CancellationToken);
@@ -634,7 +634,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task DiffTabShowsSameRevisionForIdenticalRange()
+    public async Task DiffTab_ShowsSameRevisionForIdenticalRange()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
 
@@ -652,7 +652,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task DiffTabShowsUnseededStateForIndexOnlyPackage()
+    public async Task DiffTab_ShowsUnseededStateForIndexOnlyPackage()
     {
         var response = await _client.GetAsync("/package/portable-kit/diff", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -662,7 +662,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task DiffTabFallsBackToHeadForUnknownRevision()
+    public async Task DiffTab_FallsBackToHeadForUnknownRevision()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
 
@@ -679,7 +679,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task RevisionsTabLinksEachRowToItsDiff()
+    public async Task RevisionsTab_LinksEachRowToItsDiff()
     {
         await SeedTwoRevisionsAsync("shelly-bin", SecurityStatus.Verified, SecurityStatus.Verified);
 
@@ -711,7 +711,7 @@ public sealed partial class UiPagesTests : IDisposable
     [InlineData("/not-found", "Not found - Atoll")]
     [InlineData("/some/unknown/route", "Not found - Atoll")]
     [InlineData("/package/no-such-package", "Not found - Atoll")]
-    public async Task EveryRouteServesExactlyOneTitle(string path, string expectedTitle)
+    public async Task EveryRoute_ServesExactlyOneTitle(string path, string expectedTitle)
     {
         var body = await GetBodyAsync(path);
 
@@ -730,7 +730,7 @@ public sealed partial class UiPagesTests : IDisposable
     [InlineData("/package/shelly-bin/revisions", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
     [InlineData("/package/shelly-bin/diff", "Shelly: A Modern Arch Package Manager (prebuilt binary)")]
     [InlineData("/not-found", "Nothing lives at this address")]
-    public async Task EveryRouteServesAMetaDescription(string path, string expectedDescription)
+    public async Task EveryRoute_ServesAMetaDescription(string path, string expectedDescription)
     {
         var body = await GetBodyAsync(path);
 
@@ -742,7 +742,7 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PackagePagesServeOpenGraphAndCanonicalFromExternalBaseUrl()
+    public async Task PackagePages_ServeOpenGraphAndCanonicalFromExternalBaseUrl()
     {
         await using var factory = new SecurityTestFactory { ExternalBaseUrl = "https://atoll.example.com/" };
         using var client = factory.CreateClient();

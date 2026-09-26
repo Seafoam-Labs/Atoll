@@ -34,7 +34,7 @@ public sealed class AurMirrorGitIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task ListBranches_fetch_and_read_files_round_trip()
+    public async Task FetchAsync_InitializedMirrorWithBranch_ListsFetchesAndReadsFiles()
     {
         CreateUpstreamWithBranch(
             "alpha",
@@ -65,7 +65,7 @@ public sealed class AurMirrorGitIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task FetchAsync_reports_missing_ref_as_failed_without_throwing()
+    public async Task FetchAsync_MissingRef_ReportsFailedWithoutThrowing()
     {
         CreateUpstreamWithBranch(
             "real",

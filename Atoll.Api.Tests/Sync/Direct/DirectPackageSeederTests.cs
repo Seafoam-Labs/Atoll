@@ -64,7 +64,7 @@ public class DirectPackageSeederTests
     }
 
     [Fact]
-    public async Task SeedAsync_fetches_resolved_pkgbase_and_persists_files()
+    public async Task SeedAsync_SplitPackage_FetchesResolvedPkgBaseAndPersistsFiles()
     {
         // Split packages have pkgname != pkgbase; the clone source must see the base.
         var store = new PackageIndexStore();
@@ -85,7 +85,7 @@ public class DirectPackageSeederTests
     }
 
     [Fact]
-    public async Task SeedAsync_throws_conflict_without_fetching_when_package_exists()
+    public async Task SeedAsync_ExistingPackage_ThrowsConflictWithoutFetching()
     {
         var (seeder, source, repo) = CreateSeeder();
 
@@ -101,7 +101,7 @@ public class DirectPackageSeederTests
     }
 
     [Fact]
-    public void ResolvePackageBase_split_package_returns_pkgbase_not_pkgname()
+    public void ResolvePackageBase_SplitPackage_ReturnsPkgBaseNotPkgName()
     {
         // Split packages (e.g. "libfoo" / "libfoo-devel" under base "foo") have
         // pkgname != pkgbase; AUR Git URLs are keyed by pkgbase.
@@ -121,7 +121,7 @@ public class DirectPackageSeederTests
     }
 
     [Fact]
-    public void ResolvePackageBase_non_split_package_returns_pkgname()
+    public void ResolvePackageBase_NonSplitPackage_ReturnsPkgName()
     {
         var store = new PackageIndexStore();
         store.Replace(PackageIndexBuilder.BuildFromPackages([
@@ -134,7 +134,7 @@ public class DirectPackageSeederTests
     }
 
     [Fact]
-    public void ResolvePackageBase_unknown_package_falls_back_to_pkgname()
+    public void ResolvePackageBase_UnknownPackage_FallsBackToPkgName()
     {
         // Cold start or stale index: fall back to pkgname so non-split packages
         // can still be seeded. Split packages will fail at clone time, which is

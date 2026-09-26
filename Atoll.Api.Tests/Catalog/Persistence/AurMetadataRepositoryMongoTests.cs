@@ -40,7 +40,7 @@ public sealed class AurMetadataRepositoryMongoTests : AurMetadataRepositoryContr
     }
 
     [Fact]
-    public async Task Constructor_DropsLegacyBatchLayout()
+    public async Task MongoAurMetadataRepository_LegacyBatchLayout_IsDroppedOnConstruction()
     {
         await SeedLegacyBatchLayoutAsync();
         Assert.Contains(CollectionName, await CollectionNamesAsync(), StringComparer.Ordinal);
@@ -61,7 +61,7 @@ public sealed class AurMetadataRepositoryMongoTests : AurMetadataRepositoryContr
     }
 
     [Fact]
-    public async Task Constructor_OnMigratedDatabase_DoesNotRecreateLegacyIndex()
+    public async Task MongoAurMetadataRepository_SecondConstruction_DoesNotRecreateLegacyIndex()
     {
         await SeedLegacyBatchLayoutAsync();
         CreateRepository();
@@ -83,7 +83,7 @@ public sealed class AurMetadataRepositoryMongoTests : AurMetadataRepositoryContr
     }
 
     [Fact]
-    public async Task SyncAsync_KeysDocumentsByName_AndLeavesOnlyTheIdIndex()
+    public async Task SyncAsync_KeysDocumentsByName_LeavesOnlyTheIdIndex()
     {
         var repo = CreateRepository();
 

@@ -118,7 +118,7 @@ public class PackageIndexRankerPerfTests
     }
 
     [Fact]
-    public async Task SortedIndexPageCostAtRealisticSeededScale()
+    public async Task GetIndexPageAsync_RealisticSeededScale_ReportsSortedPageCost()
     {
         // 1. Cold sorted request: what a request pays after a mutation, TTL expiry, or restart.
         //    A fresh service (and cache) per sample keeps the ranker cold (names + sort + page).

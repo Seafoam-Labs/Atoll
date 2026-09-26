@@ -9,7 +9,7 @@ public abstract class PackageSecurityRepositoryContract
     private protected abstract IPackageSecurityRepository CreateRepository();
 
     [Fact]
-    public async Task CompleteScanAsync_stamps_policy_version_and_returns_true()
+    public async Task CompleteScanAsync_ClaimedScan_StampsPolicyVersionAndReturnsTrue()
     {
         var repo = CreateRepository();
 
@@ -35,7 +35,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task MarkScanErrorAsync_stamps_policy_version_and_returns_true()
+    public async Task MarkScanErrorAsync_ClaimedScan_StampsPolicyVersionAndReturnsTrue()
     {
         var repo = CreateRepository();
 
@@ -60,7 +60,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task MarkPendingAsync_resets_policy_version_and_findings()
+    public async Task MarkPendingAsync_ScannedRevision_ResetsPolicyVersionAndFindings()
     {
         var repo = CreateRepository();
 
@@ -92,7 +92,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task MarkPendingAsync_cannot_lower_existing_requirement()
+    public async Task MarkPendingAsync_LowerRequiredPolicyVersion_KeepsExistingRequirement()
     {
         var repo = CreateRepository();
 
@@ -105,7 +105,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task EnsurePendingAsync_sets_requirement_on_insert_only()
+    public async Task EnsurePendingAsync_AlreadyPending_KeepsOriginalRequirement()
     {
         var repo = CreateRepository();
 
@@ -119,7 +119,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task Older_worker_cannot_claim_work_requiring_newer_policy()
+    public async Task TryClaimPendingScanAsync_OlderWorkerPolicy_ReturnsNullAndNewerClaims()
     {
         var repo = CreateRepository();
 
@@ -136,7 +136,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task Reconciliation_fences_in_flight_claim_from_older_worker()
+    public async Task RequeueOutdatedAsync_PolicyRaise_FencesInFlightClaimFromOlderWorker()
     {
         var repo = CreateRepository();
 
@@ -174,7 +174,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task Completion_and_error_are_rejected_after_lease_loss()
+    public async Task CompleteScanAsync_AfterLeaseRelease_RejectsCompletionAndError()
     {
         var repo = CreateRepository();
 
@@ -197,7 +197,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task RequeueOutdatedAsync_requeues_older_versions_and_preserves_current_or_newer_versions()
+    public async Task RequeueOutdatedAsync_OlderPolicyVersions_RequeuesAndPreservesCurrentOrNewer()
     {
         var repo = CreateRepository();
 
@@ -268,7 +268,7 @@ public abstract class PackageSecurityRepositoryContract
     }
 
     [Fact]
-    public async Task RequeueOutdatedAsync_cannot_lower_newer_requirement()
+    public async Task RequeueOutdatedAsync_RequirementNewerThanTarget_RequeuesNothing()
     {
         var repo = CreateRepository();
 

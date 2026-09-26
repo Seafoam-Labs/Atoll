@@ -65,13 +65,13 @@ public class PackageSecurityStatusServiceTests
     }
 
     [Fact]
-    public async Task GetHistoryAsync_unknown_package_returns_null()
+    public async Task GetHistoryAsync_UnknownPackage_ReturnsNull()
     {
         Assert.Null(await _service.GetHistoryAsync("missing", TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task GetHistoryAsync_lists_head_first_then_newest_scan()
+    public async Task GetHistoryAsync_ScannedRevisions_ListsHeadFirstThenNewestScan()
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2", "rev-3");
         await QueueAsync("pkg", "rev-1", true);
@@ -105,13 +105,13 @@ public class PackageSecurityStatusServiceTests
     }
 
     [Fact]
-    public async Task GetRevisionAsync_unknown_package_returns_null()
+    public async Task GetRevisionAsync_UnknownPackage_ReturnsNull()
     {
         Assert.Null(await _service.GetRevisionAsync("missing", "rev-1", TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task GetRevisionAsync_unknown_revision_returns_null()
+    public async Task GetRevisionAsync_UnknownRevision_ReturnsNull()
     {
         await SeedAsync("pkg", "rev-1", "rev-1");
 
@@ -119,7 +119,7 @@ public class PackageSecurityStatusServiceTests
     }
 
     [Fact]
-    public async Task GetRevisionAsync_reports_unscanned_revision_as_pending()
+    public async Task GetRevisionAsync_UnscannedRevision_ReportsPending()
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
 
@@ -139,13 +139,13 @@ public class PackageSecurityStatusServiceTests
     }
 
     [Fact]
-    public async Task QueueRescanAsync_unknown_package_returns_null()
+    public async Task QueueRescanAsync_UnknownPackage_ReturnsNull()
     {
         Assert.Null(await _service.QueueRescanAsync("missing", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task QueueRescanAsync_unknown_revision_returns_null()
+    public async Task QueueRescanAsync_UnknownRevision_ReturnsNull()
     {
         await SeedAsync("pkg", "rev-1", "rev-1");
 
@@ -154,7 +154,7 @@ public class PackageSecurityStatusServiceTests
     }
 
     [Fact]
-    public async Task QueueRescanAsync_defaults_to_the_head_revision()
+    public async Task QueueRescanAsync_NoRevisionGiven_QueuesHeadRevision()
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
 
@@ -172,7 +172,7 @@ public class PackageSecurityStatusServiceTests
     }
 
     [Fact]
-    public async Task QueueRescanAsync_requeues_an_already_verified_revision_as_pending()
+    public async Task QueueRescanAsync_VerifiedRevision_RequeuesAsPendingKeepingHeadFlag()
     {
         await SeedAsync("pkg", "rev-1", "rev-1", "rev-2");
         await QueueAsync("pkg", "rev-2", false);

@@ -89,7 +89,7 @@ public class PackageCatalogServicePerfTests
     }
 
     [Fact]
-    public async Task SearchAsyncCostAtRealisticIndexScale()
+    public async Task SearchAsync_RealisticIndexScale_ReproducesExpectedPagingShape()
     {
         _output.WriteLine(
             $"index={PackageCount:N0} packages, seeded={SeededCount:N0}, " +

@@ -6,7 +6,7 @@ namespace Atoll.Api.Tests.Security.Scanning;
 public class HiddenCharactersTests
 {
     [Fact]
-    public void FindHiddenCharacters_detects_bidi_and_zero_width_controls()
+    public void FindHiddenCharacters_SingleControlPerLine_ReturnsOneEach()
     {
         Assert.Single(HiddenCharacters.FindHiddenCharacters("rm\u200B -rf /"));
         Assert.Single(HiddenCharacters.FindHiddenCharacters("safe\u202Etext"));
@@ -38,7 +38,7 @@ public class HiddenCharactersTests
     [InlineData("fsi\u2068", true)]
     // pop directional isolate
     [InlineData("pdi\u2069", true)]
-    public void FindHiddenCharacters_flags_unicode_bidi_and_zero_width_controls(string text, bool expected)
+    public void FindHiddenCharacters_KnownBidiAndZeroWidthCharacters_Flagged(string text, bool expected)
     {
         var found = HiddenCharacters.FindHiddenCharacters(text);
         if (expected)
@@ -62,7 +62,7 @@ public class HiddenCharactersTests
     [InlineData("c1\u0080", true)]
     // C1 control 0x9F
     [InlineData("c1\u009F", true)]
-    public void FindHiddenCharacters_flags_control_characters(string text, bool expected)
+    public void FindHiddenCharacters_KnownControlCharacters_Flagged(string text, bool expected)
     {
         var found = HiddenCharacters.FindHiddenCharacters(text);
         if (expected)
@@ -85,7 +85,7 @@ public class HiddenCharactersTests
     [InlineData("unicode emoji \uD83C\uDF89", false)]
     // non-breaking space (0xA0) is outside the C1 control range
     [InlineData("nbsp\u00A0", false)]
-    public void FindHiddenCharacters_allows_whitespace_and_normal_text(string text, bool expected)
+    public void FindHiddenCharacters_WhitespaceAndNormalText_Allowed(string text, bool expected)
     {
         var found = HiddenCharacters.FindHiddenCharacters(text);
         if (expected)
@@ -105,7 +105,7 @@ public class HiddenCharactersTests
     [InlineData("\u001b[1;33;40m")]
     // several sequences on one line
     [InlineData("a\u001b[0mb\u001b[96mc")]
-    public void FindHiddenCharacters_skips_complete_ansi_csi_sequences(string text)
+    public void FindHiddenCharacters_CompleteAnsiCsiSequences_Skipped(string text)
     {
         Assert.Empty(HiddenCharacters.FindHiddenCharacters(text));
     }
@@ -117,13 +117,13 @@ public class HiddenCharactersTests
     [InlineData("cut \u001b[32")]
     // ESC without '[' is kept
     [InlineData("bare \u001bx")]
-    public void FindHiddenCharacters_keeps_non_csi_escapes(string text)
+    public void FindHiddenCharacters_NonCsiEscapes_Kept(string text)
     {
         Assert.NotEmpty(HiddenCharacters.FindHiddenCharacters(text));
     }
 
     [Fact]
-    public void FindHiddenCharacters_returns_empty_for_empty_string()
+    public void FindHiddenCharacters_EmptyLine_ReturnsEmpty()
     {
         Assert.Empty(HiddenCharacters.FindHiddenCharacters(""));
     }
@@ -142,7 +142,7 @@ public class HiddenCharactersTests
     [InlineData("echo 'x\u0016y'")]
     // C1 byte next to a Latin-1 char is mojibake
     [InlineData("mv {\u00d1\u0082.cfg,\u0442.cfg}")]
-    public void IsBenignHiddenCharacter_accepts_inert_contexts(string text)
+    public void IsBenignHiddenCharacter_InertContexts_Accepted(string text)
     {
         Assert.True(FirstHiddenCharacterIsBenign(text));
     }
@@ -156,7 +156,7 @@ public class HiddenCharactersTests
     [InlineData("x\u0082y")]
     // bare ESC (not CSI) drives terminal escapes even in quotes
     [InlineData("echo \"\u001b]0;title\u0007\"")]
-    public void IsBenignHiddenCharacter_rejects_genuinely_hidden_characters(string text)
+    public void IsBenignHiddenCharacter_GenuinelyHiddenContexts_Rejected(string text)
     {
         Assert.False(FirstHiddenCharacterIsBenign(text));
     }

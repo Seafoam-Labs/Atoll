@@ -26,7 +26,7 @@ public class PackageIndexUpdaterTests
     }
 
     [Fact]
-    public async Task RefreshCoordinatorTracksAttemptAndFailureMetrics()
+    public async Task DownloadAndReloadAsync_UnparseablePayload_RecordsFailureAndLeavesIndexUntouched()
     {
         var invalidPayload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
 
@@ -62,7 +62,7 @@ public class PackageIndexUpdaterTests
     }
 
     [Fact]
-    public async Task DownloadAndReloadAsync_uses_archive_validators_after_successful_download()
+    public async Task DownloadAndReloadAsync_SecondCycle_SendsRetainedValidatorsAndReturnsNotModified()
     {
         var payload = Gzip("[{\"ID\":1,\"Name\":\"demo\",\"PackageBase\":\"demo\",\"Version\":\"1.0-1\"}]");
         var handler = new ConditionalStubHttpMessageHandler(payload);
@@ -101,7 +101,7 @@ public class PackageIndexUpdaterTests
     }
 
     [Fact]
-    public async Task DownloadAndReloadAsync_rejects_well_formed_but_empty_dump()
+    public async Task DownloadAndReloadAsync_EmptyDump_FailsAndRetainsPreviousState()
     {
         var aurMetadata = new InMemoryAurMetadataRepository();
         await aurMetadata.SyncAsync(FullSync(Meta("demo")), CancellationToken.None);
@@ -136,7 +136,7 @@ public class PackageIndexUpdaterTests
     }
 
     [Fact]
-    public async Task DownloadAndReloadAsync_defers_pruning_until_a_suspicious_shrink_is_confirmed()
+    public async Task DownloadAndReloadAsync_SuspiciousShrink_DefersPruningUntilConfirmed()
     {
         var handler = new ScriptedHttpMessageHandler(
             _ => Ok(Dump(10), "\"v1\""),
@@ -187,7 +187,7 @@ public class PackageIndexUpdaterTests
     }
 
     [Fact]
-    public async Task DownloadAndReloadAsync_persistsOnlyThePackagesThatChanged()
+    public async Task DownloadAndReloadAsync_SequentialCycles_PersistOnlyChangedPackages()
     {
         var handler = new ScriptedHttpMessageHandler(
             _ => Ok(Dump(2), "\"v1\""),

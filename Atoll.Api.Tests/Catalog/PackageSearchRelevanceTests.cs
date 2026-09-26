@@ -8,7 +8,7 @@ namespace Atoll.Api.Tests.Catalog;
 public class PackageSearchRelevanceTests
 {
     [Fact]
-    public void SingleTermOrdersByTheTierLadder()
+    public void Rank_SingleTerm_OrdersByTheTierLadder()
     {
         var snapshot = Index(
             Pkg("vim"),
@@ -32,7 +32,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void BareInfixNamesAreNotCandidates()
+    public void Rank_BareInfixNames_AreNotCandidates()
     {
         // A substring that is neither a name prefix nor a cleaned name token resolves nothing: the
         // infix tier was dropped when retrieval moved onto the index structures.
@@ -46,7 +46,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void EveryCaseVariantOfANameResolvesAsExact()
+    public void Rank_CaseVariantsOfAName_ResolveAsExact()
     {
         // Case variants compare equal in the sorted-name order, so the exact run has to be walked in
         // full rather than stopped at the binary search's landing slot.
@@ -59,7 +59,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void NameMatchingDoesNotFoldBeyondOrdinalIgnoreCase()
+    public void Rank_NameMatching_FoldsOnlyByOrdinalIgnoreCase()
     {
         // OrdinalIgnoreCase folds a dotted i to I but keeps dotless ı and dotted İ apart. The sorted
         // run is located with the same comparison the walk re-tests, so the index cannot widen or
@@ -75,7 +75,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void MultiTermRanksFullCoverageAbovePartialThenByName()
+    public void Rank_MultiTerm_OrdersFullCoverageAbovePartialThenByName()
     {
         var snapshot = Index(
             Pkg("vim-editor"),
@@ -98,7 +98,7 @@ public class PackageSearchRelevanceTests
     [InlineData("yay-git")]
     [InlineData("paru-git")]
     [InlineData("visual-studio-code-bin")]
-    public void ExactCompoundNameRanksFirstAndStaysOneTerm(string name)
+    public void Rank_ExactCompoundName_RanksFirstAndStaysOneTerm(string name)
     {
         // The segment resolves through its parts too, so the wider family becomes a candidate; the
         // exact name still wins on the raw-segment tier, and coverage stays one bit because the
@@ -120,7 +120,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void CompoundNameAbsentFromTheCorpusReachesItsTokenFamily()
+    public void Rank_CompoundNameAbsent_ReachesItsTokenFamily()
     {
         var snapshot = Index(
             Pkg("arc-gtk-theme", votes: 100), Pkg("arc-gtk-theme-git", votes: 5), Pkg("gtk-theme-numix"));
@@ -132,7 +132,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void CompoundNamePrefixStillBeatsTheTokenFamily()
+    public void Rank_CompoundNamePrefix_BeatsTheTokenFamily()
     {
         // "linux-zen-headers-bin" is a name-prefix hit on the raw segment, so it outranks the
         // token-only matches the parts bring in.
@@ -147,7 +147,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void ProvidesStillReadsTheRawSegmentVerbatim()
+    public void Rank_Provides_ReadsTheRawSegmentVerbatim()
     {
         var snapshot = Index(Pkg("libegl-provider", provides: ["libEGL.so"]));
 
@@ -157,7 +157,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void SameTierOrdersByVotesDescendingThenNameAscending()
+    public void Rank_SameTier_OrdersByVotesDescendingThenNameAscending()
     {
         var snapshot = Index(
             Pkg("aaa-tool", votes: 5),
@@ -170,7 +170,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void NameMatchIsCaseInsensitive()
+    public void Rank_NameMatch_IsCaseInsensitive()
     {
         var snapshot = Index(Pkg("shelly-bin"));
 
@@ -181,7 +181,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void ProvidesMatchIsCaseSensitive()
+    public void Rank_ProvidesMatch_IsCaseSensitive()
     {
         var snapshot = Index(Pkg("provider", provides: ["SHELLY"]));
 
@@ -190,7 +190,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void ExactNameBeatsProvidesSelfNameFallback()
+    public void Rank_ProvidesSelfNameFallback_ExactNameWins()
     {
         // A package with no provides gets a self-name provides entry; P0 must still win over P1.
         var snapshot = Index(Pkg("vim"));
@@ -201,7 +201,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void NoMatchReturnsEmpty()
+    public void Rank_NoMatch_ReturnsEmpty()
     {
         var snapshot = Index(Pkg("vim"), Pkg("neovim-git"));
 
@@ -209,7 +209,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void EmptyQueryReturnsEmpty()
+    public void Rank_WhitespaceQuery_ReturnsEmpty()
     {
         var snapshot = Index(Pkg("vim"));
 
@@ -217,7 +217,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void ServiceCapsRankedResultsAtFifty()
+    public void FindByRelevance_DefaultCap_CapsAtFifty()
     {
         // 60 name-prefix matches, identical tier/coverage/votes: the total order ends on ordinal name.
         var results = CreateService(Enumerable.Range(0, 60).Select(i => Pkg($"pkg-{i:00}")).ToArray())
@@ -232,7 +232,7 @@ public class PackageSearchRelevanceTests
     }
 
     [Fact]
-    public void ServiceCapsRankedResultsAtTheConfiguredLimit()
+    public void FindByRelevance_ConfiguredCap_CapsAtTheConfiguredLimit()
     {
         var results = CreateService(
                 [.. Enumerable.Range(0, 60).Select(i => Pkg($"pkg-{i:00}"))],

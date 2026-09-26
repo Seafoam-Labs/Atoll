@@ -20,7 +20,7 @@ public class AtollOptionsTests
     }
 
     [Fact]
-    public void Unconfigured_options_fall_back_to_valid_defaults()
+    public void AddAtollOptions_Unconfigured_UsesValidDefaults()
     {
         var options = Resolve(new Dictionary<string, string?>(StringComparer.Ordinal));
 
@@ -48,7 +48,7 @@ public class AtollOptionsTests
     [InlineData("Atoll:Caching:DashboardTtlSeconds", "0")]
     [InlineData("Atoll:Search:MaxRankedResults", "0")]
     [InlineData("Atoll:Search:MaxRankedResults", "1001")]
-    public void Nested_annotations_are_enforced(string key, string value)
+    public void AddAtollOptions_InvalidNestedValue_IsRejected(string key, string value)
     {
         Assert.Throws<OptionsValidationException>(() => Resolve(new Dictionary<string, string?>(StringComparer.Ordinal) { [key] = value }));
     }
@@ -58,7 +58,7 @@ public class AtollOptionsTests
     [InlineData("Atoll:Mongo:Collections:SeedExclusions", "", "AtollOptions.Mongo.Collections", "SeedExclusions")]
     [InlineData("Atoll:Seed:Bulk:Parallelism", "0", "AtollOptions.Seed.Bulk", "Parallelism")]
     [InlineData("Atoll:Search:MaxRankedResults", "0", "AtollOptions.Search", "MaxRankedResults")]
-    public void Nested_failure_names_the_qualifying_path(string key, string value, string sectionPath, string memberName)
+    public void AddAtollOptions_InvalidNestedValue_NamesQualifyingPath(string key, string value, string sectionPath, string memberName)
     {
         var exception = Assert.Throws<OptionsValidationException>(
             () => Resolve(new Dictionary<string, string?>(StringComparer.Ordinal) { [key] = value }));

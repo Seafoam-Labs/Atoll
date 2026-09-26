@@ -24,7 +24,7 @@ public class FileViewerTests
     [InlineData("image.bin", null)]
     [InlineData("", null)]
     [InlineData(null, null)]
-    public void MapLanguagePinsFilesCommonInAurPackages(string? path, string? expected)
+    public void MapLanguage_FilesCommonInAurPackages_ReturnsPinnedLanguages(string? path, string? expected)
     {
         Assert.Equal(expected, FileViewer.MapLanguage(path));
     }

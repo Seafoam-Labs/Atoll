@@ -10,7 +10,7 @@ public class PackageDocumentSizeValidatorTests
     private const long Limit = PackageDocumentSizeValidator.MongoMaxDocumentSizeBytes;
 
     [Fact]
-    public void Validate_accepts_document_with_conservative_estimate_below_limit()
+    public void Validate_ConservativeEstimateBelowLimit_Accepts()
     {
         var revision = Revision(("PKGBUILD", 200, "pkgname=shelly\n"));
 
@@ -18,7 +18,7 @@ public class PackageDocumentSizeValidatorTests
     }
 
     [Fact]
-    public void Validate_accepts_when_estimate_exceeds_limit_but_exact_bson_fits()
+    public void Validate_EstimateExceedsLimitButExactBsonFits_Accepts()
     {
         // Declared sizes push the conservative estimate past 16 MiB while the actual
         // content stays tiny, so the exact measurement must accept the document.
@@ -30,7 +30,7 @@ public class PackageDocumentSizeValidatorTests
     }
 
     [Fact]
-    public void Validate_at_exact_estimate_boundary_skips_exact_measurement()
+    public void Validate_AtExactEstimateBoundary_SkipsExactMeasurement()
     {
         // size + 1-byte name + 160 + 1024 == 16 MiB exactly: the estimate check is
         // inclusive, so validation passes without ever serializing the document.
@@ -41,7 +41,7 @@ public class PackageDocumentSizeValidatorTests
     }
 
     [Fact]
-    public void Validate_rejects_document_whose_exact_bson_exceeds_limit()
+    public void Validate_ExactBsonExceedsLimit_Rejects()
     {
         var revision = Revision(("huge.txt", 16 * 1024 * 1024, new string('a', 16 * 1024 * 1024)));
 

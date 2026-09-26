@@ -8,7 +8,7 @@ namespace Atoll.Api.Tests.Packages;
 public class PackageSnapshotFactoryTests
 {
     [Fact]
-    public void Create_measures_size_and_hash_over_utf8_bytes()
+    public void Create_Utf8Content_MeasuresSizeAndHashOverEncodedBytes()
     {
         var content = "héllo → 🌍";
         var name = "ünïcode.txt";
@@ -30,7 +30,7 @@ public class PackageSnapshotFactoryTests
     }
 
     [Fact]
-    public void Create_revision_id_is_deterministic_and_order_independent()
+    public void Create_ReorderedFiles_ProducesDeterministicRevisionId()
     {
         var first = new Dictionary<string, string>(StringComparer.Ordinal) { ["a.txt"] = "one", ["b.txt"] = "two", ["c.txt"] = "three" };
         var reordered = new Dictionary<string, string>(StringComparer.Ordinal) { ["c.txt"] = "three", ["a.txt"] = "one", ["b.txt"] = "two" };
@@ -49,7 +49,7 @@ public class PackageSnapshotFactoryTests
     }
 
     [Fact]
-    public void Create_populates_content_and_metadata_documents()
+    public void Create_Snapshot_PopulatesContentAndMetadataDocuments()
     {
         var snapshot = PackageSnapshotFactory.Create(
             "shelly", new Dictionary<string, string>(StringComparer.Ordinal) { ["PKGBUILD"] = "pkgname=shelly\n" }, 5_242_880, "aur", "seed from AUR");
@@ -72,7 +72,7 @@ public class PackageSnapshotFactoryTests
     }
 
     [Fact]
-    public void Create_accepts_file_exactly_at_per_file_limit()
+    public void Create_FileExactlyAtPerFileLimit_Accepts()
     {
         var snapshot = PackageSnapshotFactory.Create(
             "pkg", new Dictionary<string, string>(StringComparer.Ordinal) { ["a.txt"] = new string('a', 10) }, 10, "aur", "seed from AUR");
@@ -81,7 +81,7 @@ public class PackageSnapshotFactoryTests
     }
 
     [Fact]
-    public void Create_rejects_file_exceeding_per_file_limit()
+    public void Create_FileOverPerFileLimit_Rejects()
     {
         var ex = Assert.Throws<InvalidOperationException>(() => PackageSnapshotFactory.Create(
             "pkg", new Dictionary<string, string>(StringComparer.Ordinal) { ["big.txt"] = new string('a', 11) }, 10, "aur", "seed from AUR"));
@@ -92,7 +92,7 @@ public class PackageSnapshotFactoryTests
     }
 
     [Fact]
-    public void Create_enforces_per_file_limit_on_utf8_bytes_not_characters()
+    public void Create_MultiByteContentOverPerFileLimit_RejectsOnUtf8Bytes()
     {
         var sixCharacters = "🌍🌍";
 

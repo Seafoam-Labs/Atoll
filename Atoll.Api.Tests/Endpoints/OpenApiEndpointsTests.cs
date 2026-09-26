@@ -23,7 +23,7 @@ public sealed class OpenApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task OpenApiSchemaExposesTypedEndpointsAndComponents()
+    public async Task GetOpenApiV1Json_ExposesTypedEndpointsAndComponents()
     {
         var response = await _client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
 

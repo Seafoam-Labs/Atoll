@@ -70,7 +70,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Verified_package_files_are_served()
+    public async Task GetV1PackagesName_VerifiedHead_ServesContent()
     {
         await SeedAsync(SecurityStatus.Verified);
 
@@ -80,7 +80,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Pending_package_files_are_blocked_with_403_and_reason()
+    public async Task GetV1PackagesName_PendingHead_Returns403WithReason()
     {
         await SeedAsync(SecurityStatus.Pending);
 
@@ -92,7 +92,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Flagged_package_files_are_blocked_with_403()
+    public async Task GetV1PackagesName_FlaggedHead_Returns403()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
@@ -104,7 +104,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Flagged_revision_read_is_blocked()
+    public async Task GetV1PackagesNameVersionsSha_FlaggedRevision_Returns403()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
@@ -114,7 +114,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Version_history_remains_visible_when_blocked()
+    public async Task GetV1PackagesNameVersions_FlaggedHead_RemainsVisible()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
@@ -124,7 +124,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Search_remains_ungated()
+    public async Task GetV1Search_FlaggedPackage_RemainsUngated()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
@@ -134,7 +134,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Package_list_remains_ungated()
+    public async Task GetV1Packages_FlaggedPackage_RemainsUngated()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
@@ -144,7 +144,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Git_info_refs_is_blocked_for_pending_package()
+    public async Task InfoRefs_PendingPackage_Returns403()
     {
         await SeedAsync(SecurityStatus.Pending);
 
@@ -154,7 +154,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Git_upload_pack_is_blocked_for_pending_package()
+    public async Task UploadPack_PendingPackage_Returns403()
     {
         await SeedAsync(SecurityStatus.Pending);
 
@@ -167,7 +167,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Flagged_revision_is_blocked_but_other_revisions_are_served()
+    public async Task GetV1PackagesNameVersionsSha_MixedRevisionStatuses_BlocksFlaggedAndServesVerified()
     {
         var rev2 = new PackageRevisionContentDocument
         {
@@ -205,7 +205,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Security_status_endpoint_reports_status()
+    public async Task GetV1PackagesNameSecurity_FlaggedHead_ReportsFlaggedStatus()
     {
         await SeedAsync(SecurityStatus.Flagged);
 

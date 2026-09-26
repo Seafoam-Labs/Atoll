@@ -40,7 +40,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetRevisionsAsyncOrdersNewestFirstMarksHeadAndJoinsScanStatuses()
+    public async Task GetRevisionsAsync_OrdersNewestFirstMarksHeadAndJoinsScanStatuses()
     {
         await SeedRevisionAsync("rev-1", "old head", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "sync from upstream", SecurityStatus.Verified, files: Files("pkgname=new\n"));
@@ -60,7 +60,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetRevisionsAsyncMarksUnscannedRevisionsWithNullStatus()
+    public async Task GetRevisionsAsync_MarksUnscannedRevisionsWithNullStatus()
     {
         await SeedRevisionAsync("rev-1", "seed");
 
@@ -70,7 +70,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetRevisionsAsyncTruncatesBeyondRenderCap()
+    public async Task GetRevisionsAsync_TruncatesBeyondRenderCap()
     {
         await InsertDocAsync();
         // The seed doc already holds one revision; append more to land above the cap.
@@ -88,7 +88,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetRevisionsAsyncReturnsNullForUnknownPackageAndEmptyForUnseeded()
+    public async Task GetRevisionsAsync_ReturnsNullForUnknownPackageAndEmptyForUnseeded()
     {
         Assert.Null(await _service.GetRevisionsAsync("no-such-package", TestContext.Current.CancellationToken));
 
@@ -98,7 +98,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFilesAsyncReturnsTreeEntriesSortedDirectoriesFirst()
+    public async Task GetFilesAsync_ReturnsTreeEntriesSortedDirectoriesFirst()
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
@@ -120,7 +120,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFilesAsyncReturnsSelectedFileContent()
+    public async Task GetFilesAsync_ReturnsSelectedFileContent()
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: Files("line one\nline two\n"));
 
@@ -134,7 +134,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFilesAsyncMarksMissingPathAsFileNotFound()
+    public async Task GetFilesAsync_MarksMissingPathAsFileNotFound()
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified);
 
@@ -145,7 +145,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFilesAsyncServesFlaggedRevisionsForUiInspection()
+    public async Task GetFilesAsync_ServesFlaggedRevisionsForUiInspection()
     {
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "new", SecurityStatus.Verified, files: Files("pkgname=new\n"));
@@ -164,7 +164,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFilesAsyncFallsBackToHeadForUnknownRevision()
+    public async Task GetFilesAsync_FallsBackToHeadForUnknownRevision()
     {
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Verified, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "new", SecurityStatus.Verified, files: Files("pkgname=new\n"));
@@ -183,7 +183,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFilesAsyncDetectsBinaryFiles()
+    public async Task GetFilesAsync_DetectsBinaryFiles()
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
@@ -197,7 +197,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFilesAsyncTruncatesLargeContent()
+    public async Task GetFilesAsync_TruncatesLargeContent()
     {
         var large = new string('a', PackageDetailsService.ContentRenderChars + 1000);
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified,
@@ -211,7 +211,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFilesAsyncReturnsNullForUnknownPackageAndEmptyForUnseeded()
+    public async Task GetFilesAsync_ReturnsNullForUnknownPackageAndEmptyForUnseeded()
     {
         Assert.Null(await _service.GetFilesAsync("no-such-package", null, null, TestContext.Current.CancellationToken));
 
@@ -221,7 +221,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetAsyncResolvesRevisionPinWithHeadFallback()
+    public async Task GetAsync_ResolvesRevisionPinWithHeadFallback()
     {
         await SeedRevisionAsync("rev-1", "old", SecurityStatus.Flagged, files: Files("pkgname=old\n"));
         await SeedRevisionAsync("rev-2", "new", SecurityStatus.Verified, files: Files("pkgname=new\n"));
@@ -245,7 +245,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetAsyncReturnsNullForUnknownPackage()
+    public async Task GetAsync_ReturnsNullForUnknownPackage()
     {
         Assert.Null(await _service.GetAsync("no-such-package", ct: TestContext.Current.CancellationToken));
     }

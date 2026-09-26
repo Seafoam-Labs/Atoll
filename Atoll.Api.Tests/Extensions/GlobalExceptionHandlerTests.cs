@@ -8,7 +8,7 @@ namespace Atoll.Api.Tests.Extensions;
 public class GlobalExceptionHandlerTests
 {
     [Fact]
-    public async Task Package_conflict_maps_to_409_and_logs_at_debug()
+    public async Task TryHandleAsync_PackageConflict_MapsTo409AndLogsAtDebug()
     {
         var logger = new CapturingLogger();
         var handler = new GlobalExceptionHandler(logger, new StubProblemDetailsService());
@@ -32,7 +32,7 @@ public class GlobalExceptionHandlerTests
     }
 
     [Fact]
-    public async Task Unexpected_exception_maps_to_500_and_logs_at_error()
+    public async Task TryHandleAsync_UnexpectedException_MapsTo500AndLogsAtError()
     {
         var logger = new CapturingLogger();
         var handler = new GlobalExceptionHandler(logger, new StubProblemDetailsService());

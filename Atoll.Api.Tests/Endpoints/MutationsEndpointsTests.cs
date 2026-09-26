@@ -68,7 +68,7 @@ public sealed class MutationsEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Mutations_disabled_rejects_seed_with_403()
+    public async Task PostV1PackagesNameSeed_MutationsDisabled_Returns403()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
@@ -79,7 +79,7 @@ public sealed class MutationsEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Mutations_disabled_rejects_rescan_with_403()
+    public async Task PostV1PackagesNameSecurityRescan_MutationsDisabled_Returns403()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
@@ -91,7 +91,7 @@ public sealed class MutationsEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Mutations_disabled_rejects_delete_with_403()
+    public async Task DeleteV1PackagesName_MutationsDisabled_Returns403()
     {
         await using var disabled = new SecurityTestFactory { MutationsEnabled = false };
         using var client = disabled.CreateClient();
@@ -107,7 +107,7 @@ public sealed class MutationsEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Mutations_enabled_rescan_queues_head_pending()
+    public async Task PostV1PackagesNameSecurityRescan_MutationsEnabled_QueuesHeadPending()
     {
         await SeedPackageAsync();
 

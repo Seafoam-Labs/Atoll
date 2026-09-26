@@ -28,7 +28,7 @@ public class ShellCommandPositionsTests
     [InlineData("echo $ sudo", "sudo", false)]
     // redirect target is a file name
     [InlineData("echo x > sudo", "sudo", false)]
-    public void Reports_argument_position(string line, string word, bool expected)
+    public void IsInvokedWord_ArgumentPositions_ReturnsFalse(string line, string word, bool expected)
     {
         Assert.Equal(expected, IsInvoked(line, word));
     }
@@ -54,7 +54,7 @@ public class ShellCommandPositionsTests
     [InlineData("sudo -u yay sudo ls", "sudo", true)]
     // command substitution body
     [InlineData("echo \"$(sudo ls)\"", "sudo", true)]
-    public void Reports_command_position(string line, string word, bool expected)
+    public void IsInvokedWord_CommandPositions_ReturnsTrue(string line, string word, bool expected)
     {
         Assert.Equal(expected, IsInvoked(line, word));
     }
@@ -72,13 +72,13 @@ public class ShellCommandPositionsTests
     [InlineData("python -m pip install x", "pip", true)]
     // makepkg does not run its arguments
     [InlineData("makepkg sudo ls", "sudo", false)]
-    public void Walks_back_over_tokens_that_do_not_govern_the_word(string line, string word, bool expected)
+    public void IsInvokedWord_NonGoverningTokens_WalksBackToCommandPosition(string line, string word, bool expected)
     {
         Assert.Equal(expected, IsInvoked(line, word));
     }
 
     [Fact]
-    public void Closing_a_command_substitution_stays_in_command_position()
+    public void IsInvokedWord_AfterClosedCommandSubstitution_StaysInCommandPosition()
     {
         // A word after an unquoted $( … ) is normally its consumer's argument, which the
         // consumer list decides. Command position is kept here because the alternative drops

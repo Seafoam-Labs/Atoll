@@ -8,7 +8,7 @@ namespace Atoll.Api.Tests.Endpoints;
 public class MetricsScopeIsolationTests
 {
     [Fact]
-    public async Task EachTestingHostScrapesOnlyItsOwnAtollMeterScope()
+    public async Task GetMetrics_ParallelTestingHosts_ScrapeOnlyOwnAtollMeterScope()
     {
         // Guards against the parallel-runner flake: WebApplicationFactory hosts
         // share one process and .NET metric listeners match meters by name

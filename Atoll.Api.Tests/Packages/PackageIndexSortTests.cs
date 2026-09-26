@@ -16,7 +16,7 @@ public class PackageIndexSortTests
     [InlineData("8", (PackageIndexSortBy)8)]
     [InlineData("votes,popularity", PackageIndexSortBy.Version)]
     [InlineData("name,version", PackageIndexSortBy.Version)]
-    public void SortByParsesNamesNumericsAndFlagCombinations(string input, PackageIndexSortBy expected)
+    public void TryParse_SortByNamesNumericsAndFlagCombinations_SetsSortBy(string input, PackageIndexSortBy expected)
     {
         var parsed = PackageIndexSortByQuery.TryParse(input, out var result);
 
@@ -32,7 +32,7 @@ public class PackageIndexSortTests
     [InlineData("1", PackageIndexSortOrder.Desc)]
     [InlineData("asc,desc", PackageIndexSortOrder.Desc)]
     [InlineData("2", (PackageIndexSortOrder)2)]
-    public void OrderParsesNamesNumericsAndFlagCombinations(string input, PackageIndexSortOrder expected)
+    public void TryParse_SortOrderNamesNumericsAndFlagCombinations_SetsOrder(string input, PackageIndexSortOrder expected)
     {
         var parsed = PackageIndexSortOrderQuery.TryParse(input, out var result);
 
@@ -45,7 +45,7 @@ public class PackageIndexSortTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("bogus")]
-    public void UnparseableSortValuesAreRejected(string? input)
+    public void TryParse_UnparseableSortAndOrderValues_ReturnsFalse(string? input)
     {
         Assert.False(PackageIndexSortByQuery.TryParse(input, out _));
         Assert.False(PackageIndexSortOrderQuery.TryParse(input, out _));

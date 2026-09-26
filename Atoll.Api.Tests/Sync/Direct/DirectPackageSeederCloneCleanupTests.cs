@@ -31,7 +31,7 @@ public sealed class DirectPackageSeederCloneCleanupTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Failed_clone_cleans_up_its_temporary_directory()
+    public async Task SeedAsync_FailedClone_RemovesTemporaryDirectoryAndPersistsNothing()
     {
         var repo = new InMemoryPackageRepository();
         var options = Options.Create(new AtollOptions

@@ -73,7 +73,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_assembles_counts_from_all_sources()
+    public async Task GetAsync_AssemblesCountsFromAllSources()
     {
         var store = IndexWithPackages(Meta("one"), Meta("two"), Meta("three"));
         var security = new InMemoryPackageSecurityRepository();
@@ -106,7 +106,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_reports_disabled_seed_and_enabled_refresh_states()
+    public async Task GetAsync_ReportsDisabledSeedAndEnabledRefreshStates()
     {
         var service = CreateService(
             IndexWithPackages(Meta("one")),
@@ -127,7 +127,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_returns_null_timestamps_untouched_and_orders_exclusions()
+    public async Task GetAsync_UnsetTimestampsStayNullAndExclusionsAreSorted()
     {
         var exclusions = new InMemorySeedExclusionRepository();
         await exclusions.RecordDocumentTooLargeAsync("zeta", ["zeta"], 1, TestContext.Current.CancellationToken);
@@ -147,7 +147,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_caps_rendered_exclusions_but_reports_the_true_count()
+    public async Task GetAsync_CapsRenderedExclusionsButReportsTheTrueCount()
     {
         var exclusions = new InMemorySeedExclusionRepository();
         for (var i = 0; i < StatusDashboardService.ExclusionRenderCap + 5; i++)
@@ -165,7 +165,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_counts_seeded_packages_without_enumerating_names()
+    public async Task GetAsync_CountsSeededPackagesWithoutEnumeratingNames()
     {
         var service = CreateService(IndexWithPackages(Meta("one")), packageService: new CountingPackageService(7));
 
@@ -175,7 +175,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_caches_the_assembled_model_for_repeated_reads()
+    public async Task GetAsync_CachesTheAssembledModelForRepeatedReads()
     {
         var counting = new CountingPackageService(3);
         var service = CreateService(IndexWithPackages(Meta("one")), packageService: counting);
@@ -192,7 +192,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_rebuilds_after_the_configured_ttl_elapses()
+    public async Task GetAsync_RebuildsAfterTheConfiguredTtlElapses()
     {
         var counting = new CountingPackageService(3);
         var service = CreateService(
@@ -221,7 +221,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_propagates_cancellation()
+    public async Task GetAsync_PropagatesCancellation()
     {
         var service = CreateService(IndexWithPackages(Meta("one")));
         using var cts = new CancellationTokenSource();
@@ -231,7 +231,7 @@ public class StatusDashboardServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_propagates_repository_failures()
+    public async Task GetAsync_PropagatesRepositoryFailures()
     {
         var service = CreateService(IndexWithPackages(), packageService: new ThrowingPackageService());
 

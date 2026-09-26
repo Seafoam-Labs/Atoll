@@ -21,7 +21,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     [Fact]
-    public async Task RendersUnifiedDiffLabeledWithTheCallersPath()
+    public async Task DiffAsync_ChangedFile_RendersUnifiedDiffWithCallerPath()
     {
         var result = await DiffAsync(
             new TextDiffEntry("PKGBUILD", "line1\nline2\nline3\n", "line1\nline2 changed\nline3\n"),
@@ -41,7 +41,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AddedAndRemovedFilesGetTheRightDevNullSide()
+    public async Task DiffAsync_AddedAndRemovedFiles_GetsDevNullOnMissingSide()
     {
         var result = await Differ.DiffAsync(
             [
@@ -65,7 +65,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EmptyOneSidedFilesNeverProduceABogusHunk()
+    public async Task DiffAsync_EmptyOneSidedFiles_NeverProducesBogusHunk()
     {
         var result = await Differ.DiffAsync(
             [
@@ -85,7 +85,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SpaceBearingAndNestedPathsRoundTrip()
+    public async Task DiffAsync_SpaceBearingAndNestedPaths_KeepRealPathLabels()
     {
         var result = await DiffAsync(
             new TextDiffEntry("dir with spaces/file name.txt", "old\n", "new\n"),
@@ -101,7 +101,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PathSegmentsThatLookLikeTheSidePrefixesDoNotConfuseTheLabel()
+    public async Task DiffAsync_SideLikePathSegments_DoNotConfuseLabel()
     {
         var result = await DiffAsync(
             new TextDiffEntry("a/weird.txt", "old\n", "new\n"), TestContext.Current.CancellationToken);
@@ -111,7 +111,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task IdenticalPairProducesNoChunk()
+    public async Task DiffAsync_IdenticalPair_ProducesNoChunk()
     {
         var result = await DiffAsync(
             new TextDiffEntry("PKGBUILD", "same\n", "same\n"), TestContext.Current.CancellationToken);
@@ -120,7 +120,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RemovedLineThatLooksLikeAHeaderStaysBodyText()
+    public async Task DiffAsync_HeaderLikeRemovedLine_StaysBodyText()
     {
         var result = await DiffAsync(
             new TextDiffEntry("PKGBUILD", "keep\n-- not a header\n", "keep\n"),
@@ -139,7 +139,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task MovedFileIsReportedAsARemovalPlusAnAddition()
+    public async Task DiffAsync_MovedFile_ReportedAsRemovalPlusAddition()
     {
         var result = await Differ.DiffAsync(
             [
@@ -159,7 +159,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TraversalAndRootedPathsNeverEscapeTheTempTree()
+    public async Task DiffAsync_TraversalAndRootedPaths_DoNotEscapeTempTree()
     {
         // Stored paths come from upstream tarballs, so neither a ".." segment nor a rooted path may decide
         // where the temp file lands: the temp name is a hash, and the real path only ever labels the output.
@@ -188,7 +188,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EmptyEntryListTouchesNeitherTheFilesystemNorGit()
+    public async Task DiffAsync_EmptyEntryList_ReturnsEmpty()
     {
         var result = await Differ.DiffAsync([], TestContext.Current.CancellationToken);
 
@@ -196,7 +196,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task MissingTrailingNewlineIsReportedAndSurvivesLabeling()
+    public async Task DiffAsync_MissingTrailingNewline_IsReportedAndLabeled()
     {
         var result = await DiffAsync(
             new TextDiffEntry("no-newline.txt", "old", "new"), TestContext.Current.CancellationToken);
@@ -210,7 +210,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TempTreeIsRemovedAfterASuccessfulDiff()
+    public async Task DiffAsync_SuccessfulDiff_RemovesTempTree()
     {
         var before = TempEntryCount();
         await DiffAsync(new TextDiffEntry("PKGBUILD", "old\n", "new\n"), TestContext.Current.CancellationToken);
@@ -219,7 +219,7 @@ public sealed class GitTextDifferTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CancellationPropagatesAndStillRemovesTheTempTree()
+    public async Task DiffAsync_Cancelled_ThrowsAndRemovesTempTree()
     {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();

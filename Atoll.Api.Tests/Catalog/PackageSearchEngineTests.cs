@@ -8,7 +8,7 @@ namespace Atoll.Api.Tests.Catalog;
 public class PackageSearchEngineTests
 {
     [Fact]
-    public void HydrateKeepsCallerOrderAndSkipsUnknownNames()
+    public void Hydrate_CallerOrderWithUnknownName_KeepsOrderAndSkipsUnknown()
     {
         var (engine, snapshot) = CreateEngine();
 
@@ -18,7 +18,7 @@ public class PackageSearchEngineTests
     }
 
     [Fact]
-    public void FindByNameIsExactOrdinal()
+    public void FindByName_OrdinalComparison_MatchesOnlyTheExactName()
     {
         var (engine, snapshot) = CreateEngine();
 
@@ -28,7 +28,7 @@ public class PackageSearchEngineTests
     }
 
     [Fact]
-    public void MatchProvidesUnionsPostingsAndDeduplicatesAcrossKeys()
+    public void MatchProvides_OverlappingPostings_UnionsAndDeduplicates()
     {
         var engine = new PackageSearchEngine(new PackageIndexStore());
         var snapshot = PackageIndexBuilder.BuildFromPackages(
@@ -44,7 +44,7 @@ public class PackageSearchEngineTests
     }
 
     [Fact]
-    public void MatchWordsIsNullOnEmptyTermSetOrAnyMissingTerm()
+    public void MatchWords_EmptyTermSetOrMissingTerm_ReturnsNull()
     {
         var (engine, snapshot) = CreateEngine();
 
@@ -58,7 +58,7 @@ public class PackageSearchEngineTests
     }
 
     [Fact]
-    public void AllEnumeratesTheNameDictionary()
+    public void All_Snapshot_EnumeratesTheNameDictionary()
     {
         var (engine, snapshot) = CreateEngine();
 
@@ -66,7 +66,7 @@ public class PackageSearchEngineTests
     }
 
     [Fact]
-    public void PrimitivesOnACapturedSnapshotAnswerThatGenerationAfterASwap()
+    public void Capture_AfterGenerationSwap_AnswersTheCapturedGeneration()
     {
         var store = new PackageIndexStore();
         store.Replace(TestData.LoadSampleIndexes());

@@ -63,7 +63,7 @@ public sealed class GitCommitFixtureTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Synthesized_history_is_pinned()
+    public async Task EnsureRepositoryAsync_FixedRevisionHistory_ProducesPinnedGitObjects()
     {
         var reposRoot = Path.Combine(Path.GetTempPath(), $"atoll-fixture-{Guid.NewGuid():N}");
         Directory.CreateDirectory(reposRoot);

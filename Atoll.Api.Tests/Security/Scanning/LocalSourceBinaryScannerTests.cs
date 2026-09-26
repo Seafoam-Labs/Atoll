@@ -17,7 +17,7 @@ public class LocalSourceBinaryScannerTests
     [Theory]
     [InlineData("icon.png")]
     [InlineData("archive/name.ico")]
-    public void Png_magic_is_medium_regardless_of_path(string path)
+    public void Scan_PngMagic_MediumRegardlessOfPath(string path)
     {
         var finding = LocalSourceBinaryScanner.Scan(PngMagic + "chunkdata", path);
 
@@ -27,7 +27,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Jpeg_with_jfif_and_exif_markers_is_medium()
+    public void Scan_JpegWithJfifAndExifMarkers_Medium()
     {
         var jfif = Bytes(0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, (byte)'J', (byte)'F', (byte)'I', (byte)'F', 0x00);
         var exif = Bytes(0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x10, (byte)'E', (byte)'x', (byte)'i', (byte)'f', 0x00);
@@ -55,7 +55,7 @@ public class LocalSourceBinaryScannerTests
     [InlineData("IMPM")]
     // Allegro packed datafile
     [InlineData("slh!")]
-    public void Ascii_magic_formats_are_medium(string magic)
+    public void Scan_KnownAsciiMagicFormats_Medium(string magic)
     {
         var finding = LocalSourceBinaryScanner.Scan(magic + "\0\0binarydata", "file.bin");
 
@@ -64,7 +64,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void TrueType_and_ico_magic_with_nul_bytes_is_medium()
+    public void Scan_TrueTypeAndIcoMagicWithNulBytes_Medium()
     {
         var ttf = Bytes(0x00, 0x01, 0x00, 0x00, 0x00, 0x0C);
         var ico = Bytes(0x00, 0x00, 0x01, 0x00, 0x01, 0x00);
@@ -74,7 +74,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Bmp_magic_is_medium()
+    public void Scan_BmpMagic_Medium()
     {
         var bmp = Bytes(0x42, 0x4D, 0x36, 0x04, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00, 0x28, 0x00);
 
@@ -82,7 +82,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Webp_magic_is_medium_despite_variable_size_field_decoding()
+    public void Scan_WebpMagicWithVariableSizeField_Medium()
     {
         var plainSize = "RIFF" + Bytes(0x24, 0x00, 0x00, 0x00) + "WEBP";
         var mergedSize = "RIFF" + Bytes(0x80) + "WEBP";
@@ -92,7 +92,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void S3m_signature_at_header_offset_is_medium()
+    public void Scan_S3mSignatureAtHeaderOffset_Medium()
     {
         // S3M modules carry the "SCRM" signature at byte offset 44, after the 28-byte title
         // and the header fields.
@@ -109,7 +109,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void S3m_signature_shifted_by_multibyte_decoding_is_medium()
+    public void Scan_S3mSignatureShiftedByMultibyteDecoding_Medium()
     {
         // A valid two-byte sequence before the signature decodes to one character, so the
         // decoded offset lands below byte offset 44.
@@ -128,7 +128,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Scrm_signature_beyond_the_header_window_falls_back_to_medium()
+    public void Scan_ScrmSignatureBeyondHeaderWindow_FallsBackToMedium()
     {
         // Only the S3M header position counts; a match deeper in a binary does not clear it,
         // but unrecognized binary data is non-blocking anyway.
@@ -139,7 +139,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Magic_bytes_win_over_a_suspicious_extension()
+    public void Scan_PngMagicNamedExe_MagicWinsOverExtension()
     {
         // Content-based detection: a real PNG named .exe is still inert media.
         var finding = LocalSourceBinaryScanner.Scan(PngMagic + "data", "installer.exe");
@@ -148,7 +148,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Elf_stays_critical_even_with_a_media_extension()
+    public void Scan_ElfWithMediaExtension_StaysCritical()
     {
         var elf = Bytes([0x7F, .. Encoding.UTF8.GetBytes("ELF payload")]);
 
@@ -165,7 +165,7 @@ public class LocalSourceBinaryScannerTests
     [InlineData("libpcre.so.3.13.2")]
     // path with directory
     [InlineData("subdir/libsteam_api.so")]
-    public void Elf_named_as_a_shared_library_is_medium(string path)
+    public void Scan_ElfNamedAsSharedLibrary_Medium(string path)
     {
         // A shared library is loaded by other programs as package content - the same trust
         // class as binaries inside a vendored archive - so it is kept for review only.
@@ -180,7 +180,7 @@ public class LocalSourceBinaryScannerTests
     [Theory]
     [InlineData("tool.so.txt")]
     [InlineData("libfoo.so.5a")]
-    public void Elf_with_a_non_library_so_suffixed_name_stays_critical(string path)
+    public void Scan_ElfWithNonLibrarySoSuffix_StaysCritical(string path)
     {
         // Only the linker naming convention counts; anything else keeps blocking severity.
         var elf = Bytes([0x7F, .. Encoding.UTF8.GetBytes("ELF payload")]);
@@ -191,7 +191,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Windows_executable_magic_is_critical()
+    public void Scan_WindowsExecutableMagic_Critical()
     {
         var exe = "MZ" + Bytes(0x90, 0x00, 0x03);
 
@@ -202,14 +202,14 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Text_starting_with_mz_is_not_an_executable()
+    public void Scan_TextStartingWithMz_NotExecutable()
     {
         // "MZ" is ASCII, so it only counts as a PE header when the content is binary.
         Assert.Null(LocalSourceBinaryScanner.Scan("MZ initials in a comment\n", "notes.txt"));
     }
 
     [Fact]
-    public void Archive_magics_are_medium_and_non_blocking()
+    public void Scan_KnownArchiveMagics_Medium()
     {
         // Archives cannot execute on their own and are versioned in the repository, so they
         // are retained for review without blocking - unlike a recognized executable format.
@@ -231,7 +231,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Tar_magic_at_header_offset_is_medium()
+    public void Scan_TarMagicAtHeaderOffset_Medium()
     {
         // POSIX tar carries "ustar" at byte offset 257, after the first header block.
         var header = new byte[512];
@@ -249,7 +249,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Archive_magic_wins_over_a_suspicious_extension()
+    public void Scan_GzipMagicNamedBin_ArchiveWinsOverExtension()
     {
         var gzip = Bytes(0x1F, 0x8B, 0x08, 0x00);
 
@@ -269,7 +269,7 @@ public class LocalSourceBinaryScannerTests
     // case-insensitive extension
     [InlineData("cert.CRT")]
     [InlineData("chain.pem")]
-    public void Certificate_and_signature_extensions_are_medium(string path)
+    public void Scan_CertificateAndSignatureExtensions_Medium(string path)
     {
         var finding = LocalSourceBinaryScanner.Scan(Bytes(0x89, 0x02, 0x1D, 0x04) + "data", path);
 
@@ -278,7 +278,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Elf_content_with_signature_extension_stays_critical()
+    public void Scan_ElfContentWithSignatureExtension_StaysCritical()
     {
         var elf = Bytes([0x7F, .. Encoding.UTF8.GetBytes("ELF payload")]);
 
@@ -288,7 +288,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Content_with_only_replacement_characters_is_medium()
+    public void Scan_OnlyReplacementCharacters_Medium()
     {
         // Legacy Latin-1/mojibake: undecodable bytes, but no NUL or control characters.
         var legacy = Bytes(0x50, 0x61, 0x82, 0x6B, 0x0A);
@@ -300,7 +300,7 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Content_with_control_characters_is_medium_binary_data()
+    public void Scan_ControlCharacters_MediumBinaryData()
     {
         var finding = LocalSourceBinaryScanner.Scan("abc\0def", "data.bin");
 
@@ -309,19 +309,19 @@ public class LocalSourceBinaryScannerTests
     }
 
     [Fact]
-    public void Plain_text_has_no_finding()
+    public void Scan_PlainText_NoFinding()
     {
         Assert.Null(LocalSourceBinaryScanner.Scan("pkgname=foo\npkgver=1.0\n", "PKGBUILD"));
     }
 
     [Fact]
-    public void Whitespace_control_characters_do_not_trigger_binary_detection()
+    public void Scan_WhitespaceControlCharacters_NotBinary()
     {
         Assert.Null(LocalSourceBinaryScanner.Scan("line1\nline2\r\n\tindented\v\f", "script.sh"));
     }
 
     [Fact]
-    public void Finding_carries_path_as_snippet_and_file()
+    public void Scan_AnyFinding_UsesPathAsSnippetAndFile()
     {
         var finding = LocalSourceBinaryScanner.Scan("abc\0def", "subdir/data.bin");
 

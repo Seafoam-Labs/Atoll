@@ -13,7 +13,7 @@ public class AurMirrorFetchTests
     }
 
     [Fact]
-    public async Task FetchAsync_empty_returns_empty_result()
+    public async Task FetchAsync_NoRefs_ReturnsEmptyResult()
     {
         var mirror = CreateMirror();
 
@@ -28,7 +28,7 @@ public class AurMirrorFetchTests
     }
 
     [Fact]
-    public async Task FetchAsync_all_refs_present_returns_all_succeeded()
+    public async Task FetchAsync_AllRefsPresent_ReturnsAllSucceeded()
     {
         var mirror = CreateMirror();
 
@@ -43,7 +43,7 @@ public class AurMirrorFetchTests
     }
 
     [Fact]
-    public async Task FetchAsync_isolates_single_missing_ref_via_bisection()
+    public async Task FetchAsync_SingleMissingRef_IsolatesViaBisection()
     {
         var mirror = CreateMirror("charlie");
 
@@ -59,7 +59,7 @@ public class AurMirrorFetchTests
     }
 
     [Fact]
-    public async Task FetchAsync_isolates_multiple_missing_refs()
+    public async Task FetchAsync_MultipleMissingRefs_IsolatesEach()
     {
         var mirror = CreateMirror("beta", "delta");
 
@@ -75,7 +75,7 @@ public class AurMirrorFetchTests
     }
 
     [Fact]
-    public async Task FetchAsync_single_bad_ref_reports_it_as_failed_without_infinite_loop()
+    public async Task FetchAsync_SingleBadRef_ReportsFailedWithoutInfiniteLoop()
     {
         var mirror = CreateMirror("only-bad");
 
@@ -89,7 +89,7 @@ public class AurMirrorFetchTests
     }
 
     [Fact]
-    public async Task FetchAsync_preserves_succeeded_refs_when_all_others_fail()
+    public async Task FetchAsync_AllOtherRefsFail_PreservesSucceededRefs()
     {
         var mirror = CreateMirror("bad1", "bad2", "bad3");
 

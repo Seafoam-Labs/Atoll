@@ -6,7 +6,7 @@ namespace Atoll.Api.Tests.Catalog;
 public class AurPackageMetadataTests
 {
     [Fact]
-    public void StructurallyIdenticalInstances_AreEqual_AndShareAHashCode()
+    public void Equals_StructurallyIdenticalInstances_AreEqualAndShareAHashCode()
     {
         var left = Sample();
         var right = Sample();
@@ -21,13 +21,13 @@ public class AurPackageMetadataTests
     }
 
     [Fact]
-    public void DifferingCollectionContent_BreaksEquality()
+    public void Equals_DifferingCollectionContent_BreaksEquality()
     {
         Assert.NotEqual(Sample(), Sample() with { Depends = ["other"] });
     }
 
     [Fact]
-    public void DifferingCollectionOrder_BreaksEquality()
+    public void Equals_DifferingCollectionOrder_BreaksEquality()
     {
         Assert.NotEqual(Sample(), Sample() with { Keywords = ["b", "a"] });
     }

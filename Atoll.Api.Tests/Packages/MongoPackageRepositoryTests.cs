@@ -37,7 +37,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task InsertSeedAsync_same_id_twice_throws_PackageConflictException()
+    public async Task InsertSeedAsync_SameIdTwice_ThrowsPackageConflictException()
     {
         var (firstDoc, firstRevision) = NewSeed("pkg/shelly", "shelly");
         // Different content (and therefore a different revision id) so the second seed gets
@@ -51,7 +51,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task InsertSeedAsync_stamps_current_schema_version_on_package_and_revision_documents()
+    public async Task InsertSeedAsync_NewSeed_StampsCurrentSchemaVersionOnBothDocuments()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
@@ -69,7 +69,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AppendRevisionAsync_caps_revisions_to_maxRevisions()
+    public async Task AppendRevisionAsync_BeyondMaxRevisions_CapsEmbeddedHistory()
     {
         const int maxRevisions = 5;
 
@@ -92,7 +92,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AppendRevisionAsync_unknown_package_throws_KeyNotFoundException()
+    public async Task AppendRevisionAsync_UnknownPackage_ThrowsKeyNotFoundException()
     {
         await Assert.ThrowsAsync<KeyNotFoundException>(async () => await AppendAsync(
             "missing",
@@ -100,7 +100,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetRevisionAsync_returns_expected_revision()
+    public async Task GetRevisionAsync_AppendedRevision_ReturnsStoredContent()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
@@ -121,7 +121,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetHistoryAsync_returns_newest_first_after_multiple_appends()
+    public async Task GetHistoryAsync_AfterMultipleAppends_ReturnsNewestFirst()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
@@ -135,7 +135,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DeleteAsync_removes_package()
+    public async Task DeleteAsync_ExistingPackage_RemovesDocument()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
@@ -147,7 +147,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ListIndexPageAsync_returns_ordered_windows_with_projection_fields()
+    public async Task ListIndexPageAsync_ConsecutivePages_ReturnOrderedProjections()
     {
         foreach (var name in new[] { "c-carrot", "a-apple", "e-egg", "b-banana", "d-date" })
         {
@@ -178,7 +178,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ListIndexPageAsync_matches_in_memory_fake_paging()
+    public async Task ListIndexPageAsync_OffsetPage_MatchesInMemoryFake()
     {
         var fake = new InMemoryPackageRepository();
 
@@ -198,7 +198,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ListIndexEntriesAsync_is_order_independent_and_drops_unknown_names()
+    public async Task ListIndexEntriesAsync_UnorderedNames_DropsUnknownAndMatchesFake()
     {
         var fake = new InMemoryPackageRepository();
 
@@ -237,7 +237,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ListAsync_query_shape_is_covered_by_the_name_index_without_fetching_documents()
+    public async Task ListAsync_QueryShape_IsIndexCoveredWithoutDocumentFetches()
     {
         for (var i = 0; i < 25; i++)
         {
@@ -272,7 +272,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ListAsync_returns_names_in_packageName_order()
+    public async Task ListAsync_SeededNames_ReturnsPackageNameOrder()
     {
         foreach (var name in new[] { "c-carrot", "a-apple", "b-banana" })
         {
@@ -286,7 +286,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AppendRevisionAsync_evicts_revision_documents_beyond_maxRevisions()
+    public async Task AppendRevisionAsync_BeyondMaxRevisions_EvictsRevisionDocuments()
     {
         const int maxRevisions = 5;
 
@@ -325,7 +325,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AppendRevisionAsync_never_deletes_reappearing_content_hash()
+    public async Task AppendRevisionAsync_ReappearingContentHash_IsNotEvicted()
     {
         const int maxRevisions = 2;
 
@@ -353,7 +353,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TrimExcessRevisionsAsync_trims_to_max_and_evicts_revision_documents()
+    public async Task TrimExcessRevisionsAsync_OverCap_TrimsAndEvictsRevisionDocuments()
     {
         const int maxRevisions = 5;
 
@@ -395,7 +395,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TrimExcessRevisionsAsync_no_op_when_nothing_exceeds_the_cap()
+    public async Task TrimExcessRevisionsAsync_UnderCap_IsNoOp()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
@@ -416,7 +416,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DeleteAsync_cascades_to_revision_documents()
+    public async Task DeleteAsync_ExistingPackage_CascadesToRevisionDocuments()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");
         await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
@@ -439,7 +439,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task InsertSeedAsync_conflict_leaves_no_orphan_revision_document()
+    public async Task InsertSeedAsync_ConflictingSeed_LeavesNoOrphanRevisionDocument()
     {
         var (firstDoc, firstRevision) = NewSeed("pkg/shelly", "shelly");
         // Same package name but different content: the second revision document inserts before

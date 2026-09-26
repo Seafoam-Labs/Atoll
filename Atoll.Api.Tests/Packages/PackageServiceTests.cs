@@ -66,7 +66,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task SeedFilesAsync_then_GetAsync_returns_files()
+    public async Task GetAsync_AfterSeed_ReturnsFiles()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -83,7 +83,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task SeedFilesAsync_then_GetHistoryAsync_returns_one_revision()
+    public async Task GetHistoryAsync_AfterSeed_ReturnsOneRevision()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -101,7 +101,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task SeedFilesAsync_then_GetAsync_by_revision_sha_returns_files()
+    public async Task GetAsync_SeededRevisionSha_ReturnsFiles()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -120,7 +120,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task SeedFilesAsync_existing_package_returns_conflict()
+    public async Task SeedFilesAsync_ExistingPackage_ThrowsPackageConflict()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -133,7 +133,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task SeedFilesAsync_oversized_file_throws()
+    public async Task SeedFilesAsync_OversizedFile_Throws()
     {
         var repo = new InMemoryPackageRepository();
         var options = Options.Create(new AtollOptions
@@ -154,7 +154,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task SeedFilesAsync_document_larger_than_mongo_limit_throws_typed_exception_before_insert()
+    public async Task SeedFilesAsync_DocumentOverMongoLimit_ThrowsTypedExceptionBeforeInsert()
     {
         var repo = new InMemoryPackageRepository();
         var options = Options.Create(new AtollOptions
@@ -180,7 +180,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task AppendRevisionFromUpstreamAsync_oversized_snapshot_throws_before_write()
+    public async Task AppendRevisionFromUpstreamAsync_OversizedSnapshot_ThrowsBeforeWrite()
     {
         var repo = new InMemoryPackageRepository();
         var options = Options.Create(new AtollOptions
@@ -211,7 +211,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_then_GetAsync_throws_not_found()
+    public async Task GetAsync_AfterDelete_ThrowsNotFound()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -223,7 +223,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_unknown_package_throws_not_found()
+    public async Task GetAsync_UnknownPackage_ThrowsNotFound()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -232,7 +232,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_unknown_revision_throws_not_found()
+    public async Task GetAsync_UnknownRevision_ThrowsNotFound()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -243,7 +243,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task ListAsync_returns_seeded_package_names()
+    public async Task ListAsync_SeededPackages_ReturnsNames()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -257,7 +257,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_sorts_by_votes_ascending_across_pages()
+    public async Task GetIndexPageAsync_VotesAscending_SortsAcrossPages()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
@@ -286,7 +286,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_sorts_by_votes_descending_when_requested()
+    public async Task GetIndexPageAsync_VotesDescending_SortsWithNameTieBreak()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
@@ -314,7 +314,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_sorts_by_popularity_descending_when_requested()
+    public async Task GetIndexPageAsync_PopularityDescending_SortsAcrossPages()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
@@ -341,7 +341,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_sorts_versions_by_ordinal_string_comparison_with_nulls_last()
+    public async Task GetIndexPageAsync_VersionDescending_ComparesOrdinallyWithNullsLast()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
@@ -370,7 +370,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_sorts_by_name_descending_when_requested()
+    public async Task GetIndexPageAsync_NameDescending_SortsAcrossPages()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -389,7 +389,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_sorts_versions_ascending_with_catalog_absent_first()
+    public async Task GetIndexPageAsync_VersionAscending_SortsCatalogAbsentFirst()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
@@ -416,7 +416,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_joins_catalog_detail_fields_and_leaves_absent_packages_null()
+    public async Task GetIndexPageAsync_CatalogRows_JoinsDetailFieldsAndLeavesAbsentNull()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
@@ -467,7 +467,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_cached_rankings_match_direct_sorts_of_the_same_corpus()
+    public async Task GetIndexPageAsync_CachedRankings_MatchDirectSortsOfSameCorpus()
     {
         // One cached corpus, three sort keys covering both key components: each page must equal a
         // plain LINQ sort of the same names and keys, so a mis-keyed or wrongly unwrapped entry
@@ -509,7 +509,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_serves_the_previous_ranking_after_an_index_swap_until_a_write()
+    public async Task GetIndexPageAsync_IndexSwapWithoutWrite_ServesPreviousRanking()
     {
         // An index swap alone does not drop the cached ranking; the worker's swap warm is what
         // rebuilds it (see the prewarm Theory below). A seeded-set write removes the catalog tag,
@@ -575,7 +575,7 @@ public class PackageServiceTests
     [InlineData(PackageIndexSortBy.Popularity, PackageIndexSortOrder.Desc)]
     [InlineData(PackageIndexSortBy.Version, PackageIndexSortOrder.Asc)]
     [InlineData(PackageIndexSortBy.Version, PackageIndexSortOrder.Desc)]
-    public async Task PrewarmAsync_rebuilds_every_keyed_ranking_after_an_index_swap(
+    public async Task PrewarmAsync_AfterIndexSwap_RebuildsEveryKeyedRanking(
         PackageIndexSortBy sortBy, PackageIndexSortOrder order)
     {
         // Each request before the swap builds the pair's cached array from the first generation; the
@@ -610,7 +610,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task A_seeded_write_evicts_the_ranked_views_stored_by_the_swap_warm()
+    public async Task SeedFilesAsync_AfterSwapWarm_EvictsRankedViews()
     {
         // The warm stores the sorted arrays with SetAsync; the catalog tag must cover those stores
         // exactly as it covers factory-built ones, or a seed would leave them stale for a TTL.
@@ -633,7 +633,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task PrewarmAsync_rearms_the_name_list_so_repeated_warms_outlive_the_ttl()
+    public async Task PrewarmAsync_WarmsWithinTtl_RearmsNameList()
     {
         // Every warm lands well inside the 2 s TTL, so filling alone would still let the entry expire
         // on its own clock and hand the repository scan to the next request. The re-store carries it.
@@ -652,7 +652,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_tracks_seed_and_delete_mutations()
+    public async Task GetIndexPageAsync_SeedThenDelete_TracksMutations()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -677,7 +677,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_serves_a_ranking_built_across_a_seed_until_the_next_write()
+    public async Task GetIndexPageAsync_RankingBuiltAcrossSeed_ServesStaleUntilNextWrite()
     {
         // A tag removal landing while a factory is in flight does not evict that factory's later
         // store, so a ranking built across a seed serves stale names until the next write or TTL.
@@ -716,7 +716,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task GetIndexPageAsync_pages_a_tied_sort_deterministically()
+    public async Task GetIndexPageAsync_TiedSort_PagesDeterministically()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo, indexStore: await CreateIndexStoreAsync(
@@ -748,7 +748,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task SeedFilesAsync_same_content_produces_same_revision_sha()
+    public async Task SeedFilesAsync_SameContentAcrossInstances_ProducesSameRevisionSha()
     {
         var repo = new InMemoryPackageRepository();
         var service = CreateService(repo);
@@ -765,7 +765,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task SeedFilesAsync_estimate_above_limit_but_exact_bson_under_limit_is_accepted()
+    public async Task SeedFilesAsync_EstimateOverLimitButExactBsonUnder_Accepts()
     {
         // Two files totalling 16,776,000 content bytes: the conservative estimate
         // (content + 160/file + 1024) exceeds the 16 MiB BSON limit, but the exact
@@ -799,7 +799,7 @@ public class PackageServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_failure_after_derived_cleanup_leaves_package_deletable_again()
+    public async Task DeleteAsync_FailureAfterDerivedCleanup_LeavesPackageDeletable()
     {
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();

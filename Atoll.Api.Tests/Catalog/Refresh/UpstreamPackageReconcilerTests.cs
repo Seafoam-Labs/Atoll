@@ -21,7 +21,7 @@ public class UpstreamPackageReconcilerTests
         };
 
     [Fact]
-    public async Task ReconcileAsync_deletes_local_packages_absent_from_upstream_and_all_derived_state()
+    public async Task ReconcileAsync_NamesAbsentUpstream_DeletesPackageAndDerivedState()
     {
         var repository = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
@@ -69,7 +69,7 @@ public class UpstreamPackageReconcilerTests
     }
 
     [Fact]
-    public async Task ReconcileAsync_deletes_nothing_when_pruning_is_disabled()
+    public async Task ReconcileAsync_PruningDisabled_DeletesNothing()
     {
         var repository = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
@@ -100,7 +100,7 @@ public class UpstreamPackageReconcilerTests
     }
 
     [Fact]
-    public async Task ReconcileAsync_defers_pruning_once_when_snapshot_shrinks_abruptly()
+    public async Task ReconcileAsync_AbruptSnapshotShrink_DefersPruningOnce()
     {
         var repository = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();

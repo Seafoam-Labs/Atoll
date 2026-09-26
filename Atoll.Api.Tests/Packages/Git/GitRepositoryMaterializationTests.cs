@@ -65,7 +65,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EnsureRepositoryAsync_creates_bare_repo_with_main_branch()
+    public async Task EnsureRepositoryAsync_CreatesBareRepoWithMainBranch()
     {
         var (service, cache, security, reposRoot) = CreateService();
         try
@@ -90,7 +90,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EnsureRepositoryAsync_is_idempotent_when_head_unchanged()
+    public async Task EnsureRepositoryAsync_UnchangedHead_DoesNotRewriteMarker()
     {
         var (service, cache, security, reposRoot) = CreateService();
         try
@@ -115,7 +115,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EnsureRepositoryAsync_produces_cloneable_repo_with_expected_files()
+    public async Task EnsureRepositoryAsync_SeededPackage_ProducesCloneableRepoWithExpectedFiles()
     {
         var (service, cache, security, reposRoot) = CreateService();
         var cloneDir = Path.Combine(Path.GetTempPath(),
@@ -149,7 +149,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EnsureRepositoryAsync_returns_silently_for_unknown_package()
+    public async Task EnsureRepositoryAsync_UnknownPackage_ReturnsSilently()
     {
         var (_, cache, _, reposRoot) = CreateService();
         try
@@ -163,7 +163,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EnsureRepositoryAsync_packs_the_object_store()
+    public async Task EnsureRepositoryAsync_SeededPackage_PacksObjectStore()
     {
         var (service, cache, security, reposRoot) = CreateService();
         try
@@ -189,7 +189,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Re_materialization_keeps_a_single_packfile()
+    public async Task EnsureRepositoryAsync_AfterRevisionAppend_KeepsSinglePackfile()
     {
         var (service, cache, security, reposRoot) = CreateService();
         try
@@ -230,7 +230,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EnsureRepositoryAsync_returns_silently_when_no_path_configured()
+    public async Task EnsureRepositoryAsync_UnsetRepositoriesPath_ReturnsSilently()
     {
         var repo = new InMemoryPackageRepository();
         var options = Options.Create(new AtollOptions
@@ -249,7 +249,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Flagged_revision_is_excluded_from_git_history_until_rescanned()
+    public async Task EnsureRepositoryAsync_FlaggedHeadRevision_ExcludesUntilRescanned()
     {
         var (service, cache, security, reposRoot) = CreateService();
         var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
@@ -299,7 +299,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Flagged_ancestor_is_excluded_when_head_is_verified()
+    public async Task EnsureRepositoryAsync_FlaggedAncestor_ExcludesFromHistory()
     {
         var (service, cache, security, reposRoot) = CreateService();
         var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
@@ -335,7 +335,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Concurrent_materialize_and_delete_never_resurrects_the_repository()
+    public async Task EnsureRepositoryAsync_RacingDelete_DoesNotResurrectRepository()
     {
         var (service, cache, security, reposRoot) = CreateService();
         try
@@ -411,7 +411,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Missing_revision_content_materializes_remaining_history_without_marker()
+    public async Task EnsureRepositoryAsync_MissingRevisionContent_MaterializesRemainingHistoryWithoutMarker()
     {
         var repo = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();

@@ -103,7 +103,7 @@ public class PackageSearchRelevancePerfTests
     }
 
     [Fact]
-    public void RelevanceRankCostAtRealisticIndexScale()
+    public void Rank_RealisticCorpusShape_ReproducesMeasuredCandidateCounts()
     {
         Assert.Equal(PackageCount, _index.ByNames.Count);
         _output.WriteLine($"index={_index.ByNames.Count:N0} packages, iterations={Iterations}, .NET {Environment.Version}");
@@ -412,7 +412,7 @@ public class PackageSearchRelevancePerfTests
     /// the first N of the unlimited ranking exactly.
     /// </summary>
     [Fact]
-    public void BoundedSelectionMatchesTheUnlimitedRanking()
+    public void Rank_ResponseCap_MatchesTheUnlimitedPrefix()
     {
         foreach (var query in new[] { "vim", "rust", "tie", "l", "vim rust neovim browser qt git yay tie" })
         {

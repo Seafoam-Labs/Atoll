@@ -6,20 +6,20 @@ namespace Atoll.Api.Tests.Packages.Git;
 public class GitSmartHttpTests
 {
     [Fact]
-    public void IsSupportedService_accepts_only_git_upload_pack()
+    public void IsSupportedService_UploadPackService_IsAccepted()
     {
         Assert.True(GitSmartHttp.IsSupportedService(GitSmartHttp.UploadPackService));
     }
 
     [Fact]
-    public void IsSupportedService_rejects_the_push_service()
+    public void IsSupportedService_ReceivePackService_IsRejected()
     {
         Assert.False(GitSmartHttp.IsSupportedService("git-receive-pack"),
             "serving receive-pack would expose an unauthenticated push target");
     }
 
     [Fact]
-    public void IsSupportedService_rejects_missing_and_mismatched_casing()
+    public void IsSupportedService_NullEmptyOrWrongCasing_IsRejected()
     {
         Assert.Multiple(() =>
         {

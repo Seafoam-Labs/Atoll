@@ -43,7 +43,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     [Fact]
-    public async Task ReturnsNullForUnknownPackageAndEmptyViewForUnseeded()
+    public async Task GetDiffAsync_UnknownPackageAndUnseeded_ReturnsNullAndEmptyView()
     {
         Assert.Null(await _service.GetDiffAsync("no-such-package", null, null, TestContext.Current.CancellationToken));
 
@@ -56,7 +56,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DefaultsToComparingAgainstTheParentRevision()
+    public async Task GetDiffAsync_NoRevisionArguments_DefaultsToParentOfHead()
     {
         await SeedAsync("rev-1", Files("pkgname=one\n"));
         await AppendAsync("rev-2", Files("pkgname=two\n"));
@@ -72,7 +72,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task OldestRevisionHasNoParentSoEveryFileReadsAsAdded()
+    public async Task GetDiffAsync_OldestRevision_TreatsEveryFileAsAdded()
     {
         await SeedAsync("rev-1", Files("pkgname=one\n"));
         await AppendAsync("rev-2", Files("pkgname=two\n"));
@@ -89,7 +89,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SameRevisionShortCircuitsWithoutCallingTheDiffer()
+    public async Task GetDiffAsync_SameFromAndTo_ShortCircuitsWithoutCallingDiffer()
     {
         await SeedAsync("rev-1", Files("pkgname=one\n"));
 
@@ -103,7 +103,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ClassifiesAddedRemovedAndModifiedAndSkipsUnchanged()
+    public async Task GetDiffAsync_MixedChanges_ClassifiesKindsAndSkipsUnchanged()
     {
         await SeedAsync("rev-1", new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
@@ -136,7 +136,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task WhitespaceOnlyChangeIsStillAChange()
+    public async Task GetDiffAsync_WhitespaceOnlyChange_IsStillModified()
     {
         await SeedAsync("rev-1", Files("pkgname=test\n"));
         await AppendAsync("rev-2", Files("pkgname=test \n"));
@@ -149,7 +149,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task BinarySideIsClassifiedAndNeverHandedToTheDiffer()
+    public async Task GetDiffAsync_BinarySide_ClassifiedWithoutCallingDiffer()
     {
         // A NUL in the leading probe is what LooksBinary keys on; written as an escape so it stays visible.
         const string binaryContent = "\0PNG fake payload";
@@ -175,7 +175,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task OversizedSideIsTooLargeAndSkipsTheDiffer()
+    public async Task GetDiffAsync_OversizedSide_ClassifiedTooLargeWithoutCallingDiffer()
     {
         var huge = new string('x', PackageDetailsService.DiffFileRenderChars + 1);
         await SeedAsync("rev-1", new Dictionary<string, PackageFile>(StringComparer.Ordinal)
@@ -199,7 +199,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TotalCharacterCapSetsTruncatedAndStopsFeedingTheDiffer()
+    public async Task GetDiffAsync_TotalCharacterCap_SetsTruncatedAndStopsFeedingDiffer()
     {
         // Each side stays under the per-file cap, so only the aggregate cap can bite.
         var chunk = new string('y', 100_000);
@@ -229,7 +229,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChangedFileCapTruncatesTheRenderedList()
+    public async Task GetDiffAsync_ChangedFileCap_TruncatesRenderedList()
     {
         var old = new Dictionary<string, PackageFile>(StringComparer.Ordinal);
         var changed = new Dictionary<string, PackageFile>(StringComparer.Ordinal);
@@ -251,7 +251,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UnknownFromAndToFallBackWithoutThrowing()
+    public async Task GetDiffAsync_UnknownFromAndTo_FallsBackWithoutThrowing()
     {
         await SeedAsync("rev-1", Files("pkgname=one\n"));
         await AppendAsync("rev-2", Files("pkgname=two\n"));
@@ -273,7 +273,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DifferFailureDegradesInsteadOfThrowing()
+    public async Task GetDiffAsync_DifferFailure_DegradesInsteadOfThrowing()
     {
         await SeedAsync("rev-1", Files("pkgname=one\n"));
         await AppendAsync("rev-2", Files("pkgname=two\n"));
@@ -289,7 +289,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task MissingContentDocumentIsTreatedAsAnEmptySide()
+    public async Task GetDiffAsync_MissingContentDocument_TreatsSideAsEmpty()
     {
         await SeedAsync("rev-1", Files("pkgname=one\n"));
         await _repository.AppendRevisionAsync(
@@ -317,7 +317,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task HostilePathIsClassifiedWithoutTouchingTheFilesystem()
+    public async Task GetDiffAsync_HostilePaths_ClassifiedWithoutTouchingFilesystem()
     {
         const string traversal = "../../etc/passwd";
         const string spaced = "dir with spaces/file name.txt";
@@ -350,7 +350,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AccessCheckGatesTheBannerButNotTheDiff()
+    public async Task GetDiffAsync_FlaggedRevision_GatesBannerButNotDiff()
     {
         await SeedAsync("rev-1", Files("pkgname=one\n"), SecurityStatus.Flagged);
         await AppendAsync("rev-2", Files("pkgname=two\n"));

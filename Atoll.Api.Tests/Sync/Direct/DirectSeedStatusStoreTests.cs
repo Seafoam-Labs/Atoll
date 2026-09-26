@@ -6,7 +6,7 @@ namespace Atoll.Api.Tests.Sync.Direct;
 public class DirectSeedStatusStoreTests
 {
     [Fact]
-    public void DisabledSnapshotKeepsEnabledFalseAndZeroCounters()
+    public void GetSnapshot_DisabledStore_KeepsEnabledFalseAndZeroCounters()
     {
         var store = new DirectSeedStatusStore(enabled: false);
         var snapshot = store.GetSnapshot();
@@ -26,7 +26,7 @@ public class DirectSeedStatusStoreTests
     }
 
     [Fact]
-    public void CycleRecordingUpdatesCountersAndTimestamps()
+    public void BeginCycle_RecordAndEndCycle_UpdatesCountersAndTimestamps()
     {
         var store = new DirectSeedStatusStore(enabled: true);
 
@@ -58,7 +58,7 @@ public class DirectSeedStatusStoreTests
     }
 
     [Fact]
-    public async Task ConcurrentCounterUpdatesAreNotLost()
+    public async Task RecordSeeded_ConcurrentUpdates_AreNotLost()
     {
         var store = new DirectSeedStatusStore(enabled: true);
         store.BeginCycle(1000);

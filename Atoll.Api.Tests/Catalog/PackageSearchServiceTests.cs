@@ -9,7 +9,7 @@ namespace Atoll.Api.Tests.Catalog;
 public class PackageSearchServiceTests
 {
     [Fact]
-    public void QueryByProvidesAndWordsMatchesExpectedPackages()
+    public void FindByProvidesAndWords_SampleIndex_MatchesExpectedPackages()
     {
         var query = CreateService();
 
@@ -24,7 +24,7 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
-    public void QueryByNameIgnoresUnknownEntries()
+    public void FindByNames_UnknownName_IsIgnored()
     {
         var query = CreateService();
 
@@ -34,7 +34,7 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
-    public void QueryByNameIsExactOrdinalAndRejectsNearMisses()
+    public void FindByNames_ExactOrdinal_RejectsNearMisses()
     {
         var query = CreateService();
 
@@ -48,7 +48,7 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
-    public void QueryByWordsRequiresEveryWordAndLooksTokensUpOrdinal()
+    public void FindByWords_MissingWordOrWrongCase_ReturnsEmpty()
     {
         var query = CreateService();
 
@@ -62,7 +62,7 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
-    public void QueryByWordsCapsResultsAtFiftyOrderedByVotes()
+    public void FindByWords_DefaultCap_CapsAtFiftyOrderedByVotes()
     {
         var query = CreateService(VoteRankedIndex(60));
 
@@ -74,7 +74,7 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
-    public void QueryByWordsHonorsTheConfiguredCap()
+    public void FindByWords_ConfiguredCap_CapsAtTheConfiguredLimit()
     {
         var query = CreateService(VoteRankedIndex(60), maxRankedResults: 20);
 
@@ -86,7 +86,7 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
-    public void QueryByNamesAndProvidesStayUncappedForPageHydration()
+    public void FindByNamesAndProvides_RankedCapConfigured_StayUncapped()
     {
         // /v1/packages rows hydrate their remaining fields through by=name batches of up to 100
         // names, so the ranked cap must not be generalized to the other two modes.
@@ -98,7 +98,7 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
-    public void QueryByProvidesMatchesExactKeysAndDeduplicates()
+    public void FindByProvides_ExactKeysAndOverlap_Deduplicates()
     {
         var query = CreateService(PackageIndexBuilder.BuildFromPackages(
         [
@@ -117,7 +117,7 @@ public class PackageSearchServiceTests
     }
 
     [Fact]
-    public void QueryByProvidesFallsBackToSelfNameOnlyWithoutExplicitProvides()
+    public void FindByProvides_NoExplicitProvides_FallsBackToSelfName()
     {
         var query = CreateService(PackageIndexBuilder.BuildFromPackages(
         [

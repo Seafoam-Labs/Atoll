@@ -19,7 +19,7 @@ public class PackageBuildFileClassifierTests
     [InlineData("PKGBUILDS", false)]
     [InlineData("SRCINFO", false)]
     [InlineData("", false)]
-    public void IsPkgbuild_recognises_only_files_named_pkgbuild(string path, bool expected)
+    public void IsPkgbuild_OnlyExactPkgbuildBasenameMatches(string path, bool expected)
     {
         Assert.Equal(expected, PackageBuildFileClassifier.IsPkgbuild(path));
     }
@@ -33,7 +33,7 @@ public class PackageBuildFileClassifierTests
     // extension is .gz, not a script
     [InlineData("source.tar.gz", false)]
     [InlineData("archive.tar.bz2", false)]
-    public void IsScannable_filters_by_filename_and_extension(string path, bool expected)
+    public void IsScannable_FilenameAndExtension_FiltersNonScripts(string path, bool expected)
     {
         Assert.Equal(expected, PackageBuildFileClassifier.IsScannable(path));
     }
@@ -49,7 +49,7 @@ public class PackageBuildFileClassifierTests
     [InlineData(".service")]
     [InlineData(".csh")]
     [InlineData(".zsh")]
-    public void IsScannable_accepts_all_known_script_extensions(string extension)
+    public void IsScannable_KnownScriptExtensions_AllAccepted(string extension)
     {
         Assert.True(PackageBuildFileClassifier.IsScannable($"script{extension}"));
     }
@@ -59,13 +59,13 @@ public class PackageBuildFileClassifierTests
     [InlineData("script.SH")]
     // uppercase + nested directory
     [InlineData("scripts/build.PY")]
-    public void IsScannable_is_case_insensitive(string path)
+    public void IsScannable_UppercaseExtensions_Accepted(string path)
     {
         Assert.True(PackageBuildFileClassifier.IsScannable(path));
     }
 
     [Fact]
-    public void IsScannable_returns_false_for_files_without_extension()
+    public void IsScannable_FileWithoutExtension_ReturnsFalse()
     {
         Assert.False(PackageBuildFileClassifier.IsScannable("plainfile"));
     }

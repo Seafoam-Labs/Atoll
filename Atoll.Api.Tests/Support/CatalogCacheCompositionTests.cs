@@ -15,7 +15,7 @@ namespace Atoll.Api.Tests.Support;
 public class CatalogCacheCompositionTests
 {
     [Fact]
-    public async Task Seeding_through_the_host_package_service_refreshes_the_catalog_snapshot()
+    public async Task SeedFilesAsync_ThroughHost_RefreshesCatalogSnapshot()
     {
         await using var factory = new SecurityTestFactory();
         var catalog = factory.Services.GetRequiredService<PackageCatalogService>();
@@ -35,7 +35,7 @@ public class CatalogCacheCompositionTests
     }
 
     [Fact]
-    public async Task A_rest_rescan_through_the_host_leaves_the_catalog_snapshot_to_its_ttl()
+    public async Task SecurityRescanAsync_VerifiedHead_LeavesCatalogSnapshotToItsTtl()
     {
         await using var factory = new SecurityTestFactory();
         var catalog = factory.Services.GetRequiredService<PackageCatalogService>();
@@ -63,7 +63,7 @@ public class CatalogCacheCompositionTests
     }
 
     [Fact]
-    public async Task Sorted_page_through_the_host_package_service_lists_the_names_once()
+    public async Task GetIndexPageAsync_RepeatedSortedPages_ReadNameListOnce()
     {
         await using var factory = new SecurityTestFactory();
         var packages = factory.Services.GetRequiredService<IPackageService>();
@@ -77,7 +77,7 @@ public class CatalogCacheCompositionTests
     }
 
     [Fact]
-    public async Task Prewarming_the_ranker_covers_the_first_sorted_page()
+    public async Task PrewarmAsync_FirstSortedPage_ReadsNameListOnce()
     {
         await using var factory = new SecurityTestFactory();
         var packages = factory.Services.GetRequiredService<IPackageService>();
@@ -91,7 +91,7 @@ public class CatalogCacheCompositionTests
     }
 
     [Fact]
-    public void The_host_raises_the_payload_cap_above_the_stock_default()
+    public void Host_HybridCacheOptions_RaisePayloadCapAboveStockDefault()
     {
         // The ranker stores full-corpus name arrays (~2.5 MB at 119k names). The stock 1 MB cap does
         // not refuse the store but logs one Error per store, so the host must raise it.

@@ -19,7 +19,7 @@ public class HybridCacheSemanticsTests
     // store. A value generated before a write can therefore serve for one full TTL after a racing
     // write; the next invalidation or expiry heals it.
     [Fact]
-    public async Task RemoveByTagAsync_does_not_evict_the_late_store_of_an_in_flight_factory()
+    public async Task RemoveByTagAsync_InFlightFactoryLateStore_IsNotEvicted()
     {
         var cache = TestHybridCache.New();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -58,7 +58,7 @@ public class HybridCacheSemanticsTests
     // alive; the entry dies on its own clock and the next reader pays the factory. Storing the value
     // back is what moves the expiry, which is what the ranker's warm relies on.
     [Fact]
-    public async Task Expiration_is_absolute_and_only_a_re_store_extends_it()
+    public async Task GetOrCreateAsync_AbsoluteExpiration_OnlyReStoreExtendsIt()
     {
         var cache = TestHybridCache.New();
         var ttl = TimeSpan.FromMilliseconds(2000);
@@ -103,7 +103,7 @@ public class HybridCacheSemanticsTests
     // Measured: an already-cancelled caller token throws before the factory runs, so a cached read
     // needs no ThrowIfCancellationRequested prologue of its own.
     [Fact]
-    public async Task Precancelled_token_throws_without_invoking_the_factory()
+    public async Task GetOrCreateAsync_PrecancelledToken_ThrowsWithoutInvokingFactory()
     {
         var cache = TestHybridCache.New();
         using var cancelled = new CancellationTokenSource();
@@ -125,7 +125,7 @@ public class HybridCacheSemanticsTests
     // Measured: the factory token cancels only when every waiter is gone, so a caller aborting its
     // request cannot kill a shared rebuild; the remaining waiter gets the value and it is cached.
     [Fact]
-    public async Task Factory_token_cancels_only_when_all_waiters_cancel()
+    public async Task GetOrCreateAsync_WaiterAbortsWithAnotherWaiting_KeepsRebuildAlive()
     {
         var cache = TestHybridCache.New();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -64,7 +64,7 @@ public class PackageRevisionCompactionWorkerTests
     }
 
     [Fact]
-    public async Task CompactAsync_trims_history_and_deletes_evicted_revisions()
+    public async Task CompactAsync_OverMaxRevisions_TrimsHistoryAndDeletesEvictedRevisions()
     {
         var repo = new InMemoryPackageRepository();
         await SeedWithHistoryAsync(repo, revisionCount: 7);
@@ -90,7 +90,7 @@ public class PackageRevisionCompactionWorkerTests
     }
 
     [Fact]
-    public async Task CompactAsync_leaves_packages_at_the_cap_untouched()
+    public async Task CompactAsync_AtMaxRevisions_LeavesPackageUntouched()
     {
         var repo = new InMemoryPackageRepository();
         await SeedWithHistoryAsync(repo, revisionCount: 5);
@@ -110,13 +110,16 @@ public class PackageRevisionCompactionWorkerTests
     }
 
     [Fact]
-    public async Task Startup_runs_the_compaction_pass()
+    public async Task StartAsync_Startup_RunsCompactionPass()
     {
         var repo = new InMemoryPackageRepository();
         await SeedWithHistoryAsync(repo, revisionCount: 7);
         var worker = CreateWorker(repo, maxRevisions: 5);
 
         await worker.StartAsync(TestContext.Current.CancellationToken);
+        // .NET 10 runs ExecuteAsync on the thread pool, so StartAsync returns before the pass runs;
+        // awaiting the task keeps StopAsync from cancelling it before it trims.
+        await worker.ExecuteTask!;
         await worker.StopAsync(TestContext.Current.CancellationToken);
 
         var head = await repo.GetHeadAsync("shelly", TestContext.Current.CancellationToken);

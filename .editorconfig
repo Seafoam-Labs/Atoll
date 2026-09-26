@@ -245,7 +245,7 @@ dotnet_diagnostic.xUnit2033.severity = error
 # promotion does not apply here.
 dotnet_diagnostic.IDISP001.severity = none
 dotnet_diagnostic.IDISP004.severity = none
-# Test method names are underscore-delimited by convention.
+# Test names are underscore-delimited by convention (AnchoredMember_Scenario_Outcome).
 dotnet_diagnostic.CA1707.severity = none
 # The test columns of the production-scoped promotions above, whose premises do not hold in
 # tests: an assertion runs once and its expected array is the literal (CA1861); assertion

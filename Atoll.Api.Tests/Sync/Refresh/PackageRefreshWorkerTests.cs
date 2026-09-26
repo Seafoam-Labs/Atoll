@@ -77,7 +77,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_appends_revision_when_upstream_head_changes()
+    public async Task RunCycleAsync_ChangedUpstreamHead_AppendsRevision()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
@@ -117,7 +117,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_marks_new_head_pending_and_demotes_old_head_scan()
+    public async Task RunCycleAsync_NewHead_MarksPendingAndDemotesOldHeadScan()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
@@ -160,7 +160,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_skips_fetch_when_upstream_head_unchanged()
+    public async Task RunCycleAsync_UnchangedUpstreamHead_SkipsFetch()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
@@ -185,7 +185,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_fans_out_one_fetch_to_split_package_members()
+    public async Task RunCycleAsync_SplitPackageMembers_FansOutOneFetchToEveryMember()
     {
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
         var repo = new InMemoryPackageRepository();
@@ -229,7 +229,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_advances_watermark_only_for_succeeded_members_on_partial_failure()
+    public async Task RunCycleAsync_PartialFailure_AdvancesWatermarkOnlyForSucceededMembers()
     {
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
         var repo = new InMemoryPackageRepository();
@@ -275,7 +275,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_no_ops_when_computed_revision_matches_current_head()
+    public async Task RunCycleAsync_SameContentRevision_NoOpsButAdvancesWatermark()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
@@ -313,7 +313,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_skips_pkgbases_missing_from_mirror_and_records_in_status()
+    public async Task RunCycleAsync_PkgBaseMissingFromMirror_SkipsAndRecordsStatus()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("ghost", "ghost"));
         var repo = new InMemoryPackageRepository();
@@ -348,7 +348,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_isolates_failed_refs_after_bisection_and_continues()
+    public async Task RunCycleAsync_FailedRefs_IsolatesAfterBisectionAndContinues()
     {
         var store = IndexWithPackages(Meta("good", "good"), Meta("broken", "broken"));
         var repo = new InMemoryPackageRepository();
@@ -388,7 +388,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_safety_sweep_includes_stale_packages_even_when_head_unchanged()
+    public async Task SelectCandidates_StalePackageWithUnchangedHead_StillSelectsCandidate()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
@@ -422,7 +422,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task SelectCandidates_marks_stale_but_unchanged_head_as_no_fetch()
+    public async Task SelectCandidates_StaleUnchangedHead_MarksNoFetch()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
@@ -449,7 +449,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_caps_candidates_per_run()
+    public async Task RunCycleAsync_MaxPackagesPerRun_CapsCandidateSelection()
     {
         var store = IndexWithPackages(Meta("a", "a"), Meta("b", "b"), Meta("c", "c"));
         var repo = new InMemoryPackageRepository();
@@ -491,7 +491,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_refreshes_many_changed_pkgbases_across_batches()
+    public async Task RunCycleAsync_ManyChangedPkgBases_RefreshesAllAcrossBatches()
     {
         var metas = Enumerable.Range(0, 25)
             .Select(i => Meta($"pkg-{i}", $"base-{i}"))
@@ -532,7 +532,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public void RefreshPlan_ResolvePackageBase_falls_back_to_pkgname_when_index_has_no_entry()
+    public void GroupByPackageBase_IndexHasNoEntry_FallsBackToPkgName()
     {
         // A seeded package that the current dump no longer describes still has to group somewhere;
         // the pkgname is the only remaining key, and it is what upstream names map to by definition.
@@ -545,7 +545,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_records_exclusion_when_revision_snapshot_too_large()
+    public async Task RunCycleAsync_OversizedRevisionSnapshot_RecordsExclusionAndSkipsNextCycle()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
@@ -611,7 +611,7 @@ public class PackageRefreshWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_skips_pkgbases_with_document_too_large_exclusion_without_fetching()
+    public async Task RunCycleAsync_DocumentTooLargeExclusion_SkipsWithoutFetching()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();

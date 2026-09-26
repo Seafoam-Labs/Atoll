@@ -13,76 +13,76 @@ public class ShellSyntaxTests
     [InlineData("echo 'done' # trailing", "echo 'done' ")]
     [InlineData("no comment here", "no comment here")]
     [InlineData("", "")]
-    public void StripComment_removes_unquoted_hash_and_everything_after(string line, string expected)
+    public void StripComment_UnquotedHash_RemovesHashAndTrailingText(string line, string expected)
     {
         Assert.Equal(expected, ShellSyntax.StripComment(line));
     }
 
     [Fact]
-    public void StripComment_does_not_treat_hash_in_single_quotes_as_comment()
+    public void StripComment_HashInsideSingleQuotes_IsPreserved()
     {
         Assert.Equal("url='https://x/#fragment'", ShellSyntax.StripComment("url='https://x/#fragment'"));
     }
 
     [Fact]
-    public void StripComment_treats_hash_after_closing_single_quote_as_comment()
+    public void StripComment_HashAfterClosingSingleQuote_StartsComment()
     {
         Assert.Equal("echo 'ok'", ShellSyntax.StripComment("echo 'ok'# comment"));
     }
 
     [Fact]
-    public void NormalizeForMatching_rejoins_empty_single_quote_obfuscation()
+    public void NormalizeForMatching_EmptySingleQuoteObfuscation_RejoinsTheWord()
     {
         Assert.Equal("curl example", ShellSyntax.NormalizeForMatching("c''u''rl example").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_rejoins_empty_double_quote_obfuscation()
+    public void NormalizeForMatching_EmptyDoubleQuoteObfuscation_RejoinsTheWord()
     {
         Assert.Equal("sudo whoami", ShellSyntax.NormalizeForMatching("s\"\"u\"\"do whoami").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_strips_backslash_escapes_in_front_of_non_whitespace()
+    public void NormalizeForMatching_BackslashBeforeNonWhitespace_DropsTheBackslash()
     {
         // \$ outside quotes is just $ to the shell, so the de-obfuscator drops the backslash.
         Assert.Equal("echo $HOME", ShellSyntax.NormalizeForMatching("echo \\$HOME").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_preserves_backslash_whitespace_escape()
+    public void NormalizeForMatching_BackslashBeforeWhitespace_KeepsTheEscape()
     {
         // \<space> is a literal escaped space in shell - keep it intact so word boundaries survive.
         Assert.Equal("echo\\ cat", ShellSyntax.NormalizeForMatching("echo\\ cat").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_preserves_double_backslash()
+    public void NormalizeForMatching_DoubleBackslash_IsPreserved()
     {
         Assert.Equal("echo \\\\", ShellSyntax.NormalizeForMatching("echo \\\\").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_combines_quote_and_escape_obfuscation()
+    public void NormalizeForMatching_QuoteAndEscapeObfuscation_RejoinsTheWord()
     {
         Assert.Equal("curl example", ShellSyntax.NormalizeForMatching("c''u\\rl example").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_strips_intra_word_single_quotes()
+    public void NormalizeForMatching_IntraWordSingleQuotes_AreStripped()
     {
         // The shell removes quotes between word characters via quote removal: c'u'rl is curl.
         Assert.Equal("curl example", ShellSyntax.NormalizeForMatching("c'u'rl example").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_strips_intra_word_double_quotes()
+    public void NormalizeForMatching_IntraWordDoubleQuotes_AreStripped()
     {
         Assert.Equal("sudo whoami", ShellSyntax.NormalizeForMatching("s\"u\"do whoami").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_keeps_quotes_at_word_edges()
+    public void NormalizeForMatching_QuotesAtWordEdges_AreKept()
     {
         // Edge quotes make the whole word a quoted string (display/argument text), so they
         // must survive normalization: 'npm' is not an invocation of npm.
@@ -91,19 +91,19 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void NormalizeForMatching_keeps_quote_between_word_and_non_word_character()
+    public void NormalizeForMatching_QuoteBetweenWordAndNonWordCharacter_IsKept()
     {
         Assert.Equal("echo done'!'", ShellSyntax.NormalizeForMatching("echo done'!'").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_combines_intra_word_and_adjacent_pair_stripping()
+    public void NormalizeForMatching_IntraWordAndAdjacentPairQuotes_AreStripped()
     {
         Assert.Equal("curl example", ShellSyntax.NormalizeForMatching("cu'r''l example").Text);
     }
 
     [Fact]
-    public void NormalizeForMatching_source_indices_survive_intra_word_quote_stripping()
+    public void NormalizeForMatching_IntraWordQuoteStripping_KeepsSourceIndices()
     {
         var (text, sourceIndices) = ShellSyntax.NormalizeForMatching("c'u'rl");
 
@@ -120,7 +120,7 @@ public class ShellSyntaxTests
     [InlineData("echo 'npm'", false)]
     // adjacent-pair obfuscation still works
     [InlineData("c''u''rl", true)]
-    public void MatchesUnquotedTool_after_normalization_detects_intra_word_obfuscation_only(string text, bool expected)
+    public void MatchesUnquotedTool_AfterNormalization_DetectsOnlyIntraWordObfuscation(string text, bool expected)
     {
         var normalized = ShellSyntax.NormalizeForMatching(text).Text;
 
@@ -129,7 +129,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void NormalizeForMatching_source_indices_map_surviving_characters_back_to_the_original()
+    public void NormalizeForMatching_SurvivingCharacters_MapBackToOriginalIndices()
     {
         // c''u''rl -> curl; each normalized character keeps its original position.
         var (text, sourceIndices) = ShellSyntax.NormalizeForMatching("c''u''rl");
@@ -139,7 +139,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void NormalizeForMatching_source_indices_skip_dropped_escapes()
+    public void NormalizeForMatching_DroppedEscape_SkipsItsSourceIndex()
     {
         var (text, sourceIndices) = ShellSyntax.NormalizeForMatching("\\$(x)");
 
@@ -148,7 +148,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void MatchesUnquotedTool_ignores_display_text_but_detects_command_substitution()
+    public void MatchesUnquotedTool_DisplayTextIgnored_CommandSubstitutionDetected()
     {
         Assert.False(ShellSyntax.MatchesUnquotedTool("echo 'sudo whoami'", "sudo"));
         Assert.True(ShellSyntax.MatchesUnquotedTool("echo \"$(sudo whoami)\"", "sudo"));
@@ -160,7 +160,7 @@ public class ShellSyntaxTests
     [InlineData("echo sudo", true)]
     // tool followed by non-whitespace boundary is not matched
     [InlineData("sudo; ls", false)]
-    public void MatchesUnquotedTool_recognises_tool_positioning(string text, bool expected)
+    public void MatchesUnquotedTool_ToolPositioning_RequiresWordBoundary(string text, bool expected)
     {
         Assert.Equal(expected, ShellSyntax.MatchesUnquotedTool(text, "sudo"));
     }
@@ -174,7 +174,7 @@ public class ShellSyntaxTests
     [InlineData("echo \"$(sudo whoami)\"", true)]
     // bare command substitution - executed
     [InlineData("$(sudo whoami)", true)]
-    public void MatchesUnquotedTool_distinguishes_display_from_execution(string text, bool expected)
+    public void MatchesUnquotedTool_DisplayVersusExecution_Distinguishes(string text, bool expected)
     {
         Assert.Equal(expected, ShellSyntax.MatchesUnquotedTool(text, "sudo"));
     }
@@ -185,26 +185,26 @@ public class ShellSyntaxTests
     [InlineData("sudopy", false)]
     // substring matches must not be flagged
     [InlineData("echo pseudo sudoku", false)]
-    public void MatchesUnquotedTool_rejects_substring_occurrences(string text, bool expected)
+    public void MatchesUnquotedTool_SubstringOccurrences_AreRejected(string text, bool expected)
     {
         Assert.Equal(expected, ShellSyntax.MatchesUnquotedTool(text, "sudo"));
     }
 
     [Fact]
-    public void MatchesUnquotedTool_returns_true_when_at_least_one_occurrence_is_unquoted()
+    public void MatchesUnquotedTool_OneUnquotedOccurrence_ReturnsTrue()
     {
         // First occurrence is display text inside quotes; second is a real invocation.
         Assert.True(ShellSyntax.MatchesUnquotedTool("echo 'sudo'; sudo whoami", "sudo"));
     }
 
     [Fact]
-    public void MatchesUnquotedTool_returns_false_when_tool_does_not_appear()
+    public void MatchesUnquotedTool_ToolAbsent_ReturnsFalse()
     {
         Assert.False(ShellSyntax.MatchesUnquotedTool("echo hello", "sudo"));
     }
 
     [Fact]
-    public void ComputeQuotePositions_tracks_single_quoted_regions()
+    public void ComputeQuotePositions_SingleQuotedCharacters_ClassifiedAsSingleQuoted()
     {
         var positions = ShellSyntax.ComputeQuotePositions("a='x' b");
 
@@ -214,7 +214,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void ComputeQuotePositions_tracks_double_quoted_regions()
+    public void ComputeQuotePositions_DoubleQuotedCharacters_ClassifiedAsDoubleQuoted()
     {
         var positions = ShellSyntax.ComputeQuotePositions("echo \"a b\" x");
 
@@ -223,7 +223,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void ComputeQuotePositions_tracks_command_substitution()
+    public void ComputeQuotePositions_CommandSubstitutionCharacters_ClassifiedAsCommandSubstitution()
     {
         var positions = ShellSyntax.ComputeQuotePositions("$(cmd) x");
 
@@ -233,7 +233,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void ComputeQuotePositions_command_substitution_inside_double_quotes_is_not_quoted_content()
+    public void ComputeQuotePositions_CommandSubstitutionInsideDoubleQuotes_IsNotQuotedContent()
     {
         // "$(x)" executes: the substitution body must not be classified as quoted text.
         var positions = ShellSyntax.ComputeQuotePositions("\"$(x)\"");
@@ -243,7 +243,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void ComputeQuotePositions_marks_backslash_escaped_characters()
+    public void ComputeQuotePositions_BackslashEscapedCharacters_AreMarkedEscaped()
     {
         var positions = ShellSyntax.ComputeQuotePositions("\\$(x)");
 
@@ -252,7 +252,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void ComputeQuotePositions_backslash_is_not_an_escape_inside_single_quotes()
+    public void ComputeQuotePositions_BackslashInsideSingleQuotes_IsNotAnEscape()
     {
         var positions = ShellSyntax.ComputeQuotePositions("'\\$'");
 
@@ -261,7 +261,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void IsEntirelyInQuotes_detects_match_created_inside_quotes_by_escape_stripping()
+    public void IsEntirelyInQuotes_EscapeStrippedMatchInsideQuotes_ReturnsTrue()
     {
         // The normalized $( only exists because the load-bearing backslash was dropped;
         // it sits inside double quotes of the original line.
@@ -274,7 +274,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void IsEntirelyInQuotes_rejects_unquoted_matches()
+    public void IsEntirelyInQuotes_UnquotedMatch_ReturnsFalse()
     {
         const string original = "s''u''d''o rm";
         var positions = ShellSyntax.ComputeQuotePositions(original);
@@ -285,7 +285,7 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void IsEntirelyInQuotes_rejects_command_substitution_body_under_double_quotes()
+    public void IsEntirelyInQuotes_CommandSubstitutionBodyUnderDoubleQuotes_ReturnsFalse()
     {
         // Code inside $(...) executes even under double quotes, so it is not "quoted text".
         const string original = "echo \"$(c\\url x)\"";
@@ -297,19 +297,19 @@ public class ShellSyntaxTests
     }
 
     [Fact]
-    public void FindUnquotedTool_returns_invocation_index()
+    public void FindUnquotedTool_Invocation_ReturnsIndex()
     {
         Assert.Equal(8, ShellSyntax.FindUnquotedTool("echo x; sudo whoami", "sudo"));
     }
 
     [Fact]
-    public void FindUnquotedTool_returns_minus_one_for_quoted_display_text()
+    public void FindUnquotedTool_QuotedDisplayText_ReturnsMinusOne()
     {
         Assert.Equal(-1, ShellSyntax.FindUnquotedTool("echo 'sudo whoami'", "sudo"));
     }
 
     [Fact]
-    public void FindUnquotedTool_returns_minus_one_when_absent()
+    public void FindUnquotedTool_ToolAbsent_ReturnsMinusOne()
     {
         Assert.Equal(-1, ShellSyntax.FindUnquotedTool("echo hello", "sudo"));
     }

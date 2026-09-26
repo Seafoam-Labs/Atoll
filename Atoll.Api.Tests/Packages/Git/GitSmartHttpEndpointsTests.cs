@@ -46,14 +46,14 @@ public sealed class GitSmartHttpEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task InfoRefs_unknown_package_returns_404()
+    public async Task InfoRefs_UnknownPackage_Returns404()
     {
         var response = await _client.GetAsync("/packages/missing.git/info/refs?service=git-upload-pack", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
-    public async Task InfoRefs_rejects_non_upload_pack_service_with_403()
+    public async Task InfoRefs_NonUploadPackService_Returns403()
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 
@@ -63,7 +63,7 @@ public sealed class GitSmartHttpEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task InfoRefs_returns_advertisement_with_expected_headers()
+    public async Task InfoRefs_UploadPackService_ReturnsAdvertisementWithExpectedHeaders()
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 
@@ -82,7 +82,7 @@ public sealed class GitSmartHttpEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task RootInfoRefs_resolves_a_split_package_base_to_a_seeded_package()
+    public async Task RootInfoRefs_SplitPackageBase_ResolvesToSeededPackage()
     {
         await _packages.SeedFilesAsync("shelly-bin", SampleFiles);
 
@@ -94,7 +94,7 @@ public sealed class GitSmartHttpEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task UploadPack_unknown_package_returns_404()
+    public async Task UploadPack_UnknownPackage_Returns404()
     {
         using var content = new ByteArrayContent([]);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/x-git-upload-pack-request");
@@ -105,7 +105,7 @@ public sealed class GitSmartHttpEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task UploadPack_stateless_request_returns_result_content_type()
+    public async Task UploadPack_StatelessRequest_ReturnsResultContentType()
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 
@@ -129,7 +129,7 @@ public sealed class GitSmartHttpEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task UploadPack_unknown_want_returns_protocol_err_packet()
+    public async Task UploadPack_UnknownWant_ReturnsProtocolErrPacket()
     {
         await _packages.SeedFilesAsync("shelly", SampleFiles);
 

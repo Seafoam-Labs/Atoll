@@ -83,7 +83,7 @@ public sealed class PackageDiffGitTabTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DiffTabRendersUnifiedDiffForChangedRevision()
+    public async Task DiffTab_RendersUnifiedDiffForChangedRevision()
     {
         // No ?from, so the base is rev-1, the revision immediately older than head.
         var response = await _client!.GetAsync(
@@ -107,7 +107,7 @@ public sealed class PackageDiffGitTabTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DiffTabShowsNoContentChangesWhenTheRangeIsIdentical()
+    public async Task DiffTab_ShowsNoContentChangesWhenTheRangeIsIdentical()
     {
         var response = await _client!.GetAsync(
             "/package/shelly-bin/diff?from=rev-2&to=rev-2", TestContext.Current.CancellationToken);

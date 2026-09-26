@@ -24,7 +24,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_returns_ordered_pages_with_envelope_metadata()
+    public async Task GetV1Packages_SecondPage_ReturnsOrderedItemsAndEnvelopeMetadata()
     {
         foreach (var name in new[] { "c-carrot", "a-apple", "e-egg", "b-banana", "d-date", "f-fig", "g-grape" })
             await SeedAsync(name);
@@ -67,7 +67,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_applies_default_page_and_limit()
+    public async Task GetV1Packages_OmittedPaging_DefaultsToFirstPageAndDefaultLimit()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
             await SeedAsync(name);
@@ -92,7 +92,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_returns_400_for_out_of_range_or_malformed_parameters()
+    public async Task GetV1Packages_OutOfRangeOrMalformedParameters_Return400()
     {
         var zeroPage = await _client.GetAsync("/v1/packages?page=0", TestContext.Current.CancellationToken);
         var zeroLimit = await _client.GetAsync("/v1/packages?limit=0", TestContext.Current.CancellationToken);
@@ -113,7 +113,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_applies_order_parameter_to_name_sort()
+    public async Task GetV1Packages_NameSortWithOrder_AppliesBothDirections()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
             await SeedAsync(name);
@@ -145,7 +145,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_sorts_votes_ascending_by_default()
+    public async Task GetV1Packages_VotesSort_OmittedOrderDefaultsToAscending()
     {
         foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin", "a-absent" })
             await SeedAsync(name);
@@ -164,7 +164,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_sorts_by_votes_descending_across_pages()
+    public async Task GetV1Packages_VotesDescending_SortsAcrossPages()
     {
         foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin", "a-absent" })
             await SeedAsync(name);
@@ -199,7 +199,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_collapses_comma_joined_sort_values_onto_one_column()
+    public async Task GetV1Packages_CommaJoinedSortValues_CollapseOntoOneColumn()
     {
         foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin" })
             await SeedAsync(name);
@@ -226,7 +226,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_binds_padded_numeric_and_flag_combined_sort_values()
+    public async Task GetV1Packages_PaddedNumericAndCombinedSortValues_BindDeterministically()
     {
         foreach (var name in new[] { "portable-kit", "portable-pro", "shelly-bin" })
             await SeedAsync(name);
@@ -248,7 +248,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_rejects_an_undefined_numeric_sort_value()
+    public async Task GetV1Packages_UndefinedNumericSort_ReturnsProblemDetails400()
     {
         await SeedAsync("portable-kit");
 
@@ -263,7 +263,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_beyond_last_page_returns_empty_items()
+    public async Task GetV1Packages_PageBeyondLast_ReturnsEmptyItems()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
             await SeedAsync(name);
@@ -286,7 +286,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_with_int_max_page_returns_empty_items_without_overflow()
+    public async Task GetV1Packages_IntMaxPage_ReturnsEmptyItemsWithoutOverflow()
     {
         foreach (var name in new[] { "b-banana", "a-apple", "c-carrot" })
             await SeedAsync(name);
@@ -302,7 +302,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_returns_empty_envelope_for_empty_corpus()
+    public async Task GetV1Packages_EmptyCorpus_ReturnsEmptyEnvelope()
     {
         await using var factory = new SecurityTestFactory();
         using var client = factory.CreateClient();
@@ -326,7 +326,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Index_rows_carry_catalog_fields_when_names_are_in_the_index()
+    public async Task GetV1Packages_IndexedNames_CarryCatalogFields()
     {
         await SeedAsync("shelly-bin");
         await SeedAsync("a-apple");
@@ -391,7 +391,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task IndexPageNamesRoundTripThroughSearchByNameHydration()
+    public async Task GetV1Search_IndexPageNames_RoundTripThroughNameHydration()
     {
         await SeedAsync("portable-pro");
         await SeedAsync("shelly-bin");

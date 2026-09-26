@@ -6,7 +6,7 @@ namespace Atoll.Api.Tests.Ui;
 public class UiFormattingTests
 {
     [Fact]
-    public void PackageMetaDescriptionFallsBackToTheSiteBlurbWithoutAnAurDescription()
+    public void PackageMetaDescription_FallsBackToTheSiteBlurbWithoutAnAurDescription()
     {
         Assert.Multiple(() =>
         {

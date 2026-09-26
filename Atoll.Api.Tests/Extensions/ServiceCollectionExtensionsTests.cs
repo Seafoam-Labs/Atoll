@@ -56,7 +56,7 @@ public class ServiceCollectionExtensionsTests
     [InlineData("Off", true)]
     [InlineData("Direct", true)]
     [InlineData("Bulk", true)]
-    public void Host_registers_expected_workers_and_shared_mirror_per_configuration(
+    public void Host_SeedModeAndRefreshEnabled_RegistersExpectedWorkersAndSharedMirror(
         string seedMode,
         bool refreshEnabled)
     {
@@ -103,7 +103,7 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddSyncServices_without_seed_or_refresh_sections_defaults_to_direct_without_mirror()
+    public void AddSyncServices_WithoutSeedOrRefreshSections_DefaultsToDirectWithoutMirror()
     {
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder().Build();
@@ -132,7 +132,7 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddSecurityServices_without_security_section_defaults_to_enabled()
+    public void AddSecurityServices_WithoutSecuritySection_DefaultsToEnabled()
     {
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder().Build();

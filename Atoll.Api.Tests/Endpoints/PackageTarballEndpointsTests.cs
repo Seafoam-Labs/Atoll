@@ -34,7 +34,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
     private sealed record TarEntryData(string Name, UnixFileMode Mode, TarEntryType EntryType, string Content);
 
     [Fact]
-    public async Task Head_tarball_is_served_while_revision_is_pending()
+    public async Task TarballAsync_PendingHeadRevision_ServesTarball()
     {
         await SeedAsync(SecurityStatus.Pending);
 
@@ -56,7 +56,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Flagged_head_tarball_is_served_while_content_json_is_blocked()
+    public async Task TarballAsync_FlaggedHeadRevision_ServesTarballWhileContentJsonForbidden()
     {
         await SeedAsync(SecurityStatus.Flagged);
 
@@ -71,7 +71,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Pinned_revision_tarball_serves_the_requested_revision()
+    public async Task TarballAsync_PinnedRevision_ServesRequestedRevision()
     {
         await SeedTwoRevisionsAsync(verified: SecurityStatus.Verified, flagged: SecurityStatus.Flagged);
 
@@ -90,7 +90,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Unknown_revision_returns_404_instead_of_falling_back_to_head()
+    public async Task TarballAsync_UnknownRevision_ReturnsNotFoundWithoutHeadFallback()
     {
         await SeedAsync(SecurityStatus.Verified);
 
@@ -100,7 +100,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Unknown_package_returns_404()
+    public async Task TarballAsync_UnknownPackage_ReturnsNotFound()
     {
         var response = await _client.GetAsync("/v1/packages/missing/tarball", TestContext.Current.CancellationToken);
 
@@ -108,7 +108,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Shell_scripts_get_the_same_exec_bits_as_clones()
+    public async Task TarballAsync_ShellScripts_GetSameExecBitsAsClones()
     {
         await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg", new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {

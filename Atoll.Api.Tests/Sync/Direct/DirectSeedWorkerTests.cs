@@ -171,7 +171,7 @@ public class DirectSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_skips_when_index_is_empty()
+    public async Task RunCycleAsync_EmptyIndex_ReportsIndexEmptyAndStartsNoCycle()
     {
         var status = new DirectSeedStatusStore(enabled: true);
         var worker = CreateWorker(
@@ -188,7 +188,7 @@ public class DirectSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_skips_when_nothing_is_missing()
+    public async Task RunCycleAsync_NothingMissing_ReportsNothingMissingWithoutSeeding()
     {
         var status = new DirectSeedStatusStore(enabled: true);
         var service = new FakeSeedService([]);
@@ -205,7 +205,7 @@ public class DirectSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_seeds_missing_and_records_status()
+    public async Task RunCycleAsync_MissingPackages_SeedsEachAndRecordsStatus()
     {
         var status = new DirectSeedStatusStore(enabled: true);
         var service = new FakeSeedService([]);
@@ -236,7 +236,7 @@ public class DirectSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_records_failures_without_stopping_the_cycle()
+    public async Task RunCycleAsync_FailingFetch_RecordsFailureAndCompletesCycle()
     {
         var status = new DirectSeedStatusStore(enabled: true);
         var service = new FakeSeedService([]);
@@ -260,7 +260,7 @@ public class DirectSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_ends_cycle_even_when_cancelled_midway()
+    public async Task RunCycleAsync_CancelledMidway_EndsCycleAndPairsCounters()
     {
         var status = new DirectSeedStatusStore(enabled: true);
         using var cts = new CancellationTokenSource();

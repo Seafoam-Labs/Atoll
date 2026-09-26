@@ -15,7 +15,7 @@ public sealed class CatalogStateTests
     [InlineData("x", "words", "relevance", CatalogSearchMode.Words, CatalogSort.NameAsc)]
     [InlineData("", "relevance", null, CatalogSearchMode.Relevance, CatalogSort.NameAsc)]
     [InlineData("  ", null, null, CatalogSearchMode.Relevance, CatalogSort.NameAsc)]
-    public void FromQueryResolvesTheDefaults(
+    public void FromQuery_MissingModeAndSort_ResolvesDefaults(
         string? q, string? mode, string? sort, CatalogSearchMode expectedMode, CatalogSort expectedSort)
     {
         var state = CatalogState.FromQuery(q, null, mode, null, null, sort);
@@ -28,7 +28,7 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void BareUrlSerializesNoParameters()
+    public void ToQueryParameters_DefaultState_SerializesNoParameters()
     {
         var state = CatalogState.FromQuery(null, null, null, null, null, null);
 
@@ -40,7 +40,7 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void RankedQueryOmitsModeAndSortParameters()
+    public void ToQueryParameters_RankedQuery_OmitsModeAndSort()
     {
         var parameters = CatalogState.FromQuery("x", null, null, null, null, null).ToQueryParameters();
 
@@ -53,7 +53,7 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void ExplicitLegacyModeSerializesWithAQueryPresent()
+    public void ToQueryParameters_LegacyModeWithQuery_SerializesMode()
     {
         var state = CatalogState.FromQuery("x", null, "name", null, null, null);
         var parameters = state.ToQueryParameters();
@@ -67,7 +67,7 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void ExplicitNameSortSerializesWithAQueryPresent()
+    public void ToQueryParameters_NameSortWithQuery_SerializesSort()
     {
         var state = CatalogState.FromQuery("x", null, null, null, null, "name-asc");
         var parameters = state.ToQueryParameters();
@@ -81,7 +81,7 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void BlankQueryWithRelevanceModeSerializesBare()
+    public void ToQueryParameters_BlankQueryWithRelevanceMode_SerializesBare()
     {
         var state = CatalogState.FromQuery("", null, "relevance", null, null, null);
         var parameters = state.ToQueryParameters();
@@ -95,7 +95,7 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void RelevanceSortNormalizesToNameOrderWhereItCannotApply()
+    public void FromQuery_RelevanceSortWithoutRankedQuery_NormalizesToNameOrder()
     {
         var legacyMode = CatalogState.FromQuery("x", null, "words", null, null, "relevance");
         var blankQuery = CatalogState.FromQuery("", null, "relevance", null, null, "relevance");
@@ -113,7 +113,7 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void FiltersAndPageKeepTheirOwnDefaults()
+    public void ToQueryParameters_FiltersAndPage_RoundTripEachParameter()
     {
         var parameters = CatalogState.FromQuery("x", 3, "words", "seeded", "flagged", null).ToQueryParameters();
 
@@ -129,7 +129,7 @@ public sealed class CatalogStateTests
     }
 
     [Fact]
-    public void PageZeroClampsToOneAndDropsOutOfTheUrl()
+    public void FromQuery_PageZero_ClampsToOneAndDropsPageFromUrl()
     {
         var parameters = CatalogState.FromQuery("x", 0, null, null, null, null).ToQueryParameters();
 

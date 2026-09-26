@@ -57,7 +57,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EmptyQueryReturnsAllPackagesSortedByName()
+    public async Task SearchAsync_EmptyQuery_ReturnsAllPackagesSortedByName()
     {
         var result = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.NameAsc, ct: TestContext.Current.CancellationToken);
 
@@ -69,7 +69,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task NameModeMatchesNameOrDescriptionCaseInsensitive()
+    public async Task SearchAsync_NameMode_MatchesNameOrDescriptionCaseInsensitive()
     {
         var service = CreateService();
 
@@ -83,7 +83,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task WordsModeRequiresEveryTokenToMatch()
+    public async Task SearchAsync_WordsMode_RequiresEveryTokenToMatch()
     {
         var service = CreateService();
 
@@ -97,7 +97,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ProvidesModeMatchesProvidesValuesOnly()
+    public async Task SearchAsync_ProvidesMode_MatchesProvidesValuesOnly()
     {
         var service = CreateService();
 
@@ -110,7 +110,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RelevanceModeRanksProvidesAheadOfNamePrefixes()
+    public async Task SearchAsync_RelevanceMode_RanksProvidesAheadOfNamePrefixes()
     {
         var result = await CreateService().SearchAsync("portable", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
 
@@ -120,7 +120,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RelevanceModeBreaksWordPostingTiesByVotes()
+    public async Task SearchAsync_RelevanceMode_BreaksWordPostingTiesByVotes()
     {
         var result = await CreateService().SearchAsync("handheld", CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Relevance, CatalogSort.Relevance, ct: TestContext.Current.CancellationToken);
 
@@ -130,7 +130,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RelevanceModeMatchesNameTokensAndReturnsNothingForUnknownQueries()
+    public async Task SearchAsync_NameTokenAndTypoQuery_MatchesTokenWithoutTypoTolerance()
     {
         var service = CreateService();
 
@@ -143,7 +143,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ExplicitSortsOrderTheRankedMembershipWithoutWideningIt()
+    public async Task SearchAsync_ExplicitSortOnRankedQuery_ReordersWithoutWideningMembership()
     {
         // VotesAsc reverses rank order (portable-pro first) while TotalMatches still counts the ranked
         // membership, not the whole catalog.
@@ -155,7 +155,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RelevanceSortFallsBackToNameOrderWithoutARankedQuery()
+    public async Task SearchAsync_RelevanceSortWithoutRankedQuery_FallsBackToNameOrder()
     {
         var service = CreateService();
 
@@ -172,7 +172,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RankedResultsPageAndClampLikeTheLegacyModes()
+    public async Task SearchAsync_RankedResults_PageAndClampLikeLegacyModes()
     {
         // Every generated name starts with the queried prefix, so the ranked membership is the corpus.
         var service = CreateService(Corpus(124));
@@ -193,7 +193,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SeededFilterNarrowsToSeededOrIndexOnlyRows()
+    public async Task SearchAsync_SeededFilter_SplitsSeededFromIndexOnlyRows()
     {
         _seededNames = ["shelly-bin"];
         var service = CreateService();
@@ -210,7 +210,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SecurityFilterNarrowsToSeededPackagesWithMatchingHeadStatus()
+    public async Task SearchAsync_SecurityFilter_NarrowsToSeededPackagesWithMatchingHeadStatus()
     {
         _seededNames = ["shelly-bin"];
         await _securityRepository.MarkPendingAsync("shelly-bin", "rev-1", isHead: true, PkgBuildSecurityScanner.CurrentPolicyVersion, ct: TestContext.Current.CancellationToken);
@@ -233,7 +233,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TwoHeadDocumentsForOnePackageStillServeTheCatalog()
+    public async Task SearchAsync_TwoHeadDocumentsForOnePackage_StillServesOneRow()
     {
         _seededNames = ["shelly-bin"];
         // Appending a revision marks the new head pending before demoting the previous one, so both
@@ -249,7 +249,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SeedingThroughPackageServiceMakesTheNextSearchSeeTheSeededRow()
+    public async Task SearchAsync_AfterSeedThroughPackageService_NextSearchSeesSeededRow()
     {
         // The catalog and the writer share one HybridCache, as they do as host singletons: the
         // write-path tag removal, not a UI-side invalidator, is what refreshes the snapshot.
@@ -299,7 +299,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         packages.GetIndexPageAsync(1, 10, PackageIndexSortBy.Votes, PackageIndexSortOrder.Desc, ct);
 
     [Fact]
-    public async Task HeadRescanLeavesTheSnapshotToExpireWithoutReListingTheRankedNames()
+    public async Task SearchAsync_AfterHeadRescan_LeavesSnapshotToExpireWithoutReListing()
     {
         // One cache shared by the ranker's writer, the catalog, and the rescan queue, as in the
         // host: the snapshot carries only <c>catalog</c>, so a head rescan invalidates nothing;
@@ -354,7 +354,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PrewarmBuildsTheSnapshotAheadOfTheFirstSearch()
+    public async Task PrewarmAsync_BeforeFirstSearch_BuildsSnapshotOnceAndReusesIt()
     {
         var packages = new SeededNamesPackageService(["shelly-bin"]);
         var catalog = new PackageCatalogService(
@@ -377,7 +377,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PrewarmLeavesTheSnapshotToExpireSoAnUntaggedHeadPromotionStillHeals()
+    public async Task PrewarmAsync_ExpiredSnapshot_ReListsOnNextPrewarm()
     {
         // Unlike the ranker's warm, this one only fills. A head promoted by refresh drops no tag, so
         // its badge heals through the snapshot's expiry; re-storing the value the way the ranker does
@@ -399,7 +399,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task VotesDescendingSortOrdersByVotes()
+    public async Task SearchAsync_VotesDescSort_OrdersByVotes()
     {
         var result = await CreateService().SearchAsync(null, CatalogSeededFilter.All, CatalogSecurityFilter.Any, CatalogSearchMode.Name, CatalogSort.VotesDesc, ct: TestContext.Current.CancellationToken);
 
@@ -416,7 +416,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     [InlineData(CatalogSort.PopularityDesc, "pkg-c,pkg-a,pkg-d,pkg-b")]
     [InlineData(CatalogSort.LastModifiedAsc, "pkg-d,pkg-a,pkg-b,pkg-c")]
     [InlineData(CatalogSort.LastModifiedDesc, "pkg-c,pkg-b,pkg-a,pkg-d")]
-    public async Task EverySortOrdersTheCorpusByItsColumn(CatalogSort sort, string expected)
+    public async Task SearchAsync_EverySort_OrdersCorpusByItsColumn(CatalogSort sort, string expected)
     {
         // Each column is a distinct permutation of 1-4, so no two sorts may agree.
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
@@ -432,7 +432,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task NamePopularityAndLastModifiedSortsBreakTiesByName()
+    public async Task SearchAsync_NamePopularityAndLastModifiedSorts_BreakTiesByName()
     {
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
         names["pkg-a"] = CreateMetadata("pkg-a") with { Popularity = 5, LastModified = 100 };
@@ -458,7 +458,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RowFiltersNarrowTotalsBeforePagingAndClamping()
+    public async Task SearchAsync_RowFilters_NarrowTotalsBeforePagingAndClamping()
     {
         // Only 75 of the 124 rows are seeded, so totals and page counts must follow the filter.
         _seededNames = ExpectedNames(0, 75);
@@ -481,7 +481,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task NonNameSortsBreakTiesByNameForStablePaging()
+    public async Task SearchAsync_NonNameSortsWithEqualKeys_BreakTiesByNameForStablePaging()
     {
         // All packages share the same votes/popularity/mtime, so the name tie-break is the only
         // thing keeping page boundaries deterministic across the cached sorted view.
@@ -500,7 +500,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ResultsArePaginatedInPageSizeChunk()
+    public async Task SearchAsync_MultiPageCorpus_PaginatesByPageSizeAndClampsPastEnd()
     {
         var service = CreateService(Corpus(PackageCatalogService.PageSize * 2 + 1));
 
@@ -528,7 +528,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task OutOfRangePagesAreClampedToFirstPage()
+    public async Task SearchAsync_PageZero_ClampsToFirstPage()
     {
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
         names["pkg-a"] = CreateMetadata("pkg-a");
@@ -542,7 +542,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SearchesReflectIndexReplacement()
+    public async Task SearchAsync_AfterIndexReplacement_SeesNewGeneration()
     {
         var names = ImmutableDictionary.CreateBuilder<string, AurPackageMetadata>(StringComparer.Ordinal);
         names["pkg-a"] = CreateMetadata("pkg-a");

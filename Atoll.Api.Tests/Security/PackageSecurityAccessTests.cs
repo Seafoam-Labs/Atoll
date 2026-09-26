@@ -45,7 +45,7 @@ public class PackageSecurityAccessTests
     [InlineData(SecurityStatus.Pending, false, SecurityAccessReasonCodes.Pending)]
     [InlineData(SecurityStatus.Flagged, false, SecurityAccessReasonCodes.Flagged)]
     [InlineData(SecurityStatus.Error, false, SecurityAccessReasonCodes.Error)]
-    public async Task Status_is_enforced(SecurityStatus status, bool allowed, string? reason)
+    public async Task CheckAsync_ScanStatus_EnforcesAllowAndReasonCode(SecurityStatus status, bool allowed, string? reason)
     {
         var packages = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
@@ -60,7 +60,7 @@ public class PackageSecurityAccessTests
     }
 
     [Fact]
-    public async Task Missing_scan_is_pending_and_blocked()
+    public async Task CheckAsync_MissingScan_BlockedAsPending()
     {
         var packages = new InMemoryPackageRepository();
         await SeedPackageAsync(packages);
@@ -72,7 +72,7 @@ public class PackageSecurityAccessTests
     }
 
     [Fact]
-    public async Task Disabled_feature_allows_everything()
+    public async Task CheckAsync_SecurityDisabled_AllowsPendingRevision()
     {
         var packages = new InMemoryPackageRepository();
         await SeedPackageAsync(packages);
@@ -85,7 +85,7 @@ public class PackageSecurityAccessTests
     }
 
     [Fact]
-    public async Task Flagged_revision_blocks_only_itself()
+    public async Task CheckAsync_FlaggedRevision_BlocksRevisionAndHead()
     {
         var packages = new InMemoryPackageRepository();
         var security = new InMemoryPackageSecurityRepository();
@@ -121,7 +121,7 @@ public class PackageSecurityAccessTests
     }
 
     [Fact]
-    public async Task Unknown_revision_is_blocked_as_pending()
+    public async Task CheckAsync_UnknownRevision_BlockedAsPending()
     {
         var packages = new InMemoryPackageRepository();
         await SeedPackageAsync(packages);
@@ -133,7 +133,7 @@ public class PackageSecurityAccessTests
     }
 
     [Fact]
-    public async Task Unknown_package_is_allowed()
+    public async Task CheckAsync_UnknownPackage_Allowed()
     {
         var result = await Create(new InMemoryPackageRepository(), new InMemoryPackageSecurityRepository()).CheckAsync("missing", ct: TestContext.Current.CancellationToken);
 

@@ -63,7 +63,7 @@ public sealed class StatusPageTests : IDisposable
     }
 
     [Fact]
-    public async Task StatusPageRendersOverviewStatsAndWorkerCards()
+    public async Task StatusPage_RendersOverviewStatsAndWorkerCards()
     {
         await _factory.Repository.InsertSeedAsync(Doc("shelly-bin"), SeedRevision("shelly-bin"), TestContext.Current.CancellationToken);
         await _factory.SecurityRepository.MarkPendingAsync("shelly-bin", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
@@ -96,7 +96,7 @@ public sealed class StatusPageTests : IDisposable
     }
 
     [Fact]
-    public async Task StatusPageShowsBypassedBannerWhenSecurityDisabled()
+    public async Task StatusPage_ShowsBypassedBannerWhenSecurityDisabled()
     {
         await _factory.DisposeAsync();
         _client.Dispose();
@@ -116,7 +116,7 @@ public sealed class StatusPageTests : IDisposable
     }
 
     [Fact]
-    public async Task StatusPageShowsNotLoadedYetWithEmptyIndex()
+    public async Task StatusPage_ShowsNotLoadedYetWithEmptyIndex()
     {
         await _factory.DisposeAsync();
         _client.Dispose();
@@ -136,7 +136,7 @@ public sealed class StatusPageTests : IDisposable
     }
 
     [Fact]
-    public async Task StatusPageHidesGrafanaLinkWhenUnconfigured()
+    public async Task StatusPage_HidesGrafanaLinkWhenUnconfigured()
     {
         var response = await _client.GetAsync("/status", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -146,7 +146,7 @@ public sealed class StatusPageTests : IDisposable
     }
 
     [Fact]
-    public async Task StatusPageShowsOpenApiLink()
+    public async Task StatusPage_ShowsOpenApiLink()
     {
         var response = await _client.GetAsync("/status", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);

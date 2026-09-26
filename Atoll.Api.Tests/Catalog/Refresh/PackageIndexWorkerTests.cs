@@ -21,7 +21,7 @@ public class PackageIndexWorkerTests
     private static readonly byte[] InvalidPayload = [0x01, 0x02, 0x03, 0x04];
 
     [Fact]
-    public async Task Startup_prewarms_the_catalog_snapshot_and_the_ranker_names()
+    public async Task StartAsync_PrewarmsCatalogSnapshotAndRankerNames()
     {
         var packages = new SeededNamesPackageService([]);
         var store = new PackageIndexStore();
@@ -47,7 +47,7 @@ public class PackageIndexWorkerTests
     }
 
     [Fact]
-    public async Task A_refresh_swap_warms_the_caches_again_without_rescanning_the_snapshot()
+    public async Task ExecuteAsync_RefreshSwap_WarmsCachesAgainWithoutRescanningSnapshot()
     {
         var packages = new SeededNamesPackageService([]);
         var store = new PackageIndexStore();
@@ -74,7 +74,7 @@ public class PackageIndexWorkerTests
     }
 
     [Fact]
-    public async Task A_cycle_that_reached_the_archive_warms_and_a_failed_one_does_not()
+    public async Task RefreshAndWarmAsync_RefreshedNotModifiedAndFailedCycles_WarmExceptOnFailure()
     {
         var packages = new SeededNamesPackageService([]);
         var store = new PackageIndexStore();

@@ -6,19 +6,19 @@ namespace Atoll.Api.Tests.Catalog.Indexing;
 public class TokenCleaningTests
 {
     [Fact]
-    public void SplitsOnSeparators()
+    public void SplitAndClean_Separators_SplitIntoTokens()
     {
         Assert.Equal(["foo", "bar", "baz"], Clean("foo-bar.baz"));
     }
 
     [Fact]
-    public void SplitsCamelCaseBoundaries()
+    public void SplitAndClean_CamelCaseBoundaries_SplitIntoTokens()
     {
         Assert.Equal(["foo", "bar", "baz"], Clean("FooBarBaz"));
     }
 
     [Fact]
-    public void DropsTokensBelowLengthFloorUnlessAllowedShort()
+    public void SplitAndClean_TokensBelowLengthFloor_DropsUnlessAllowedShort()
     {
         Assert.Equal(["abc"], Clean("ab", "abc"));
         Assert.Equal(["i3"], Clean("i3"));
@@ -26,26 +26,26 @@ public class TokenCleaningTests
     }
 
     [Fact]
-    public void DropsNonAscii()
+    public void SplitAndClean_NonAscii_DropsToken()
     {
         Assert.Empty(Clean("café"));
     }
 
     [Fact]
-    public void DropsLeadingTwoDigitsButKeepsSingleLeadingDigit()
+    public void SplitAndClean_LeadingTwoDigits_DropsButKeepsSingleLeadingDigit()
     {
         Assert.Empty(Clean("30fps"));
         Assert.Equal(["3dfoo"], Clean("3dfoo"));
     }
 
     [Fact]
-    public void DropsPureNumeric()
+    public void SplitAndClean_PureNumeric_DropsToken()
     {
         Assert.Empty(Clean("1337"));
     }
 
     [Fact]
-    public void DropsProseStopWordsButKeepsNameTokens()
+    public void SplitAndClean_ProseStopWords_DropsButKeepsNameTokens()
     {
         Assert.Multiple(() =>
         {
@@ -55,7 +55,7 @@ public class TokenCleaningTests
     }
 
     [Fact]
-    public void DeduplicatesAcrossTokensAndSplits()
+    public void SplitAndClean_RepeatedTokensAndSplits_Deduplicates()
     {
         Assert.Equal(["foo"], Clean("foo", "foo"));
         Assert.Equal(["foo"], Clean("foo-foo"));
@@ -70,7 +70,7 @@ public class TokenCleaningTests
     [InlineData("1337", null)]
     [InlineData("30fps", null)]
     [InlineData("café", null)]
-    public void NormalizePostingAppliesTheIndexingFilters(string segment, string? expected)
+    public void NormalizePosting_Segment_AppliesTheIndexingFilters(string segment, string? expected)
     {
         Assert.Equal(expected, TokenCleaning.NormalizePosting(segment));
     }
@@ -85,7 +85,7 @@ public class TokenCleaningTests
     [InlineData("1337")]
     [InlineData("30fps")]
     [InlineData("café")]
-    public void SplitAndCleanOfASinglePartAgreesWithNormalizePosting(string segment)
+    public void SplitAndClean_SinglePart_AgreesWithNormalizePosting(string segment)
     {
         var expected = TokenCleaning.NormalizePosting(segment);
         var cleaned = Clean(segment);

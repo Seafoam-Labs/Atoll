@@ -64,7 +64,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
     }
 
     [Fact]
-    public async Task Constructor_drops_superseded_indexes_left_by_an_older_deployment()
+    public async Task Constructor_SupersededIndexesFromOlderDeployment_DropsThem()
     {
         // Recreate the shapes earlier releases ensured: the pre-policy-aware claim index, the
         // packageName duplicate of the compound head index, and the narrow head-status index.
@@ -89,7 +89,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
     }
 
     [Fact]
-    public async Task Constructor_is_idempotent_when_the_superseded_indexes_are_already_absent()
+    public async Task Constructor_SupersededIndexesAlreadyAbsent_ConvergesIdempotently()
     {
         NewRepository();
 
@@ -101,7 +101,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
     }
 
     [Fact]
-    public async Task Head_status_query_shape_is_covered_by_the_index_without_fetching_documents()
+    public async Task ListHeadStatusesAsync_HeadQueryShape_IsCoveredWithoutFetchingDocuments()
     {
         for (var i = 0; i < 25; i++)
         {
@@ -142,7 +142,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
     }
 
     [Fact]
-    public async Task Legacy_pending_work_without_requirement_is_claimable_and_backfilled()
+    public async Task TryClaimPendingScanAsync_LegacyPendingWithoutRequirement_IsClaimableAndBackfilled()
     {
         var collection = _client.GetDatabase(_database).GetCollection<PackageSecurityScanDocument>("package-security-scans");
         await collection.InsertOneAsync(new PackageSecurityScanDocument
@@ -173,7 +173,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
     }
 
     [Fact]
-    public async Task RequeueOutdatedAsync_requeues_unversioned_and_older_versions_only()
+    public async Task RequeueOutdatedAsync_UnversionedAndOlderThanTarget_RequeuesOnlyThose()
     {
         // 1. Legacy unversioned verified document (directly inserted into Mongo)
         var collection = _client.GetDatabase(_database).GetCollection<PackageSecurityScanDocument>("package-security-scans");

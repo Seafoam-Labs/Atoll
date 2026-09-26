@@ -76,7 +76,7 @@ public class PackageSecurityWorkerTests
     }
 
     [Fact]
-    public async Task Clean_package_is_marked_verified()
+    public async Task StartAsync_CleanPackage_MarksVerified()
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
@@ -93,7 +93,7 @@ public class PackageSecurityWorkerTests
     }
 
     [Fact]
-    public async Task Malicious_package_is_marked_flagged()
+    public async Task StartAsync_FlaggedContent_MarksFlagged()
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
@@ -110,7 +110,7 @@ public class PackageSecurityWorkerTests
     }
 
     [Fact]
-    public async Task Package_seeded_after_worker_start_is_picked_up_by_polling()
+    public async Task StartAsync_PackageSeededAfterStart_PicksUpByPolling()
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
@@ -126,7 +126,7 @@ public class PackageSecurityWorkerTests
     }
 
     [Fact]
-    public async Task Disabled_worker_does_not_scan()
+    public async Task StartAsync_SecurityDisabled_LeavesScanPending()
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
@@ -141,7 +141,7 @@ public class PackageSecurityWorkerTests
     }
 
     [Fact]
-    public async Task Completed_scans_are_recorded_in_status()
+    public async Task StartAsync_CompletedScans_RecordsStatusCounters()
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
@@ -169,7 +169,7 @@ public class PackageSecurityWorkerTests
     }
 
     [Fact]
-    public async Task Worker_startup_requeues_and_rescans_outdated_scans()
+    public async Task StartAsync_OutdatedScans_RequeuesAndRescans()
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
@@ -214,7 +214,7 @@ public class PackageSecurityWorkerTests
     }
 
     [Fact]
-    public async Task Disabled_worker_does_not_requeue_outdated_scans()
+    public async Task StartAsync_SecurityDisabled_KeepsOutdatedScanVerified()
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();
@@ -235,7 +235,7 @@ public class PackageSecurityWorkerTests
     }
 
     [Fact]
-    public async Task Worker_does_not_claim_work_requiring_a_newer_policy()
+    public async Task StartAsync_RequirementNewerThanWorkerPolicy_ClaimsNothing()
     {
         var repo = new InMemoryPackageRepository();
         var securityRepo = new InMemoryPackageSecurityRepository();

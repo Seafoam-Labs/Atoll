@@ -39,7 +39,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SeededPackageIsServedFromRealMongoStorage()
+    public async Task GetV1Packages_SeededPackage_IsServedFromMongoStorage()
     {
         var repo = _factory.CreatePackageRepository();
         var now = DateTimeOffset.UtcNow;
@@ -85,7 +85,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PackageIndexIsServedPagedFromRealMongoStorage()
+    public async Task GetV1Packages_RealMongoCorpus_ReturnsRequestedPageWithEnvelope()
     {
         var repo = _factory.CreatePackageRepository();
         var now = DateTimeOffset.UtcNow;
@@ -143,7 +143,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DeletePackagePersistsToRealMongo()
+    public async Task DeleteV1PackagesName_RealMongo_CascadesRevisionAndScanDocuments()
     {
         var repo = _factory.CreatePackageRepository();
         var now = DateTimeOffset.UtcNow;

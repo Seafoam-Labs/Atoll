@@ -12,7 +12,7 @@ public class GitRepositoryCacheTests
     private static readonly DateTimeOffset T2 = new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void IsRevisionServable_security_disabled_serves_every_revision()
+    public void IsRevisionServable_SecurityDisabled_ServesEveryRevision()
     {
         Assert.Multiple(() =>
         {
@@ -25,7 +25,7 @@ public class GitRepositoryCacheTests
     }
 
     [Fact]
-    public void IsRevisionServable_security_enabled_serves_only_verified_revisions()
+    public void IsRevisionServable_SecurityEnabled_ServesOnlyVerifiedRevisions()
     {
         Assert.Multiple(() =>
         {
@@ -38,7 +38,7 @@ public class GitRepositoryCacheTests
     }
 
     [Fact]
-    public void ComputeHistoryMarker_security_disabled_ignores_scan_statuses()
+    public void ComputeHistoryMarker_SecurityDisabled_IgnoresScanStatuses()
     {
         var doc = TestDoc("rev-3", ("rev-1", T0), ("rev-2", T1), ("rev-3", T2));
         var statuses = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
@@ -59,7 +59,7 @@ public class GitRepositoryCacheTests
     }
 
     [Fact]
-    public void ComputeHistoryMarker_security_enabled_includes_statuses_in_materialization_order()
+    public void ComputeHistoryMarker_SecurityEnabled_ListsStatusesInMaterializationOrder()
     {
         // Revisions are stored newest-first; the marker must enumerate them in CreatedAt order.
         var doc = TestDoc("rev-3", ("rev-3", T2), ("rev-1", T0), ("rev-2", T1));
@@ -75,7 +75,7 @@ public class GitRepositoryCacheTests
     }
 
     [Fact]
-    public void ComputeHistoryMarker_changes_when_a_scan_status_flips()
+    public void ComputeHistoryMarker_ScanStatusFlips_Changes()
     {
         var doc = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
         var flagged = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
@@ -94,7 +94,7 @@ public class GitRepositoryCacheTests
     }
 
     [Fact]
-    public void ComputeHistoryMarker_changes_when_a_scan_document_appears_or_disappears()
+    public void ComputeHistoryMarker_ScanDocumentAppearsOrDisappears_Changes()
     {
         var doc = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
         var full = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal)
@@ -109,7 +109,7 @@ public class GitRepositoryCacheTests
     }
 
     [Fact]
-    public void ComputeHistoryMarker_changes_when_security_is_toggled()
+    public void ComputeHistoryMarker_SecurityToggled_Changes()
     {
         var doc = TestDoc("rev-1", ("rev-1", T0));
         var statuses = new Dictionary<string, SecurityStatus>(StringComparer.Ordinal) { ["rev-1"] = SecurityStatus.Verified };
@@ -119,7 +119,7 @@ public class GitRepositoryCacheTests
     }
 
     [Fact]
-    public void ComputeHistoryMarker_changes_when_history_ages_out_a_revision()
+    public void ComputeHistoryMarker_RevisionAgesOut_Changes()
     {
         var withOldRevision = TestDoc("rev-2", ("rev-1", T0), ("rev-2", T1));
         var withoutOldRevision = TestDoc("rev-2", ("rev-2", T1));

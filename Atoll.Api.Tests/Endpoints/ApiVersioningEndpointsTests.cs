@@ -22,7 +22,7 @@ public sealed class ApiVersioningEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task V1RestSurfaceIsServedAndAdvertisesSupportedVersions()
+    public async Task GetV1Search_ServedWithApiSupportedVersionsHeader()
     {
         var response = await _client.GetAsync("/v1/search?query=portable-kit", TestContext.Current.CancellationToken);
 
@@ -34,7 +34,7 @@ public sealed class ApiVersioningEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task UnversionedRestRoutesReturn404()
+    public async Task MapEndpoints_UnversionedRestRoutes_Return404()
     {
         var search = await _client.GetAsync("/search?query=portable-kit", TestContext.Current.CancellationToken);
         var packages = await _client.GetAsync("/packages", TestContext.Current.CancellationToken);
@@ -49,7 +49,7 @@ public sealed class ApiVersioningEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task UnsupportedUrlSegmentVersionReturns404()
+    public async Task MapEndpoints_UnsupportedUrlSegmentVersion_Returns404()
     {
         var search = await _client.GetAsync("/v2/search?query=portable-kit", TestContext.Current.CancellationToken);
         var packages = await _client.GetAsync("/v2/packages", TestContext.Current.CancellationToken);
@@ -62,7 +62,7 @@ public sealed class ApiVersioningEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task QueryStringVersioningIsNotHonored()
+    public async Task MapEndpoints_QueryStringVersioning_IsNotHonored()
     {
         var response = await _client.GetAsync("/packages?api-version=1.0", TestContext.Current.CancellationToken);
 
@@ -70,7 +70,7 @@ public sealed class ApiVersioningEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task ProtocolFixedSurfacesRemainVersionNeutral()
+    public async Task MapEndpoints_ProtocolFixedSurfaces_RemainVersionNeutral()
     {
         var health = await _client.GetAsync("/health", TestContext.Current.CancellationToken);
         var rpc = await _client.GetAsync("/rpc?v=5&type=suggest&arg=portable", TestContext.Current.CancellationToken);
@@ -83,7 +83,7 @@ public sealed class ApiVersioningEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task OpenApiDocumentIsServedPerVersionWithSubstitutedPaths()
+    public async Task GetOpenApiV1Json_ServedPerVersionWithSubstitutedPaths()
     {
         var v1 = await _client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
         var bare = await _client.GetAsync("/openapi/1.0.json", TestContext.Current.CancellationToken);

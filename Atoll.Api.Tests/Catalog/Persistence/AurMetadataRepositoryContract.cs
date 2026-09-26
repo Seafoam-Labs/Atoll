@@ -9,7 +9,7 @@ public abstract class AurMetadataRepositoryContract
     private protected abstract IAurMetadataRepository CreateRepository();
 
     [Fact]
-    public async Task EmptyRepository_HasNoData_AndZeroCount()
+    public async Task LoadAsync_EmptyRepository_ReturnsEmptyAndZeroCount()
     {
         var repo = CreateRepository();
 
@@ -24,7 +24,7 @@ public abstract class AurMetadataRepositoryContract
     }
 
     [Fact]
-    public async Task SyncAsync_Then_LoadAsync_RoundTripsPackages()
+    public async Task SyncAsync_FullSnapshot_RoundTripsThroughLoadAsync()
     {
         var repo = CreateRepository();
 
@@ -46,7 +46,7 @@ public abstract class AurMetadataRepositoryContract
     }
 
     [Fact]
-    public async Task SyncAsync_UpsertsChanged_InsertsNew_RemovesVanished_KeepsUntouched()
+    public async Task SyncAsync_MixedDelta_UpsertsInsertsRemovesAndKeepsUntouched()
     {
         var repo = CreateRepository();
 

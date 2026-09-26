@@ -13,7 +13,7 @@ namespace Atoll.Api.Tests.Catalog.Refresh;
 public class AurMetadataClientTests
 {
     [Fact]
-    public async Task FetchAsync_returns_NotModified_on_304()
+    public async Task FetchAsync_NotModifiedResponse_ReturnsNotModifiedResult()
     {
         var handler = new ControlHandler(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
         var client = Client(handler);
@@ -24,7 +24,7 @@ public class AurMetadataClientTests
     }
 
     [Fact]
-    public async Task FetchAsync_returns_snapshot_with_packages_and_validators()
+    public async Task FetchAsync_OkResponse_ReturnsSnapshotWithPackagesAndValidators()
     {
         var etag = new EntityTagHeaderValue("\"v1\"");
         var lastModified = DateTimeOffset.UtcNow;
@@ -44,7 +44,7 @@ public class AurMetadataClientTests
     }
 
     [Fact]
-    public async Task FetchAsync_sends_conditional_headers_for_retained_validators()
+    public async Task FetchAsync_RetainedValidators_SendsConditionalHeaders()
     {
         var etag = new EntityTagHeaderValue("\"v1\"");
         var lastModified = DateTimeOffset.UtcNow;
@@ -61,7 +61,7 @@ public class AurMetadataClientTests
     }
 
     [Fact]
-    public async Task FetchAsync_rejects_malformed_non_array_dump()
+    public async Task FetchAsync_MalformedNonArrayDump_ThrowsJsonException()
     {
         var handler = new ControlHandler(_ => Ok("not-json", new EntityTagHeaderValue("\"v1\""), DateTimeOffset.UtcNow));
         var client = Client(handler);
@@ -70,7 +70,7 @@ public class AurMetadataClientTests
     }
 
     [Fact]
-    public async Task FetchAsync_rejects_well_formed_but_empty_dump()
+    public async Task FetchAsync_EmptyDump_ThrowsInvalidDataException()
     {
         var handler = new ControlHandler(_ => Ok("[]", new EntityTagHeaderValue("\"v1\""), DateTimeOffset.UtcNow));
         var client = Client(handler);
@@ -79,7 +79,7 @@ public class AurMetadataClientTests
     }
 
     [Fact]
-    public async Task FetchAsync_honors_cancellation()
+    public async Task FetchAsync_CancelledToken_ThrowsOperationCanceledException()
     {
         var handler = new CancellationHandler();
         var client = Client(handler);

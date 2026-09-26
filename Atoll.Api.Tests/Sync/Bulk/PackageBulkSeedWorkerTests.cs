@@ -81,7 +81,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_seeds_non_split_package_from_mirror_files()
+    public async Task RunCycleAsync_NonSplitPackage_SeedsFromMirrorFiles()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"));
         var repo = new InMemoryPackageRepository();
@@ -102,7 +102,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_fetches_pkgbase_once_and_fans_out_to_split_pkgnames()
+    public async Task RunCycleAsync_SplitPkgNamesSharingBase_FetchesPkgBaseOnceAndFansOut()
     {
         // libfoo + libfoo-devel share pkgbase "foo": one fetch, two seeds, identical files.
         var store = IndexWithPackages(Meta("libfoo", "foo"), Meta("libfoo-devel", "foo"));
@@ -126,7 +126,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_skips_pkgbases_not_on_mirror_and_records_in_status()
+    public async Task RunCycleAsync_PkgBaseMissingFromMirror_SkipsAndRecordsInStatus()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("ghost", "ghost"));
         var repo = new InMemoryPackageRepository();
@@ -152,7 +152,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_does_not_refetch_document_too_large_exclusions()
+    public async Task RunCycleAsync_DocumentTooLargeExclusion_IsNotRefetched()
     {
         var store = IndexWithPackages(
             Meta("duckstation", "duckstation"),
@@ -178,7 +178,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_reports_failed_refs_after_bisection()
+    public async Task RunCycleAsync_FailedRefsAfterBisection_ReportsInStatus()
     {
         var store = IndexWithPackages(Meta("good", "good"), Meta("broken", "broken"));
         var repo = new InMemoryPackageRepository();
@@ -201,7 +201,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_skips_already_seeded_packages()
+    public async Task RunCycleAsync_AlreadySeededPackage_IsSkipped()
     {
         var store = IndexWithPackages(Meta("shelly", "shelly"), Meta("other", "other"));
         var repo = new InMemoryPackageRepository();
@@ -225,7 +225,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_empty_index_seeds_nothing()
+    public async Task RunCycleAsync_EmptyIndex_SeedsNothing()
     {
         var store = new PackageIndexStore(); // empty
         var repo = new InMemoryPackageRepository();
@@ -242,7 +242,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public void BulkSeedStatusStore_disabled_reports_zeros()
+    public void GetSnapshot_DisabledStatusStore_ReportsZeros()
     {
         var store = new BulkSeedStatusStore(false);
 
@@ -257,7 +257,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_seeds_all_packages_in_parallel_across_batches()
+    public async Task RunCycleAsync_FortyPackagesInBatchesOfTen_SeedsAllAcrossFourBatches()
     {
         var metas = Enumerable.Range(0, 40)
             .Select(i => Meta($"pkg-{i}", $"base-{i}"))
@@ -287,7 +287,7 @@ public class PackageBulkSeedWorkerTests
     }
 
     [Fact]
-    public async Task RunCycleAsync_handles_read_files_failure_without_killing_cycle()
+    public async Task RunCycleAsync_ReadFilesFailure_DoesNotKillCycle()
     {
         var store = IndexWithPackages(Meta("a", "a"), Meta("b", "b"));
         var repo = new InMemoryPackageRepository();

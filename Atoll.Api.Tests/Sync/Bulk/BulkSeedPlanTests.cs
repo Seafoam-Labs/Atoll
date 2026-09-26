@@ -6,7 +6,7 @@ namespace Atoll.Api.Tests.Sync.Bulk;
 public class BulkSeedPlanTests
 {
     [Fact]
-    public void BuildPkgBaseTargets_maps_split_packages_to_single_base()
+    public void BuildPkgBaseTargets_SplitPackages_MapToSingleBaseKey()
     {
         // Split packages: two pkgnames share one pkgbase branch.
         var targets = BulkSeedPlan.BuildPkgBaseTargets(["libfoo", "libfoo-devel"], _ => "foo");
@@ -19,7 +19,7 @@ public class BulkSeedPlanTests
     }
 
     [Fact]
-    public void BuildPkgBaseTargets_dedupes_when_multiple_pkgnames_map_to_same_base()
+    public void BuildPkgBaseTargets_MultiplePkgNamesPerBase_DeduplicatesToSingleEntry()
     {
         var targets = BulkSeedPlan.BuildPkgBaseTargets(
             ["libfoo", "libfoo-devel", "shelly", "libfoo-docs"],
@@ -34,7 +34,7 @@ public class BulkSeedPlanTests
     }
 
     [Fact]
-    public void BuildPkgBaseTargets_falls_back_to_pkgname_when_resolver_returns_empty()
+    public void BuildPkgBaseTargets_EmptyResolverResult_FallsBackToPkgName()
     {
         // Cold start / stale snapshot: empty pkgbase means non-split, use pkgname.
         var targets = BulkSeedPlan.BuildPkgBaseTargets(["shelly", "other"], _ => "");
@@ -47,7 +47,7 @@ public class BulkSeedPlanTests
     }
 
     [Fact]
-    public void BuildPkgBaseTargets_preserves_input_order_within_a_base()
+    public void BuildPkgBaseTargets_NamesWithinOneBase_KeepInputOrder()
     {
         var targets = BulkSeedPlan.BuildPkgBaseTargets(["zeta", "alpha", "beta"], _ => "shared");
 
@@ -55,7 +55,7 @@ public class BulkSeedPlanTests
     }
 
     [Fact]
-    public void BuildPkgBaseTargets_skips_empty_names()
+    public void BuildPkgBaseTargets_EmptyNames_AreSkipped()
     {
         var targets = BulkSeedPlan.BuildPkgBaseTargets(["", "shelly", ""], name => name);
 
@@ -67,7 +67,7 @@ public class BulkSeedPlanTests
     }
 
     [Fact]
-    public void ChunkBy_splits_into_expected_sizes()
+    public void ChunkBy_NonDivisibleSource_SplitsIntoExpectedSizes()
     {
         var batch = BulkSeedPlan.ChunkBy([.. Enumerable.Range(0, 7)], 3).ToList();
 
@@ -81,7 +81,7 @@ public class BulkSeedPlanTests
     }
 
     [Fact]
-    public void ChunkBy_empty_source_yields_nothing()
+    public void ChunkBy_EmptySource_YieldsNothing()
     {
         var batch = BulkSeedPlan.ChunkBy(Array.Empty<int>(), 10).ToList();
 
@@ -89,7 +89,7 @@ public class BulkSeedPlanTests
     }
 
     [Fact]
-    public void ChunkBy_batch_larger_than_source_returns_single_full_slice()
+    public void ChunkBy_BatchLargerThanSource_ReturnsSingleFullSlice()
     {
         var batch = BulkSeedPlan.ChunkBy([1, 2], 100).ToList();
 
@@ -100,7 +100,7 @@ public class BulkSeedPlanTests
     }
 
     [Fact]
-    public void ChunkBy_non_positive_size_throws()
+    public void ChunkBy_NonPositiveSize_Throws()
     {
         Assert.Multiple(() =>
         {

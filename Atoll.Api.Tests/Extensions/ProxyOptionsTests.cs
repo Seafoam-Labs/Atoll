@@ -25,7 +25,7 @@ public class ProxyOptionsTests
     }
 
     [Fact]
-    public void Without_proxy_configuration_framework_loopback_defaults_apply()
+    public void AddAtollInfrastructure_UnconfiguredProxy_KeepsFrameworkLoopbackDefaults()
     {
         var forwarded = BuildForwardedHeaders(new Dictionary<string, string?>(StringComparer.Ordinal));
 
@@ -42,7 +42,7 @@ public class ProxyOptionsTests
     }
 
     [Fact]
-    public void Configured_networks_proxies_and_headers_replace_the_defaults()
+    public void AddAtollInfrastructure_ConfiguredNetworksProxiesAndHeaders_ReplaceDefaults()
     {
         var forwarded = BuildForwardedHeaders(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
@@ -64,7 +64,7 @@ public class ProxyOptionsTests
     }
 
     [Fact]
-    public async Task Two_hop_chain_restores_original_scheme_and_client_ip()
+    public async Task UseForwardedHeaders_TwoHopChain_RestoresSchemeAndClientIp()
     {
         var services = new ServiceCollection();
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -107,7 +107,7 @@ public class ProxyOptionsTests
     [InlineData("not-a-network/16")]
     [InlineData("172.31.0.0/")]
     [InlineData("/16")]
-    public void Invalid_networks_fail_options_validation(string knownNetworks)
+    public void KnownNetworks_InvalidCidr_FailsOptionsValidation(string knownNetworks)
     {
         var services = new ServiceCollection();
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -122,7 +122,7 @@ public class ProxyOptionsTests
     }
 
     [Fact]
-    public void Invalid_forward_limit_fails_options_validation()
+    public void ForwardLimit_Zero_FailsOptionsValidation()
     {
         var services = new ServiceCollection();
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)

@@ -24,7 +24,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacyInfo_returns_aurweb_v5_contract_and_custom_clone_path()
+    public async Task GetRpc_InfoRequest_ReturnsAurwebV5ContractAndClonePath()
     {
         var response = await _client.GetAsync("/rpc?v=5&type=info&arg[]=shelly-bin&arg[]=missing", TestContext.Current.CancellationToken);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
@@ -49,7 +49,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacyInfo_accepts_paru_form_encoded_post_requests()
+    public async Task PostRpc_ParuFormEncodedInfoRequest_ReturnsMultiinfoResult()
     {
         using var content = new FormUrlEncodedContent(
         [
@@ -72,7 +72,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacySearch_supports_default_and_relation_fields()
+    public async Task GetRpc_Search_SupportsDefaultAndRelationFields()
     {
         var byDescription = await JsonAsync("/rpc?v=5&type=search&arg=modern");
         var byProvides = await JsonAsync("/rpc?v=5&type=search&arg=shelly&by=provides");
@@ -87,7 +87,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task PathRpc_and_suggestions_are_supported()
+    public async Task MapAurRpcEndpoints_PathRoutesAndSuggestions_AreServed()
     {
         var info = await JsonAsync("/rpc/v5/info/shelly-bin");
         var search = await JsonAsync("/rpc/v5/search/portable?by=name");
@@ -108,7 +108,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     [InlineData("/rpc?v=4&type=info&arg=shelly-bin", "Invalid version specified.")]
     [InlineData("/rpc?v=5&type=search&arg=x", "Query arg too small.")]
     [InlineData("/rpc?v=5&type=search&arg=shelly&by=unknown", "Incorrect by field specified.")]
-    public async Task Invalid_requests_return_aurweb_error_envelopes(string path, string expectedError)
+    public async Task GetRpc_InvalidRequests_ReturnAurwebErrorEnvelopes(string path, string expectedError)
     {
         var body = await JsonAsync(path);
 
@@ -121,7 +121,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacyInfo_result_carries_the_exact_uppercase_wire_field_set()
+    public async Task GetRpc_InfoResult_CarriesExactUppercaseWireFieldSet()
     {
         var body = await JsonAsync("/rpc?v=5&type=info&arg=shelly-bin");
 
@@ -138,7 +138,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacySearch_field_predicates_match_aurweb_semantics()
+    public async Task GetRpc_SearchFieldPredicates_MatchAurwebSemantics()
     {
         var providesExact = await JsonAsync("/rpc?v=5&type=search&arg=shel&by=provides");
         var providesHit = await JsonAsync("/rpc?v=5&type=search&arg=shelly&by=provides");
@@ -160,7 +160,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacySearch_orders_name_matches_ordinal()
+    public async Task GetRpc_SearchByName_OrdersMatchesOrdinal()
     {
         await using var factory = new ApiTestFactory { Index = TestData.IndexFromNames(["alpha", "ALPHA", "alpha-b", "alpha_a"]) };
         using var client = factory.CreateClient();
@@ -174,7 +174,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacySearch_succeeds_at_five_thousand_matches()
+    public async Task GetRpc_SearchAtMaxResults_ReturnsEveryResult()
     {
         await using var factory = BulkFactory(AurRpcService.MaxResults);
         using var client = factory.CreateClient();
@@ -192,7 +192,7 @@ public sealed class AurRpcEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacySearch_errors_when_matches_exceed_five_thousand()
+    public async Task GetRpc_SearchOverMaxResults_ReturnsTooManyPackageResults()
     {
         await using var factory = BulkFactory(AurRpcService.MaxResults + 1);
         using var client = factory.CreateClient();

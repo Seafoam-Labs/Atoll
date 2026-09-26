@@ -8,7 +8,7 @@ namespace Atoll.Api.Tests.Catalog.Indexing;
 public class PackageIndexBuilderTests
 {
     [Fact]
-    public async Task LoaderBuildsAllThreeIndexes()
+    public async Task LoadAsync_SampleFile_BuildsAllThreeIndexes()
     {
         var path = await TestData.WriteSamplePackagesAsync();
 
@@ -18,7 +18,7 @@ public class PackageIndexBuilderTests
     }
 
     [Fact]
-    public async Task BuildFromPackagesProducesSameIndexesAsLoadAsync()
+    public async Task BuildFromPackages_SamplePackages_ProducesTheSameIndexesAsLoadAsync()
     {
         var path = await TestData.WriteSamplePackagesAsync();
         var fromFile = await PackageIndexBuilder.LoadAsync(path, CancellationToken.None);
@@ -36,7 +36,7 @@ public class PackageIndexBuilderTests
     }
 
     [Fact]
-    public void BuildFromPackagesSkipsPackagesWithoutAName()
+    public void BuildFromPackages_PackageWithoutAName_IsSkipped()
     {
         var packages = new List<AurPackageMetadata>
         {
@@ -54,7 +54,7 @@ public class PackageIndexBuilderTests
     }
 
     [Fact]
-    public void RelevanceIndexMirrorsTheNameSet()
+    public void BuildFromPackages_RelevanceIndex_MirrorsTheNameSet()
     {
         var relevance = PackageIndexBuilder.BuildFromPackages(SamplePackages()).Relevance;
 
@@ -81,7 +81,7 @@ public class PackageIndexBuilderTests
     }
 
     [Fact]
-    public void NameTokenPostingsCarryOnlyNameTokens()
+    public void BuildFromPackages_NameTokenPostings_CarryOnlyNameTokens()
     {
         var indexes = PackageIndexBuilder.BuildFromPackages(SamplePackages());
         var relevance = indexes.Relevance;
@@ -98,7 +98,7 @@ public class PackageIndexBuilderTests
     }
 
     [Fact]
-    public void RepeatedNameKeepsOneIdAndTheLastPackage()
+    public void BuildFromPackages_RepeatedName_KeepsOneIdAndTheLastPackage()
     {
         var indexes = PackageIndexBuilder.BuildFromPackages(
         [

@@ -23,7 +23,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task HealthGetAndHeadReturnOk()
+    public async Task GetHealth_WithHeadVerb_ReturnsOk()
     {
         var get = await _client.GetAsync("/health", TestContext.Current.CancellationToken);
         var head = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/health"), TestContext.Current.CancellationToken);
@@ -33,7 +33,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task PackagesSupportsNameProvidesAndWordsQueries()
+    public async Task GetV1Search_NameProvidesAndWordsQueries_ReturnExpectedNames()
     {
         var byName = await SearchNamesAsync("query=portable-kit,not-real");
         var byProvides = await SearchNamesAsync("query=shelly&by=provides");
@@ -46,7 +46,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task SearchByNameIsExactCaseSensitiveAndSubstringFree()
+    public async Task GetV1Search_ByName_IsExactCaseSensitiveAndSubstringFree()
     {
         var exact = await SearchNamesAsync("by=name&query=shelly-bin");
         var wrongCase = await SearchNamesAsync("by=name&query=Shelly-Bin");
@@ -62,7 +62,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task SearchByWordsRequiresEveryToken()
+    public async Task GetV1Search_ByWords_RequiresEveryToken()
     {
         var allTokens = await SearchNamesAsync("by=words&query=handheld,emulator");
         var missingToken = await SearchNamesAsync("by=words&query=handheld,missing");
@@ -74,7 +74,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task SearchByProvidesIsExactAndFallsBackToSelfName()
+    public async Task GetV1Search_ByProvides_IsExactAndFallsBackToSelfName()
     {
         var exact = await SearchNamesAsync("by=provides&query=shelly");
         var nearMissPrefix = await SearchNamesAsync("by=provides&query=shel");
@@ -90,7 +90,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task SearchQueryBindingPinsSpacesEncodingRepeatsAndEmpties()
+    public async Task GetV1Search_QueryBinding_PinsSpacesEncodingRepeatsAndEmpties()
     {
         // Legacy modes never treat a space as a separator; "portable kit" stays one literal key.
         var space = await SearchNamesAsync("by=words&query=portable%20kit");
@@ -113,7 +113,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task RepeatedByValuesCombineAsFlags()
+    public async Task GetV1Search_RepeatedByValues_CombineAsFlags()
     {
         // "name,words" ORs to Words because Name is 0; an undefined combination is rejected instead.
         var collapsed = await SearchNamesAsync("query=handheld&by=name&by=words");
@@ -124,7 +124,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task RelevanceServesRankedBareArray()
+    public async Task GetV1Search_ByRelevance_ServesRankedBareArray()
     {
         var portable = await SearchNamesAsync("query=portable&by=relevance");
         var upperCase = await SearchNamesAsync("query=SHELLY&by=Relevance");
@@ -146,7 +146,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task RelevanceTreatsPlusAsSeparatorAndResolvesALiteralPlusThroughItsParts()
+    public async Task GetV1Search_PlusSeparatorAndLiteralPlus_RankIdentically()
     {
         // QueryStringEnumerable.Decode turns '+' into a space before unescaping, so "portable+pro" is
         // two terms; "%2B" unescapes to a literal '+' that survives as one term, which resolves
@@ -163,7 +163,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task RelevanceResponseIsBareArrayWithoutScoreOrTier()
+    public async Task GetV1Search_RelevanceItem_OmitsScoreAndTierFields()
     {
         var response = await _client.GetAsync("/v1/search?query=portable&by=relevance", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -182,7 +182,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task RelevanceRejectsOverBoundQuery()
+    public async Task GetV1Search_RelevanceQueryOverBound_ReturnsProblemDetails400()
     {
         var overBound = new string('a', 257);
 
@@ -200,7 +200,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task InvalidPackagesByAndUnknownRouteReturnTextHtml404()
+    public async Task MapEndpoints_UnknownByValueAndUnknownRoute_Return400And404()
     {
         var invalidBy = await _client.GetAsync("/v1/search?query=shelly&by=unknown", TestContext.Current.CancellationToken);
         var unknown = await _client.GetAsync("/does-not-exist", TestContext.Current.CancellationToken);
@@ -210,7 +210,7 @@ public sealed class MinimalApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task MetricsReturnsPrometheusText()
+    public async Task GetMetrics_AfterSearch_ExposesPrometheusAndAtollSamples()
     {
         _ = await _client.GetAsync("/v1/search?query=portable-kit", TestContext.Current.CancellationToken);
 

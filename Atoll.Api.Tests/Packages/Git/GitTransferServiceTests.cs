@@ -60,7 +60,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AdvertiseRefsAsync_unknown_package_returns_NotFound()
+    public async Task AdvertiseRefsAsync_UnknownPackage_ReturnsNotFound()
     {
         var (git, _, _, _, reposRoot) = CreateServices();
         try
@@ -77,7 +77,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UploadPackAsync_unknown_package_returns_NotFound()
+    public async Task UploadPackAsync_UnknownPackage_ReturnsNotFound()
     {
         var (git, _, _, _, reposRoot) = CreateServices();
         try
@@ -94,7 +94,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AdvertiseRefsAsync_writes_pkt_line_prelude_and_refs()
+    public async Task AdvertiseRefsAsync_SeededPackage_WritesPktLinePreludeAndRefs()
     {
         var (git, packages, cache, security, reposRoot) = CreateServices();
         try
@@ -122,7 +122,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UploadPackAsync_serves_a_full_clone_to_a_local_client()
+    public async Task EnsureRepositoryAsync_SeededPackage_ClonesWithExpectedFiles()
     {
         var (git, packages, cache, security, reposRoot) = CreateServices();
         var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
@@ -154,7 +154,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UploadPackAsync_stateless_rpc_responds_to_want_request()
+    public async Task UploadPackAsync_WantRequest_ReturnsOkWithBody()
     {
         var (git, packages, cache, security, reposRoot) = CreateServices();
         try
@@ -184,7 +184,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UploadPackAsync_unknown_want_returns_protocol_err_packet()
+    public async Task UploadPackAsync_UnknownWant_ReturnsProtocolErrPacket()
     {
         var (git, packages, cache, security, reposRoot) = CreateServices();
         try
@@ -211,7 +211,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UploadPackAsync_flush_only_body_is_answered_with_empty_ok()
+    public async Task UploadPackAsync_FlushOnlyBody_ReturnsEmptyOk()
     {
         var (git, packages, cache, security, reposRoot) = CreateServices();
         try
