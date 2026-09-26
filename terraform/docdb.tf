@@ -46,6 +46,7 @@ resource "aws_docdb_cluster" "main" {
   db_subnet_group_name        = aws_docdb_subnet_group.main.name
   vpc_security_group_ids      = [aws_security_group.docdb_sg.id]
   storage_encrypted           = true
+  storage_type                = "iopt1"
   backup_retention_period     = 7
   preferred_backup_window     = "07:00-09:00"
   skip_final_snapshot         = true
