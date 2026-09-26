@@ -68,10 +68,6 @@ catalog page the `ui` scenario drives — over a synthetic 85k-package index,
 reporting median/min latency and allocations per call for default page load,
 pagination, sort toggle, seeded filter, and broad/narrow queries.
 
-```sh
-dotnet test --project Atoll.Api.Tests/Atoll.Api.Tests.csproj --filter-class Atoll.Api.Tests.Ui.PackageCatalogServicePerfTests --output Detailed
-```
-
 A `ui` p95 increase with flat in-process numbers points at the rendering/HTTP
 leg; both rising points at the search path. Assertions are scale/behaviour
 sanity checks, not timing gates, so the probe stays in the normal test run.
@@ -94,15 +90,19 @@ Three pools cover the shapes a served rate has to
 survive: the fixed evidence queries, a 500-query pool of distinct prefixes of real
 names so nothing is repeat-query warmth, and an adversarial pool of one/two-char
 prefixes, a stop-word prefix, the maximum-length term, and the maximum term count.
-`dotnet test` hides `ITestOutputHelper` and runs other classes in parallel, which
-inflates the allocation columns (the counter is process-wide), so read the numbers
-by running the MTP executable directly:
+
+All three probes report only through `ITestOutputHelper`, which `dotnet test` never
+prints, and `dotnet test` runs classes in parallel, which inflates the allocation
+columns (the counter is process-wide). Read any probe by building and running the
+standalone MTP executable, selecting the class with `-class`:
 
 ```sh
 dotnet build Atoll.Api.Tests/Atoll.Api.Tests.csproj -c Release -p:SkipTailwind=true
 ./Atoll.Api.Tests/bin/Release/net10.0/Atoll.Api.Tests -showLiveOutput -noLogo \
   -class "Atoll.Api.Tests.Catalog.PackageSearchRelevancePerfTests"
 ```
+
+Single-dash MTP options; `-class` takes a fully qualified name and supports `*`.
 
 ## Corpora
 
