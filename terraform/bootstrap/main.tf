@@ -376,6 +376,22 @@ resource "aws_iam_policy" "github_deploy" {
         ]
       },
       {
+        # The main stack defines a CloudWatch dashboard over the metrics its
+        # resources publish (see monitoring.tf). ListDashboards is omitted: it
+        # takes no resource ARN, and the provider manages the dashboard with
+        # Get/Put/Delete by name.
+        Sid    = "CloudWatchDashboards"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutDashboard",
+          "cloudwatch:GetDashboard",
+          "cloudwatch:DeleteDashboard",
+        ]
+        Resource = [
+          "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:dashboard/${var.project_name}-*"
+        ]
+      },
+      {
         Sid    = "ManageAppIamRoles"
         Effect = "Allow"
         Action = [
