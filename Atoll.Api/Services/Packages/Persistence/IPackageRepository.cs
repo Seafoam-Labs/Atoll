@@ -27,6 +27,8 @@ public interface IPackageRepository
     Task AppendRevisionAsync(string packageName, PackageRevisionContentDocument revision, int maxRevisions,
         CancellationToken ct = default);
 
+    Task<long> TrimExcessRevisionsAsync(int maxRevisions, CancellationToken ct = default);
+
     Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default);
 
     Task UpdateSyncStateAsync(IReadOnlyCollection<string> packageNames, string? upstreamHead, bool succeeded, string? errorMessage,

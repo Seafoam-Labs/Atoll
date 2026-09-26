@@ -920,6 +920,11 @@ public class PackageServiceTests
             return inner.AppendRevisionAsync(packageName, revision, maxRevisions, ct);
         }
 
+        public Task<long> TrimExcessRevisionsAsync(int maxRevisions, CancellationToken ct = default)
+        {
+            return inner.TrimExcessRevisionsAsync(maxRevisions, ct);
+        }
+
         public Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)
         {
             return inner.ListSyncStatesAsync(ct);

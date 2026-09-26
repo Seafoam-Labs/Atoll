@@ -254,6 +254,14 @@ deterministically; the worker records the pkgbase in `seed-exclusions` (reason `
 it — together with all other excluded pkgbases — in every subsequent cycle instead of re-fetching it forever. Clearing
 the exclusion re-enables refresh for that pkgbase.
 
+### Revision retention compaction
+
+The cap is enforced at append time, so lowering `Atoll:Mongo:MaxRevisions` only reaches packages that change
+upstream. `PackageRevisionCompactionWorker` (`Atoll.Api/Services/Packages/`) closes that gap: once per start it trims
+every package above the cap and deletes the evicted `package-revisions` documents, logging the trimmed package count.
+The pass is idempotent and scans `packages`; it does not touch bare repos, so already-materialized Git commits stay
+servable.
+
 ### Measuring document sizes (ops)
 
 To size the storage profile of a deployment, rank packages by BSON size and count documents approaching the 16 MiB

@@ -122,6 +122,9 @@ public class DirectSeedWorkerTests
             CancellationToken ct = default)
             => throw new NotSupportedException();
 
+        public Task<long> TrimExcessRevisionsAsync(int maxRevisions, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
         public Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)
             => throw new NotSupportedException();
 

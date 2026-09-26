@@ -353,6 +353,69 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TrimExcessRevisionsAsync_trims_to_max_and_evicts_revision_documents()
+    {
+        const int maxRevisions = 5;
+
+        var (doc, revision) = NewSeed("pkg/shelly", "shelly");
+        await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
+        for (var i = 1; i <= 6; i++)
+            await AppendAsync(
+                "shelly",
+                NewRevisionContent("shelly", $"rev-{i}", $"commit {i}", PkgbuildFiles("shelly", $"rev-{i}")));
+
+        var (otherDoc, otherRevision) = NewSeed("pkg/other", "other");
+        await _repo.InsertSeedAsync(otherDoc, otherRevision, CancellationToken.None);
+
+        var trimmed = await _repo.TrimExcessRevisionsAsync(maxRevisions, CancellationToken.None);
+
+        var head = await _repo.GetHeadAsync("shelly", CancellationToken.None);
+        var untouched = await _repo.GetHeadAsync("other", CancellationToken.None);
+        var revisionDocCount = await CountRevisionDocsAsync("shelly");
+        var evictedFirst = await _repo.GetRevisionAsync("shelly", "rev-0", CancellationToken.None);
+        var evictedSecond = await _repo.GetRevisionAsync("shelly", "rev-1", CancellationToken.None);
+        var retainedOldest = await _repo.GetRevisionAsync("shelly", "rev-2", CancellationToken.None);
+        var secondPass = await _repo.TrimExcessRevisionsAsync(maxRevisions, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(1, trimmed);
+            Assert.Equal(0, secondPass);
+            Assert.NotNull(head);
+            Assert.Equal(
+                ["rev-6", "rev-5", "rev-4", "rev-3", "rev-2"],
+                head!.Revisions.Select(r => r.RevisionId), StringComparer.Ordinal);
+            Assert.Equal("rev-6", head.HeadRevisionId);
+            Assert.Equal(maxRevisions, revisionDocCount);
+            Assert.Null(evictedFirst);
+            Assert.Null(evictedSecond);
+            Assert.NotNull(retainedOldest);
+            Assert.Equal(1, untouched!.Revisions.Count);
+        });
+    }
+
+    [Fact]
+    public async Task TrimExcessRevisionsAsync_no_op_when_nothing_exceeds_the_cap()
+    {
+        var (doc, revision) = NewSeed("pkg/shelly", "shelly");
+        await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
+        await AppendAsync("shelly", NewRevisionContent("shelly", "rev-1", "commit 1"));
+
+        var trimmed = await _repo.TrimExcessRevisionsAsync(5, CancellationToken.None);
+
+        var head = await _repo.GetHeadAsync("shelly", CancellationToken.None);
+        var revisionDocCount = await CountRevisionDocsAsync("shelly");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(0, trimmed);
+            Assert.NotNull(head);
+            Assert.Equal(2, head!.Revisions.Count);
+            Assert.Equal(2, revisionDocCount);
+        });
+    }
+
+    [Fact]
     public async Task DeleteAsync_cascades_to_revision_documents()
     {
         var (doc, revision) = NewSeed("pkg/shelly", "shelly");

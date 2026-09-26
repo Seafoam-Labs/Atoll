@@ -202,6 +202,42 @@ internal sealed class InMemoryPackageRepository : IPackageRepository
         }
     }
 
+    public Task<long> TrimExcessRevisionsAsync(int maxRevisions, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            long trimmed = 0;
+            foreach (var packageName in _docs.Keys.ToList())
+            {
+                var existing = _docs[packageName];
+                if (existing.Revisions.Count <= maxRevisions)
+                    continue;
+
+                var retained = existing.Revisions.Take(maxRevisions).ToList();
+                var retainedIds = retained.Select(r => r.RevisionId).ToHashSet(StringComparer.Ordinal);
+                foreach (var evicted in existing.Revisions.Where(r => !retainedIds.Contains(r.RevisionId)))
+                    _revisions.Remove(PackageSchema.RevisionDocumentId(packageName, evicted.RevisionId));
+
+                _docs[packageName] = new PackageDocument
+                {
+                    Id = existing.Id,
+                    PackageName = existing.PackageName,
+                    CreatedAt = existing.CreatedAt,
+                    UpdatedAt = existing.UpdatedAt,
+                    HeadRevisionId = existing.HeadRevisionId,
+                    Revisions = retained,
+                    LastSyncedUpstreamHead = existing.LastSyncedUpstreamHead,
+                    LastSyncAttemptAt = existing.LastSyncAttemptAt,
+                    LastSyncSucceededAt = existing.LastSyncSucceededAt,
+                    LastSyncError = existing.LastSyncError
+                };
+                trimmed++;
+            }
+
+            return Task.FromResult(trimmed);
+        }
+    }
+
     public Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)
     {
         lock (_gate)

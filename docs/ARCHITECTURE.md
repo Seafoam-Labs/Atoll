@@ -148,7 +148,9 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - **Derived caches:** the in-memory index, the bare repos, the HybridCache entries, and the shared AUR mirror,
   with their invalidation rules and staleness windows, are catalogued in [Caching](CACHING.md).
 - **Limits & containment:**
-  - `MaxRevisions` (default 10) caps retained revision history per package.
+  - `MaxRevisions` (default 10) caps retained revision history per package. Append-time trimming only
+    bounds packages that change, so a startup sweep (`PackageRevisionCompactionWorker`) trims stored
+    history down to a lowered cap.
   - `MaxFileBytes` (default 5 MB) is enforced on UTF-8 content bytes; each file stores its SHA-256 hash.
   - Revision IDs hash the package name plus ordinally sorted file names and hashes, independent of input order.
   - The 16 MiB BSON limit applies per revision document. A conservative estimate avoids routine serialization; documents

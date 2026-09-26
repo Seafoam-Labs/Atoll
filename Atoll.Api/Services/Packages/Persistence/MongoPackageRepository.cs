@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace Atoll.Api.Services.Packages.Persistence;
@@ -189,6 +190,47 @@ public sealed class MongoPackageRepository : IPackageRepository
             throw new KeyNotFoundException($"Package '{packageName}' not found.");
 
         await DeleteEvictedRevisionDocsAsync(packageName, doc.Revisions, revision.RevisionId, maxRevisions, ct);
+    }
+
+    public async Task<long> TrimExcessRevisionsAsync(int maxRevisions, CancellationToken ct = default)
+    {
+        // Array length is compared in an expression: no filter shape gets an index here either way,
+        // and $ifNull keeps a document that lacks the field from failing the whole sweep.
+        var arraySize = new BsonDocument(
+            "$size", new BsonDocument("$ifNull", new BsonArray { "$revisions", new BsonArray() }));
+        var filter = new BsonDocumentFilterDefinition<PackageDocument>(
+            new BsonDocument("$expr", new BsonDocument("$gt", new BsonArray { arraySize, maxRevisions })));
+
+        var overCap = await _packages
+            .Find(filter)
+            .Project(p => new { p.PackageName, p.Revisions })
+            .ToListAsync(ct);
+
+        if (overCap.Count == 0)
+            return 0;
+
+        // Slice in place instead of rewriting each array: an empty $each turns the append operator
+        // into a trim, and an append racing this pass keeps its newest revisions at the array head.
+        var result = await _packages.UpdateManyAsync(
+            filter,
+            Builders<PackageDocument>.Update.PushEach(
+                p => p.Revisions, Array.Empty<PackageRevisionDocument>(), slice: maxRevisions),
+            cancellationToken: ct);
+
+        const int deleteBatchSize = 500;
+        var evictedDocIds = overCap
+            .SelectMany(p => p.Revisions
+                .Skip(maxRevisions)
+                .Select(r => PackageSchema.RevisionDocumentId(p.PackageName, r.RevisionId)))
+            .ToList();
+
+        foreach (var batch in evictedDocIds.Chunk(deleteBatchSize))
+        {
+            await _revisions.DeleteManyAsync(
+                Builders<PackageRevisionContentDocument>.Filter.In(r => r.Id, batch), ct);
+        }
+
+        return result.MatchedCount;
     }
 
     public async Task<IReadOnlyList<PackageSyncState>> ListSyncStatesAsync(CancellationToken ct = default)

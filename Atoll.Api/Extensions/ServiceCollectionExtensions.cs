@@ -192,6 +192,7 @@ internal static class ServiceCollectionExtensions
             services.AddSingleton<DirectPackageSeeder>();
             services.AddSingleton<IPackageService, PackageService>();
             services.AddSingleton<PackageTarballService>();
+            services.AddHostedService<PackageRevisionCompactionWorker>();
             return services;
         }
 
