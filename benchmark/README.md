@@ -104,6 +104,11 @@ dotnet build Atoll.Api.Tests/Atoll.Api.Tests.csproj -c Release -p:SkipTailwind=t
 
 Single-dash MTP options; `-class` takes a fully qualified name and supports `*`.
 
+Read a single probe median as carrying about 3 ms of noise (three identical Release runs of the
+relevance probe spread 8.04 to 11.24 ms, every timing column moving together with that run's total
+wall time). Compare a probe against another run of the same class, not against a different day's
+results file.
+
 ## Corpora
 
 **Isolated (default).** MongoDB starts empty and `setup()` stores only the names
