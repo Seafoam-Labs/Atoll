@@ -2,7 +2,7 @@ using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Persistence;
 using Xunit;
 
-namespace Atoll.Api.Tests.Catalog.Indexing;
+namespace Atoll.Api.Tests.Catalog.Persistence;
 
 public abstract class AurMetadataRepositoryContract
 {
@@ -13,66 +13,118 @@ public abstract class AurMetadataRepositoryContract
     {
         var repo = CreateRepository();
 
-        var exists = await repo.ExistsAsync(CancellationToken.None);
         var count = await repo.CountAsync(CancellationToken.None);
         var loaded = await repo.LoadAsync(CancellationToken.None);
 
         Assert.Multiple(() =>
         {
-            Assert.False(exists);
             Assert.Equal(0, count);
             Assert.Empty(loaded);
         });
     }
 
     [Fact]
-    public async Task SaveAsync_Then_LoadAsync_RoundTripsPackages()
+    public async Task SyncAsync_Then_LoadAsync_RoundTripsPackages()
     {
         var repo = CreateRepository();
 
         var packages = SamplePackages().ToList();
-        await repo.SaveAsync(packages, CancellationToken.None);
+        await repo.SyncAsync(FullSync(packages), CancellationToken.None);
 
         var loaded = await repo.LoadAsync(CancellationToken.None);
         var count = await repo.CountAsync(CancellationToken.None);
-        var exists = await repo.ExistsAsync(CancellationToken.None);
 
         Assert.Multiple(() =>
         {
-            Assert.True(exists);
             Assert.Equal(packages.Count, count);
             Assert.Equal(packages.Count, loaded.Count);
-            Assert.Equivalent(packages.Select(p => p.Name).Order(StringComparer.Ordinal), loaded.Select(p => p.Name).Order(StringComparer.Ordinal), strict: true);
+            Assert.Equivalent(
+                packages.Select(p => p.Name).Order(StringComparer.Ordinal),
+                loaded.Select(p => p.Name).Order(StringComparer.Ordinal),
+                strict: true);
         });
     }
 
     [Fact]
-    public async Task SaveAsync_ReplacesPreviousBatch_AndRemovesOldDocuments()
+    public async Task SyncAsync_UpsertsChanged_InsertsNew_RemovesVanished_KeepsUntouched()
     {
         var repo = CreateRepository();
 
-        var firstBatch = SamplePackages("v1").ToList();
-        await repo.SaveAsync(firstBatch, CancellationToken.None);
-        Assert.Equal(firstBatch.Count, await repo.CountAsync(CancellationToken.None));
+        var unchanged = NewMeta(1001, "shelly-bin", "shelly");
+        var changed = NewMeta(1002, "portable-kit", "portable");
+        var vanished = NewMeta(1003, "portable-pro", "portable-pro");
+        await repo.SyncAsync(FullSync([unchanged, changed, vanished]), CancellationToken.None);
 
-        var secondBatch = SamplePackages("v2").ToList();
-        await repo.SaveAsync(secondBatch, CancellationToken.None);
+        var next = new[]
+        {
+            unchanged,
+            changed with { Version = "1.1-1", NumVotes = 7 },
+            NewMeta(1004, "portable-next", "portable-next")
+        };
+        var delta = AurMetadataDelta.Compute(
+            ToDictionary([unchanged, changed, vanished]), next);
 
+        await repo.SyncAsync(delta, CancellationToken.None);
         var loaded = await repo.LoadAsync(CancellationToken.None);
-        var loadedNames = loaded.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
-        var activeCount = await repo.CountAsync(CancellationToken.None);
+        var count = await repo.CountAsync(CancellationToken.None);
+        var byName = loaded.ToDictionary(p => p.Name, StringComparer.Ordinal);
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(secondBatch.Count, activeCount);
-            Assert.False(loadedNames.Overlaps(firstBatch.Select(p => p.Name)));
-            foreach (var expected in secondBatch.Select(p => p.Name))
-                Assert.True(loadedNames.Contains(expected), $"Missing {expected}");
+            Assert.Equal(3, count);
+            Assert.False(byName.ContainsKey(vanished.Name));
+            Assert.Equal(unchanged, byName[unchanged.Name]);
+            Assert.Equal("1.1-1", byName[changed.Name].Version);
+            Assert.Equal(7, byName[changed.Name].NumVotes);
+            Assert.True(byName.ContainsKey("portable-next"));
         });
     }
 
     [Fact]
-    public async Task SaveAsync_PreservesAllFields()
+    public async Task SyncAsync_EmptyDelta_ChangesNothing()
+    {
+        var repo = CreateRepository();
+
+        var packages = SamplePackages().ToList();
+        await repo.SyncAsync(FullSync(packages), CancellationToken.None);
+        var before = await repo.LoadAsync(CancellationToken.None);
+
+        await repo.SyncAsync(AurMetadataDelta.Compute(ToDictionary(packages), packages), CancellationToken.None);
+        var after = await repo.LoadAsync(CancellationToken.None);
+        var count = await repo.CountAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(packages.Count, count);
+            Assert.Equivalent(before, after, strict: true);
+        });
+    }
+
+    [Fact]
+    public async Task SyncAsync_RepeatedWithSameSnapshot_KeepsOneDocumentPerName()
+    {
+        var repo = CreateRepository();
+
+        var packages = SamplePackages().ToList();
+        await repo.SyncAsync(FullSync(packages), CancellationToken.None);
+        await repo.SyncAsync(AurMetadataDelta.Compute(ToDictionary(packages), packages), CancellationToken.None);
+        await repo.SyncAsync(FullSync(packages), CancellationToken.None);
+
+        var loaded = await repo.LoadAsync(CancellationToken.None);
+        var count = await repo.CountAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(packages.Count, count);
+            Assert.Equal(packages.Count, loaded.Count);
+            Assert.Equal(
+                loaded.Count,
+                loaded.Select(p => p.Name).Distinct(StringComparer.Ordinal).Count());
+        });
+    }
+
+    [Fact]
+    public async Task SyncAsync_PreservesAllFields()
     {
         var repo = CreateRepository();
 
@@ -106,7 +158,7 @@ public abstract class AurMetadataRepositoryContract
             Replaces = ["old-ghost"]
         };
 
-        await repo.SaveAsync([original], CancellationToken.None);
+        await repo.SyncAsync(FullSync([original]), CancellationToken.None);
         var loaded = await repo.LoadAsync(CancellationToken.None);
 
         var pkg = Assert.Single(loaded);
@@ -147,54 +199,39 @@ public abstract class AurMetadataRepositoryContract
     {
         var repo = CreateRepository();
 
-        await repo.SaveAsync([.. SamplePackages()], CancellationToken.None);
-        Assert.True(await repo.ExistsAsync(CancellationToken.None));
+        await repo.SyncAsync(FullSync(SamplePackages()), CancellationToken.None);
+        Assert.True(await repo.CountAsync(CancellationToken.None) > 0);
 
         await repo.DeleteAsync(CancellationToken.None);
 
-        var exists = await repo.ExistsAsync(CancellationToken.None);
         var count = await repo.CountAsync(CancellationToken.None);
         var loaded = await repo.LoadAsync(CancellationToken.None);
 
         Assert.Multiple(() =>
         {
-            Assert.False(exists);
             Assert.Equal(0, count);
             Assert.Empty(loaded);
         });
     }
 
-    [Fact]
-    public async Task SaveAsync_EmptyInput_SwapsPointerToEmptyBatch()
+    private protected static AurMetadataDelta FullSync(IEnumerable<AurPackageMetadata> packages)
     {
-        var repo = CreateRepository();
-
-        await repo.SaveAsync([.. SamplePackages()], CancellationToken.None);
-        Assert.True(await repo.CountAsync(CancellationToken.None) > 0);
-
-        await repo.SaveAsync([], CancellationToken.None);
-
-        var existsAfterEmpty = await repo.ExistsAsync(CancellationToken.None);
-        var countAfterEmpty = await repo.CountAsync(CancellationToken.None);
-        var loadedAfterEmpty = await repo.LoadAsync(CancellationToken.None);
-
-        Assert.Multiple(() =>
-        {
-            Assert.True(existsAfterEmpty);
-            Assert.Equal(0, countAfterEmpty);
-            Assert.Empty(loadedAfterEmpty);
-        });
+        return AurMetadataDelta.Compute(new Dictionary<string, AurPackageMetadata>(StringComparer.Ordinal), packages);
     }
 
-    private static IEnumerable<AurPackageMetadata> SamplePackages(string prefix = "")
+    private protected static Dictionary<string, AurPackageMetadata> ToDictionary(IEnumerable<AurPackageMetadata> packages)
     {
-        var p = string.IsNullOrEmpty(prefix) ? "" : prefix + "-";
-        yield return NewMeta(1001, $"{p}shelly-bin", $"{p}shelly");
-        yield return NewMeta(1002, $"{p}portable-kit", $"{p}portable");
-        yield return NewMeta(1003, $"{p}portable-pro", $"{p}portable-pro");
+        return packages.ToDictionary(p => p.Name, StringComparer.Ordinal);
     }
 
-    private static AurPackageMetadata NewMeta(long id, string name, string packageBase)
+    private protected static IEnumerable<AurPackageMetadata> SamplePackages()
+    {
+        yield return NewMeta(1001, "shelly-bin", "shelly");
+        yield return NewMeta(1002, "portable-kit", "portable");
+        yield return NewMeta(1003, "portable-pro", "portable-pro");
+    }
+
+    private protected static AurPackageMetadata NewMeta(long id, string name, string packageBase)
     {
         return new AurPackageMetadata(
             id, name, id, packageBase, "1.0-1",

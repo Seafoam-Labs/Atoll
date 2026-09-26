@@ -100,10 +100,15 @@ public sealed class PackageIndexUpdater(
 
             logger.LogDebug("Parsed {PackageCount} packages from the AUR metadata dump.", packages.Count);
 
-            var previousPackageCount = store.Current.ByNames.Count;
+            var previousByNames = store.Current.ByNames;
+            var previousPackageCount = previousByNames.Count;
             var pruneNeedsConfirmation = options.Value.DataSource.PruneDeletedPackages
                                          && UpstreamPackageReconciler.IsSuspiciousShrink(packages.Count, previousPackageCount);
-            await aurMetadataRepository.SaveAsync(packages, cancellationToken);
+
+            // The persist must stay ahead of the store swap: the store doubles as the diff baseline,
+            // so a failed sync leaves it unadvanced and the next cycle re-issues the same upserts.
+            var delta = AurMetadataDelta.Compute(previousByNames, packages);
+            await aurMetadataRepository.SyncAsync(delta, cancellationToken);
 
             var next = PackageIndexBuilder.BuildFromPackages(packages);
             store.Replace(next);
@@ -128,7 +133,9 @@ public sealed class PackageIndexUpdater(
                 logger.LogWarning(ex, "Package index refreshed, but upstream reconciliation failed.");
             }
 
-            logger.LogInformation("Package index refreshed with {PackageCount} packages.", packages.Count);
+            logger.LogInformation(
+                "Package index refreshed with {PackageCount} packages. Metadata sync wrote {UpsertCount} documents, removed {RemovalCount} and left {UnchangedCount} unchanged.",
+                packages.Count, delta.Upserts.Count, delta.Removals.Count, delta.Unchanged);
 
             RecordSuccess();
             return PackageIndexRefreshOutcome.Refreshed;

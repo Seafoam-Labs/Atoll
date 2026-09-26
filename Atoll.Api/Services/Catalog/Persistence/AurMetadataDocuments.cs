@@ -7,10 +7,8 @@ namespace Atoll.Api.Services.Catalog.Persistence;
 public sealed class AurPackageMetadataDocument
 {
     [BsonId]
-    [BsonRepresentation(BsonType.ObjectId)]
+    [BsonRepresentation(BsonType.String)]
     public string Id { get; set; } = null!;
-
-    [BsonElement("batch")] public string BatchId { get; set; } = null!;
 
     [BsonElement("aur_id")] public long AurId { get; set; }
 
@@ -81,23 +79,13 @@ public sealed class AurPackageMetadataDocument
     }
 }
 
-[BsonIgnoreExtraElements]
-public sealed class BatchPointer
-{
-    [BsonId]
-    [BsonRepresentation(BsonType.ObjectId)]
-    public string Id { get; set; } = null!;
-
-    [BsonElement("activeBatchId")] public string ActiveBatchId { get; set; } = null!;
-}
-
 public static class AurMetadataExtensions
 {
-    public static AurPackageMetadataDocument ToDocument(this AurPackageMetadata p, string batchId)
+    public static AurPackageMetadataDocument ToDocument(this AurPackageMetadata p)
     {
         return new AurPackageMetadataDocument
         {
-            BatchId = batchId,
+            Id = p.Name,
             AurId = p.Id,
             Name = p.Name,
             PackageBaseId = p.PackageBaseId,

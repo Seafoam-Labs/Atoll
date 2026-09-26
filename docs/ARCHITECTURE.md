@@ -68,10 +68,10 @@ flowchart TD
 ```
 
 - **PackageIndexWorker:** Periodically downloads the AUR metadata archive (`packages-meta-ext-v1.json.gz`) with
-  conditional `ETag`/`Last-Modified` headers, persists new snapshots to MongoDB, and atomically swaps the in-memory
-  `PackageIndexStore` snapshot. On startup, it primes the index from MongoDB so search is immediately available. When
-  `DataSource:PruneDeletedPackages` is enabled, it prunes seeded packages that disappeared upstream (>10% drops require
-  confirmation by a second snapshot).
+  conditional `ETag`/`Last-Modified` headers, persists the packages whose content changed to MongoDB, and atomically
+  swaps the in-memory `PackageIndexStore` snapshot. On startup, it primes the index from MongoDB so search is
+  immediately available. When `DataSource:PruneDeletedPackages` is enabled, it prunes seeded packages that disappeared
+  upstream (>10% drops require confirmation by a second snapshot).
 - **Seed workers (Direct / Bulk):** `Seed:Mode` controls automated seeding of missing packages. Direct mode clones
   individual packages from AUR; Bulk mode batch-fetches branches from the GitHub AUR mirror into a local cache.
 - **PackageRefreshWorker:** Periodically checks already-seeded packages against upstream Git HEADs, appending new
@@ -140,7 +140,8 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
     without fetching documents that carry findings.
   - `seed-exclusions` — Records pkgbases whose revision content exceeds the 16 MiB document limit, preventing endless
     retries during seed and refresh.
-  - `aur-metadata` — Raw AUR metadata dump snapshots.
+  - `aur-metadata` — Copy of the AUR metadata dump, keyed by pkgname (`_id` = name) and delta-synced per refresh
+    cycle. Boot cache for the in-memory index only, with no secondary indexes.
 - **In-memory index (cache):** `PackageIndexStore` maintains an immutable snapshot of `ByNames`, `ByWords`, and
   `ByProvides` lookup tables. Rebuilt on startup from MongoDB and swapped atomically on metadata refresh.
 - **On-disk Git repos (cache):** Bare repositories under `data/repos/` (configurable via `Atoll:Git:RepositoriesPath`),
@@ -290,6 +291,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | Normalized `package-revisions` storage | Avoids 16 MiB document growth as revisions accumulate; keeps `packages` documents lean. | Content reads take an extra indexed query; two-document writes on append without distributed transactions. | Active |
 | Subprocess execution for `git upload-pack` | Reuses complete and standard Git smart HTTP protocol implementation. | Requires `git` binary in container; small process-spawn overhead per Git fetch. | Active |
 | Atomic snapshot swap in `PackageIndexStore` | Lock-free, zero-contention reads; consistent view per query. | Full index rebuild on refresh; temporary 2× peak memory during rebuild. | Active |
+| Name-keyed delta sync of `aur-metadata` | The dump moves ~4-185 packages per 5-minute cycle, so diffing against the in-memory index and upserting only the difference cut ~240k write operations per cycle to O(hundreds) and removed the collection's secondary index. | Loses the atomic pointer swap: a boot landing mid-write reads a mixed collection, which converges on the next cycle. Migration deploys boot with an empty index until the first full sync lands. | Active |
 | Cached sorted views in `PackageCatalogService` | Fast UI pagination over 100k+ packages. Each `(generation, sort)` is pre-sorted once into an array reference, and the worker's post-cycle warm rebuilds the default sorts off the request path. | First access per sort pays O(N log N) only when the warm did not cover it (a failed warm, a non-default sort). Substring queries still scan linearly (~10-25 ms). | Active |
 | Frozen seeded/head snapshot in `PackageCatalogService` | Row filters probe a `FrozenSet`/`FrozenDictionary` instead of immutable hash collections; the seeded-filter scenario drops ~2.3x at 85k packages and the rebuild is ~2.7x faster. | ~5.5 MB more transient garbage per rebuild; head-status changes are not invalidated and can lag one TTL in the list, and a head promotion forces the last-wins indexed build. Window bounds in [Caching](CACHING.md). | Active |
 | HybridCache for the TTL caches (`PackageIndexRanker`, catalog seeded snapshot, status dashboard) | Bounds the sorted REST feed (the seeded set is ranked once per sort into a cached name array, so a page costs O(limit) instead of sorting ~118k enriched rows) while collapsing three bespoke gate/epoch/TTL implementations into one library pattern: `GetOrCreateAsync` with keys from `AtollCacheKeys`, TTLs from `Atoll:Caching`, and the `catalog` tag. | Per-instance invalidation and coalescing only (no backplane), with the known invalidation windows, the extra Mongo list per window, and the discardable size-check serialization documented in [Caching](CACHING.md). | Active |

@@ -5,51 +5,30 @@ namespace Atoll.Api.Tests.Fakes;
 
 internal sealed class InMemoryAurMetadataRepository : IAurMetadataRepository
 {
-    private readonly Dictionary<string, List<AurPackageMetadata>> _batchesByPointer = new(StringComparer.Ordinal);
-    private string? _activeBatchId;
+    private readonly Dictionary<string, AurPackageMetadata> _byName = new(StringComparer.Ordinal);
 
-    public Task SaveAsync(IEnumerable<AurPackageMetadata> packages, CancellationToken ct)
+    public Task SyncAsync(AurMetadataDelta delta, CancellationToken ct)
     {
-        var batchId = Guid.NewGuid().ToString("N");
-        var materialized = packages.ToList();
-        _batchesByPointer[batchId] = materialized;
-
-        var previous = _activeBatchId;
-        _activeBatchId = batchId;
-
-        if (previous is not null) _batchesByPointer.Remove(previous);
+        foreach (var package in delta.Upserts) _byName[package.Name] = package;
+        foreach (var name in delta.Removals) _byName.Remove(name);
 
         return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<AurPackageMetadata>> LoadAsync(CancellationToken ct)
     {
-        IReadOnlyList<AurPackageMetadata> result =
-            _activeBatchId is not null && _batchesByPointer.TryGetValue(_activeBatchId, out var batch)
-                ? batch
-                : Array.Empty<AurPackageMetadata>();
-
+        IReadOnlyList<AurPackageMetadata> result = [.. _byName.Values];
         return Task.FromResult(result);
-    }
-
-    public Task<bool> ExistsAsync(CancellationToken ct)
-    {
-        return Task.FromResult(_activeBatchId is not null);
     }
 
     public Task<long> CountAsync(CancellationToken ct)
     {
-        var count = _activeBatchId is not null && _batchesByPointer.TryGetValue(_activeBatchId, out var batch)
-            ? batch.Count
-            : 0;
-
-        return Task.FromResult((long)count);
+        return Task.FromResult((long)_byName.Count);
     }
 
     public Task DeleteAsync(CancellationToken ct)
     {
-        _batchesByPointer.Clear();
-        _activeBatchId = null;
+        _byName.Clear();
         return Task.CompletedTask;
     }
 }

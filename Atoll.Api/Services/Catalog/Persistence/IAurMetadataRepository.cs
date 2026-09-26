@@ -2,11 +2,9 @@ namespace Atoll.Api.Services.Catalog.Persistence;
 
 public interface IAurMetadataRepository
 {
-    Task SaveAsync(IEnumerable<AurPackageMetadata> packages, CancellationToken ct);
-
     Task<IReadOnlyList<AurPackageMetadata>> LoadAsync(CancellationToken ct);
 
-    Task<bool> ExistsAsync(CancellationToken ct);
+    Task SyncAsync(AurMetadataDelta delta, CancellationToken ct);
 
     Task<long> CountAsync(CancellationToken ct);
 

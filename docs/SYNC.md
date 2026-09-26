@@ -61,9 +61,20 @@ minutes).
    available immediately, then initiates an upstream check without waiting for the first interval.
 2. **Conditional Requests:** Subsequent polls send `ETag` and `Last-Modified` validators. A `304 Not Modified` skips
    downloading, decompressing, and re-parsing the dump.
-3. **Atomic Updates:** A modified dump must decompress and parse into a valid, non-empty JSON package array.
-   `PackageIndexUpdater` writes the batch to MongoDB and atomically swaps the active pointer, ensuring readers never see
-   a partial snapshot.
+3. **Delta Sync:** A modified dump must decompress and parse into a valid, non-empty JSON package array.
+   `PackageIndexUpdater` diffs it against the in-memory index and persists only what moved: `aur-metadata` is keyed by
+   pkgname, so a cycle issues one upsert per changed package plus one `$in` delete for the names that vanished
+   upstream, and nothing at all when no content moved. The archive regenerates on a 300-second grid and serves
+   `cache-control: max-age=300`, which equals the default poll interval, so a `304` is rare by construction and raising
+   `RefreshIntervalMinutes` only divides the number of full downloads per day. Measured deltas run 4 to 185 packages
+   out of ~120,000 per cycle, dominated by a periodic `Popularity` rescale that carries no `LastModified` change,
+   which is why the diff compares content rather than timestamps. A cycle with no content movement issues no database
+   command at all; a full sync (the first cycle after a migration, or any boot that finds the collection empty) is
+   ~120 chunked bulk writes.
+
+   The in-memory index is still swapped atomically; the persisted copy is not. A boot landing mid-write reads a mixed
+   collection, which converges on the next cycle and cannot throw during the boot build because the index builder is
+   duplicate-tolerant.
 4. **Authoritative Pruning (`PruneDeletedPackages`):**
    When `Atoll:DataSource:PruneDeletedPackages=true`, `UpstreamPackageReconciler` compares MongoDB's seeded package set
    against the newly published snapshot:

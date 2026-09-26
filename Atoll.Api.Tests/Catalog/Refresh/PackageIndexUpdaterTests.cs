@@ -5,6 +5,7 @@ using System.Text;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Services.Catalog.Persistence;
 using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -103,7 +104,7 @@ public class PackageIndexUpdaterTests
     public async Task DownloadAndReloadAsync_rejects_well_formed_but_empty_dump()
     {
         var aurMetadata = new InMemoryAurMetadataRepository();
-        await aurMetadata.SaveAsync([Meta("demo")], CancellationToken.None);
+        await aurMetadata.SyncAsync(FullSync(Meta("demo")), CancellationToken.None);
         var store = new PackageIndexStore();
         store.Replace(PackageIndexBuilder.BuildFromPackages([Meta("demo")]));
         var options = Options.Create(new AtollOptions
@@ -185,6 +186,52 @@ public class PackageIndexUpdaterTests
         });
     }
 
+    [Fact]
+    public async Task DownloadAndReloadAsync_persistsOnlyThePackagesThatChanged()
+    {
+        var handler = new ScriptedHttpMessageHandler(
+            _ => Ok(Dump(2), "\"v1\""),
+            _ => Ok(Dump(3), "\"v2\""),
+            _ => Ok(Dump(3), "\"v3\""));
+        var aurMetadata = new RecordingAurMetadataRepository();
+        var options = Options.Create(new AtollOptions
+        {
+            DataSource = new DataSourceOptions
+            {
+                DataFileUrl = "https://example.test/packages.json.gz",
+                RefreshIntervalMinutes = 5
+            }
+        });
+        var coordinator = new PackageIndexUpdater(
+            new PackageIndexStore(),
+            aurMetadata,
+            new AurMetadataClient(new HandlerHttpClientFactory(handler), options, NullLogger<AurMetadataClient>.Instance),
+            options,
+            NullLogger<PackageIndexUpdater>.Instance,
+            InertReconciler());
+
+        await coordinator.DownloadAndReloadAsync(CancellationToken.None);
+        await coordinator.DownloadAndReloadAsync(CancellationToken.None);
+        await coordinator.DownloadAndReloadAsync(CancellationToken.None);
+        var retained = await aurMetadata.LoadAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            // An empty first cycle means a fresh host, so it writes the whole snapshot; the second
+            // writes only the added package; the third sees an identical dump and writes nothing.
+            Assert.Equal([2, 1, 0], aurMetadata.Deltas.Select(d => d.Upserts.Count));
+            Assert.Equal([0, 0, 0], aurMetadata.Deltas.Select(d => d.Removals.Count));
+            Assert.Equal([0, 2, 3], aurMetadata.Deltas.Select(d => d.Unchanged));
+            Assert.Equal(["p1", "p2", "p3"], retained.Select(p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        });
+    }
+
+    private static AurMetadataDelta FullSync(params AurPackageMetadata[] packages)
+    {
+        return AurMetadataDelta.Compute(
+            new Dictionary<string, AurPackageMetadata>(StringComparer.Ordinal), packages);
+    }
+
     private static AurPackageMetadata Meta(string name)
     {
         return new AurPackageMetadata(0, name, 0, name, "1.0", "d", null, 0, 0, null, null, null, 0, 0, "",
@@ -225,6 +272,25 @@ public class PackageIndexUpdaterTests
     private sealed class HandlerHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+    }
+
+    private sealed class RecordingAurMetadataRepository : IAurMetadataRepository
+    {
+        private readonly InMemoryAurMetadataRepository _inner = new();
+
+        public List<AurMetadataDelta> Deltas { get; } = [];
+
+        public Task SyncAsync(AurMetadataDelta delta, CancellationToken ct)
+        {
+            Deltas.Add(delta);
+            return _inner.SyncAsync(delta, ct);
+        }
+
+        public Task<IReadOnlyList<AurPackageMetadata>> LoadAsync(CancellationToken ct) => _inner.LoadAsync(ct);
+
+        public Task<long> CountAsync(CancellationToken ct) => _inner.CountAsync(ct);
+
+        public Task DeleteAsync(CancellationToken ct) => _inner.DeleteAsync(ct);
     }
 
     private sealed class ConditionalStubHttpMessageHandler(byte[] payload) : HttpMessageHandler

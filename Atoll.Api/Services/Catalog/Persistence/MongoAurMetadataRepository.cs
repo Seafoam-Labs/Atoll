@@ -1,56 +1,44 @@
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace Atoll.Api.Services.Catalog.Persistence;
 
 public sealed class MongoAurMetadataRepository : IAurMetadataRepository
 {
+    /// <summary>
+    ///     Keeps one bulk command near 1.5 MB, well under the 16 MB message limit and the 100k
+    ///     operations MongoDB allows per command.
+    /// </summary>
+    private const int BulkChunkSize = 1000;
+
+    private const string LegacyBatchIndexName = "batch_1_aur_id_1";
+
+    // A rolling deploy overlaps a draining task that may still write legacy ObjectId-keyed documents
+    // into this collection; deserializing one of those into the string _id below throws out of the
+    // index worker and stops the host. Once the legacy layout is gone the filter matches everything.
+    private static readonly FilterDefinition<AurPackageMetadataDocument> NameKeyed =
+        new BsonDocumentFilterDefinition<AurPackageMetadataDocument>(
+            new BsonDocument("_id", new BsonDocument("$type", "string")));
+
+    private readonly IMongoDatabase _database;
+    private readonly string _collectionName;
     private readonly IMongoCollection<AurPackageMetadataDocument> _packages;
-    private readonly IMongoCollection<BatchPointer> _pointer;
 
     public MongoAurMetadataRepository(IMongoClient client, IOptions<AtollOptions> options)
     {
         var o = options.Value;
-        var db = client.GetDatabase(o.Mongo.Database);
-        var aurMetadata = o.Mongo.Collections.AurMetadata;
-        _packages = db.GetCollection<AurPackageMetadataDocument>(aurMetadata);
-        _pointer = db.GetCollection<BatchPointer>($"{aurMetadata}.pointer");
+        _database = client.GetDatabase(o.Mongo.Database);
+        _collectionName = o.Mongo.Collections.AurMetadata;
+        _packages = _database.GetCollection<AurPackageMetadataDocument>(_collectionName);
 
-        var index = new CreateIndexModel<AurPackageMetadataDocument>(
-            Builders<AurPackageMetadataDocument>.IndexKeys
-                .Ascending(x => x.BatchId)
-                .Ascending(x => x.AurId),
-            new CreateIndexOptions { Unique = true });
-
-        _packages.Indexes.CreateOne(index);
-    }
-
-    public async Task SaveAsync(IEnumerable<AurPackageMetadata> packages, CancellationToken ct)
-    {
-        var batchId = Guid.NewGuid().ToString("N");
-
-        var docs = packages.Select(p => p.ToDocument(batchId)).ToList();
-
-        if (docs.Count == 0)
-        {
-            await SwapPointerAsync(batchId, ct);
-            return;
-        }
-
-        await _packages.InsertManyAsync(docs, cancellationToken: ct);
-        await SwapPointerAsync(batchId, ct);
+        DropLegacyBatchLayout();
     }
 
     public async Task<IReadOnlyList<AurPackageMetadata>> LoadAsync(CancellationToken ct)
     {
-        var pointer = await _pointer
-            .Find(Builders<BatchPointer>.Filter.Empty)
-            .FirstOrDefaultAsync(ct);
-
-        if (pointer is null) return [];
-
         var docs = await _packages
-            .Find(Builders<AurPackageMetadataDocument>.Filter.Eq(x => x.BatchId, pointer.ActiveBatchId))
+            .Find(NameKeyed)
             .ToListAsync(ct);
 
         return
@@ -60,49 +48,70 @@ public sealed class MongoAurMetadataRepository : IAurMetadataRepository
         ];
     }
 
-    public async Task<bool> ExistsAsync(CancellationToken ct)
+    public async Task SyncAsync(AurMetadataDelta delta, CancellationToken ct)
     {
-        var pointer = await _pointer
-            .Find(Builders<BatchPointer>.Filter.Empty)
-            .FirstOrDefaultAsync(ct);
+        if (delta.IsEmpty) return;
 
-        return pointer is not null;
+        var bulkOptions = new BulkWriteOptions { IsOrdered = false };
+
+        foreach (var chunk in delta.Upserts.Chunk(BulkChunkSize))
+        {
+            // The replacement carries _id explicitly: an upsert whose filter names _id but whose
+            // replacement document does not has historically inserted a null one.
+            var models = chunk
+                .Select(p =>
+                {
+                    var document = p.ToDocument();
+                    return (WriteModel<AurPackageMetadataDocument>)new ReplaceOneModel<AurPackageMetadataDocument>(
+                        Builders<AurPackageMetadataDocument>.Filter.Eq(x => x.Id, document.Id),
+                        document)
+                    {
+                        IsUpsert = true
+                    };
+                })
+                .ToList();
+
+            await _packages.BulkWriteAsync(models, bulkOptions, ct);
+        }
+
+        foreach (var chunk in delta.Removals.Chunk(BulkChunkSize))
+        {
+            await _packages.DeleteManyAsync(
+                Builders<AurPackageMetadataDocument>.Filter.In(x => x.Id, chunk), ct);
+        }
     }
 
-    public async Task<long> CountAsync(CancellationToken ct)
+    public Task<long> CountAsync(CancellationToken ct)
     {
-        var pointer = await _pointer
-            .Find(Builders<BatchPointer>.Filter.Empty)
-            .FirstOrDefaultAsync(ct);
-
-        if (pointer is null) return 0;
-
-        return await _packages.CountDocumentsAsync(
-            Builders<AurPackageMetadataDocument>.Filter.Eq(x => x.BatchId, pointer.ActiveBatchId),
+        return _packages.CountDocumentsAsync(
+            Builders<AurPackageMetadataDocument>.Filter.Empty,
             cancellationToken: ct);
     }
 
-    public async Task DeleteAsync(CancellationToken ct)
+    public Task DeleteAsync(CancellationToken ct)
     {
-        await _packages.DeleteManyAsync(Builders<AurPackageMetadataDocument>.Filter.Empty, ct);
-        await _pointer.DeleteManyAsync(Builders<BatchPointer>.Filter.Empty, ct);
+        return _packages.DeleteManyAsync(
+            Builders<AurPackageMetadataDocument>.Filter.Empty, ct);
     }
 
-    private async Task SwapPointerAsync(string batchId, CancellationToken ct)
+    /// <summary>
+    ///     Discards the superseded batch-rotation layout, which cannot be converted in place because
+    ///     _id is immutable. The first refresh cycle re-syncs the whole dump into the name-keyed one.
+    /// </summary>
+    private void DropLegacyBatchLayout()
     {
-        var previous = await _pointer.FindOneAndReplaceAsync(
-            Builders<BatchPointer>.Filter.Empty,
-            new BatchPointer { ActiveBatchId = batchId },
-            new FindOneAndReplaceOptions<BatchPointer, BatchPointer>
-            {
-                IsUpsert = true,
-                ReturnDocument = ReturnDocument.Before
-            },
-            ct);
+        // Gated on the live index list rather than suppressing IndexNotFound because DocumentDB
+        // reports a missing index as a generic command error without MongoDB's codeName, which would
+        // crash startup on a fresh cluster. Listing still surfaces authorization failures.
+        using var indexCursor = _packages.Indexes.List();
+        var indexNames = indexCursor
+            .ToList()
+            .Select(ix => ix["name"].AsString)
+            .ToHashSet(StringComparer.Ordinal);
 
-        if (previous?.ActiveBatchId is not null)
-            await _packages.DeleteManyAsync(
-                Builders<AurPackageMetadataDocument>.Filter.Eq(x => x.BatchId, previous.ActiveBatchId),
-                ct);
+        if (!indexNames.Contains(LegacyBatchIndexName)) return;
+
+        _database.DropCollection(_collectionName);
+        _database.DropCollection($"{_collectionName}.pointer");
     }
 }
