@@ -107,7 +107,7 @@ jobs:
       - name: Terraform plan
         run: |
           set -o pipefail
-          terraform plan -input=false -no-color -var "image_tag=${{ github.sha }}" 2>&1 | tee plan.txt
+          terraform plan -input=false -no-color -var "image_tag=${{ github.sha }}" -var "alerting_topic_arn=${{ vars.ALERTING_SNS_TOPIC_ARN }}" 2>&1 | tee plan.txt
 
       - name: Prepare plan comment
         if: always()
@@ -220,7 +220,7 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform apply
-        run: terraform apply -input=false -auto-approve -var "image_tag=${{ github.sha }}"
+        run: terraform apply -input=false -auto-approve -var "image_tag=${{ github.sha }}" -var "alerting_topic_arn=${{ vars.ALERTING_SNS_TOPIC_ARN }}"
 
       # A manual redeploy usually reuses the existing image tag, so the task
       # definition is unchanged and ECS would not roll on its own. Force a new

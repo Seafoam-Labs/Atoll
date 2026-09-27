@@ -377,8 +377,11 @@ resource "aws_iam_policy" "github_deploy" {
       },
       {
         # The main stack defines a CloudWatch dashboard over the metrics its
-        # resources publish (see monitoring.tf). ListDashboards is omitted: it
-        # takes no resource ARN, and the provider manages the dashboard with
+        # resources publish (see monitoring.tf). Dashboards are a global
+        # resource, so the ARN carries no region — PutDashboard authorizes
+        # against arn:aws:cloudwatch::<account>:dashboard/<name> and a
+        # region-qualified ARN here matches nothing. ListDashboards is omitted:
+        # it takes no resource ARN, and the provider manages the dashboard with
         # Get/Put/Delete by name.
         Sid    = "CloudWatchDashboards"
         Effect = "Allow"
@@ -388,8 +391,35 @@ resource "aws_iam_policy" "github_deploy" {
           "cloudwatch:DeleteDashboard",
         ]
         Resource = [
-          "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:dashboard/${var.project_name}-*"
+          "arn:aws:cloudwatch::${local.account_id}:dashboard/${var.project_name}-*"
         ]
+      },
+      {
+        # Alarm definitions live in the main stack (alerting.tf) and publish to
+        # the shared Buoy topic. Alarms are regional, so unlike the dashboard ARN
+        # above this one carries the region.
+        Sid    = "AlertAlarms"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricAlarm",
+          "cloudwatch:DescribeAlarms",
+          "cloudwatch:DeleteAlarms",
+          "cloudwatch:TagResource",
+          "cloudwatch:UntagResource",
+          "cloudwatch:ListTagsForResource",
+        ]
+        Resource = [
+          "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:alarm:${var.project_name}-*"
+        ]
+      },
+      {
+        # Strictly speaking CloudWatch publishes using the topic's own policy,
+        # not the caller's identity. Granted anyway: this account has twice
+        # rejected a call over an undocumented caller-side check.
+        Sid      = "PublishAlerts"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = ["arn:aws:sns:${var.aws_region}:${local.account_id}:${var.alert_topic_name}"]
       },
       {
         Sid    = "ManageAppIamRoles"

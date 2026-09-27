@@ -58,3 +58,11 @@ variable "waf_rate_limit" {
   type        = number
   default     = 250
 }
+
+# ARN of the shared alert topic from the Buoy stack, passed by CI from the
+# ALERTING_SNS_TOPIC_ARN repository variable. Empty means "no alerting", which
+# keeps PR plans and local applies working before the variable is set.
+variable "alerting_topic_arn" {
+  description = "SNS topic alarm actions publish to; alarms are skipped when empty"
+  default     = ""
+}
