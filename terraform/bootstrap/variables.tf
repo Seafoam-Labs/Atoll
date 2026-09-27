@@ -22,3 +22,9 @@ variable "state_bucket_name" {
   description = "Globally unique name for the Terraform state bucket"
   default     = "seafoam-atoll-tfstate"
 }
+
+# Must match topic_name in the Buoy stack, which owns the shared alert topic.
+variable "alert_topic_name" {
+  description = "SNS topic the main stack's alarms publish to"
+  default     = "seafoam-alerts"
+}
