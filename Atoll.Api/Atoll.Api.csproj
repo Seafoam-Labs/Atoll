@@ -55,4 +55,12 @@
         <Touch Files="wwwroot/app.min.css"/>
     </Target>
 
+    <!-- The stylesheet above is generated and gitignored, so a SkipTailwind build
+         on a clean checkout has no file for the unconditional Content include;
+         static web asset resolution then fails. Create an empty placeholder. -->
+    <Target Name="EnsureTailwindOutputPlaceholder" BeforeTargets="PrepareForBuild"
+            Condition="'$(SkipTailwind)' == 'true' And '$(DesignTimeBuild)' != 'true' And !Exists('wwwroot/app.min.css')">
+        <Touch Files="wwwroot/app.min.css" AlwaysCreate="true"/>
+    </Target>
+
 </Project>

@@ -306,7 +306,10 @@ Security notes not covered by the ADRs: options are validated on startup via Dat
 **Git identity compatibility:** commit identity depends on ordered revisions, trees and executable modes, sanitized
 revision authors, timestamps, messages, and parent order. The `git-v2` marker introduced corrected author identities;
 older local caches rebuild lazily and receive new synthesized SHAs once. The `git-v3` marker adds a packed object
-store and feeds only the marker string, so that rebuild leaves the served SHAs untouched.
+store and feeds only the marker string, so that rebuild leaves the served SHAs untouched. The `git-v4` marker pins
+commit timestamps to UTC: a bare unix timestamp made git stamp the host's local timezone offset into the commit
+object, so hosts in different timezones (or across a DST switch) synthesized different SHAs for the same history.
+That rebuild changes the served SHAs once more.
 
 ## Operations
 

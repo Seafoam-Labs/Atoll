@@ -20,7 +20,7 @@ public sealed class GitRepositoryCache(
     IOptions<AtollOptions> options,
     ILogger<GitRepositoryCache> logger) : IGitRepositoryCache
 {
-    private const string MaterializationVersion = "git-v3";
+    private const string MaterializationVersion = "git-v4";
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new(StringComparer.Ordinal);
     private readonly AtollOptions _options = options.Value;
 
@@ -285,8 +285,10 @@ public sealed class GitRepositoryCache(
         if (revision.CreatedAt != default)
         {
             var unix = revision.CreatedAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
-            env["GIT_AUTHOR_DATE"] = unix;
-            env["GIT_COMMITTER_DATE"] = unix;
+            // A bare unix timestamp makes git stamp the commit with the host's local
+            // timezone offset, so served SHAs would vary by host TZ and DST. Pin UTC.
+            env["GIT_AUTHOR_DATE"] = $"{unix} +0000";
+            env["GIT_COMMITTER_DATE"] = $"{unix} +0000";
         }
 
         return (await GitClient.ExecuteAsync(repoPath, args, null, env, ct)).Trim();
