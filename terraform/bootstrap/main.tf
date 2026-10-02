@@ -352,76 +352,6 @@ resource "aws_iam_policy" "github_deploy" {
         ]
       },
       {
-        Sid    = "CloudWatchLogs"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:DeleteLogGroup",
-          "logs:PutRetentionPolicy",
-          "logs:TagLogGroup",
-          "logs:UntagLogGroup",
-          "logs:ListTagsLogGroup",
-          "logs:ListTagsForResource",
-        ]
-        Resource = [
-          "arn:aws:logs:${var.aws_region}:${local.account_id}:log-group:/ecs/${var.project_name}*"
-        ]
-      },
-      {
-        Sid    = "ReadLogGroups"
-        Effect = "Allow"
-        Action = ["logs:DescribeLogGroups"]
-        Resource = [
-          "arn:aws:logs:${var.aws_region}:${local.account_id}:log-group::log-stream:*"
-        ]
-      },
-      {
-        # The main stack defines a CloudWatch dashboard over the metrics its
-        # resources publish (see monitoring.tf). Dashboards are a global
-        # resource, so the ARN carries no region — PutDashboard authorizes
-        # against arn:aws:cloudwatch::<account>:dashboard/<name> and a
-        # region-qualified ARN here matches nothing. ListDashboards is omitted:
-        # it takes no resource ARN, and the provider manages the dashboard with
-        # Get/Put/Delete by name.
-        Sid    = "CloudWatchDashboards"
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:PutDashboard",
-          "cloudwatch:GetDashboard",
-          "cloudwatch:DeleteDashboard",
-        ]
-        Resource = [
-          "arn:aws:cloudwatch::${local.account_id}:dashboard/${var.project_name}-*"
-        ]
-      },
-      {
-        # Alarm definitions live in the main stack (alerting.tf) and publish to
-        # the shared Buoy topic. Alarms are regional, so unlike the dashboard ARN
-        # above this one carries the region.
-        Sid    = "AlertAlarms"
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:PutMetricAlarm",
-          "cloudwatch:DescribeAlarms",
-          "cloudwatch:DeleteAlarms",
-          "cloudwatch:TagResource",
-          "cloudwatch:UntagResource",
-          "cloudwatch:ListTagsForResource",
-        ]
-        Resource = [
-          "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:alarm:${var.project_name}-*"
-        ]
-      },
-      {
-        # Strictly speaking CloudWatch publishes using the topic's own policy,
-        # not the caller's identity. Granted anyway: this account has twice
-        # rejected a call over an undocumented caller-side check.
-        Sid      = "PublishAlerts"
-        Effect   = "Allow"
-        Action   = ["sns:Publish"]
-        Resource = ["arn:aws:sns:${var.aws_region}:${local.account_id}:${var.alert_topic_name}"]
-      },
-      {
         Sid    = "ManageAppIamRoles"
         Effect = "Allow"
         Action = [
@@ -498,4 +428,96 @@ resource "aws_iam_policy" "github_deploy" {
 resource "aws_iam_role_policy_attachment" "github_deploy" {
   role       = aws_iam_role.github_deploy.name
   policy_arn = aws_iam_policy.github_deploy.arn
+}
+
+# A managed policy is capped at 6144 characters and the one above had reached
+# 6129 before monitoring was added — CreatePolicyVersion fails with
+# "Cannot exceed quota for PolicySize" rather than truncating. The log group,
+# dashboard, alarm, and alert-topic grants therefore live in a second policy
+# attached to the same role; IAM evaluates both as one permission set. New
+# observability permissions belong here, where there is room.
+resource "aws_iam_policy" "github_deploy_monitoring" {
+  name        = "${var.project_name}-github-deploy-monitoring"
+  description = "Observability permissions GitHub Actions needs to run the Atoll terraform stack"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:DeleteLogGroup",
+          "logs:PutRetentionPolicy",
+          "logs:TagLogGroup",
+          "logs:UntagLogGroup",
+          "logs:ListTagsLogGroup",
+          "logs:ListTagsForResource",
+        ]
+        Resource = [
+          "arn:aws:logs:${var.aws_region}:${local.account_id}:log-group:/ecs/${var.project_name}*"
+        ]
+      },
+      {
+        Sid    = "ReadLogGroups"
+        Effect = "Allow"
+        Action = ["logs:DescribeLogGroups"]
+        Resource = [
+          "arn:aws:logs:${var.aws_region}:${local.account_id}:log-group::log-stream:*"
+        ]
+      },
+      {
+        # The main stack defines a CloudWatch dashboard over the metrics its
+        # resources publish (see monitoring.tf). Dashboards are a global
+        # resource, so the ARN carries no region — PutDashboard authorizes
+        # against arn:aws:cloudwatch::<account>:dashboard/<name> and a
+        # region-qualified ARN here matches nothing. ListDashboards is omitted:
+        # it takes no resource ARN, and the provider manages the dashboard with
+        # Get/Put/Delete by name.
+        Sid    = "CloudWatchDashboards"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutDashboard",
+          "cloudwatch:GetDashboard",
+          "cloudwatch:DeleteDashboard",
+        ]
+        Resource = [
+          "arn:aws:cloudwatch::${local.account_id}:dashboard/${var.project_name}-*"
+        ]
+      },
+      {
+        # Alarm definitions live in the main stack (alerting.tf) and publish to
+        # the shared Buoy topic. Alarms are regional, so unlike the dashboard ARN
+        # above this one carries the region.
+        Sid    = "AlertAlarms"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricAlarm",
+          "cloudwatch:DescribeAlarms",
+          "cloudwatch:DeleteAlarms",
+          "cloudwatch:TagResource",
+          "cloudwatch:UntagResource",
+          "cloudwatch:ListTagsForResource",
+        ]
+        Resource = [
+          "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:alarm:${var.project_name}-*"
+        ]
+      },
+      {
+        # Strictly speaking CloudWatch publishes using the topic's own policy,
+        # not the caller's identity. Granted anyway: this account has twice
+        # rejected a call over an undocumented caller-side check.
+        Sid      = "PublishAlerts"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = ["arn:aws:sns:${var.aws_region}:${local.account_id}:${var.alert_topic_name}"]
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "github_deploy_monitoring" {
+  role       = aws_iam_role.github_deploy.name
+  policy_arn = aws_iam_policy.github_deploy_monitoring.arn
 }
