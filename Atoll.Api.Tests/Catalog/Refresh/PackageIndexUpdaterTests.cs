@@ -136,6 +136,57 @@ public class PackageIndexUpdaterTests
     }
 
     [Fact]
+    public async Task DownloadAndReloadAsync_CyclesAfterRecovery_CountOnlyTheCurrentStreak()
+    {
+        var handler = new ScriptedHttpMessageHandler(
+            _ => Ok("[]", "\"v1\""),
+            _ => Ok(Dump(2), "\"v2\""),
+            _ => NotModified(),
+            _ => Ok("[]", "\"v3\""),
+            _ => Ok("[]", "\"v4\""));
+        var options = Options.Create(new AtollOptions
+        {
+            DataSource = new DataSourceOptions
+            {
+                DataFileUrl = "https://example.test/packages.json.gz",
+                RefreshIntervalMinutes = 5
+            }
+        });
+        var coordinator = new PackageIndexUpdater(
+            new PackageIndexStore(),
+            new InMemoryAurMetadataRepository(),
+            new AurMetadataClient(new HandlerHttpClientFactory(handler), options, NullLogger<AurMetadataClient>.Instance),
+            options,
+            NullLogger<PackageIndexUpdater>.Instance,
+            InertReconciler());
+
+        Assert.Equal(PackageIndexRefreshOutcome.Failed, await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Equal(1, coordinator.GetStatus().ConsecutiveFailures);
+
+        Assert.Equal(PackageIndexRefreshOutcome.Refreshed, await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Equal(0, coordinator.GetStatus().ConsecutiveFailures);
+
+        // An unmodified cycle is a cycle that got through, so it keeps the streak clear.
+        Assert.Equal(PackageIndexRefreshOutcome.NotModified, await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Equal(0, coordinator.GetStatus().ConsecutiveFailures);
+
+        Assert.Equal(PackageIndexRefreshOutcome.Failed, await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+        Assert.Equal(PackageIndexRefreshOutcome.Failed, await coordinator.DownloadAndReloadAsync(CancellationToken.None));
+
+        var status = coordinator.GetStatus();
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(5, status.Attempts);
+            Assert.Equal(2, status.Successes);
+            Assert.Equal(3, status.Failures);
+            Assert.Equal(2, status.ConsecutiveFailures);
+            // Recovery must not erase the history the page flags on.
+            Assert.NotNull(status.LastFailedUtc);
+            Assert.NotNull(status.LastSucceededUtc);
+        });
+    }
+
+    [Fact]
     public async Task DownloadAndReloadAsync_SuspiciousShrink_DefersPruningUntilConfirmed()
     {
         var handler = new ScriptedHttpMessageHandler(

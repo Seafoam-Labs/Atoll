@@ -322,10 +322,12 @@ That rebuild changes the served SHAs once more.
   `Activity.Current?.Id` is captured in error logs for correlation.
 - **Metrics:** `GET /metrics` serves OpenTelemetry metrics in Prometheus exposition format. Custom `atoll_*`
   instruments cover process uptime, search request count, index sizes (by names / provides / words), AUR refresh
-  statistics (attempts, successes, failures, last timestamps), bulk-seed statistics, security-scan statistics
-  (throughput, outcomes, backlog depth), and package-refresh statistics; ASP.NET Core request metrics, outbound
-  HTTP client metrics (AUR / mirror fetches via `OpenTelemetry.Instrumentation.Http`), and built-in .NET runtime
-  metrics are included. Alerting is not configured; intended for the infrastructure layer.
+  statistics (cumulative attempts/successes/failures counters, a consecutive-failure gauge, last timestamps),
+  bulk-seed statistics, security-scan statistics (throughput, outcomes, backlog depth), and package-refresh
+  statistics; ASP.NET Core request metrics, outbound HTTP client metrics (AUR / mirror fetches via
+  `OpenTelemetry.Instrumentation.Http`), and built-in .NET runtime metrics are included. Alerting lives in the
+  infrastructure layer (`terraform/alerting.tf`); the app's `atoll_*` series are not shipped to CloudWatch, so the
+  metadata-refresh alarm derives from ECS log events rather than from these instruments.
 - **Telemetry export:** Metrics and application logs are also exported over OTLP via `UseOtlpExporter()`,
   configured through `OTEL_EXPORTER_OTLP_*` environment variables. `compose.yaml` bundles the
   `grafana/otel-lgtm` development stack (OTel Collector, Prometheus, Loki, Tempo, Grafana) with a provisioned

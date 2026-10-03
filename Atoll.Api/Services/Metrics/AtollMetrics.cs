@@ -67,6 +67,12 @@ public sealed class AtollMetrics : IDisposable
             ("successes.total", "Total successful metadata refreshes.", s => s.Successes),
             ("failures.total", "Total failed metadata refreshes.", s => s.Failures));
 
+        meter.CreateObservableGauge(
+            "atoll.refresh.consecutive_failures",
+            () => indexUpdater.GetStatus().ConsecutiveFailures,
+            "{cycle}",
+            "Consecutive metadata refresh cycles failed since the last one succeeded.");
+
         RegisterTimestamp(meter, "atoll.refresh.last_started_timestamp",
             "Unix time of the last started metadata refresh.",
             () => indexUpdater.GetStatus().LastStartedUtc);

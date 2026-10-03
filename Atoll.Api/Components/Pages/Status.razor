@@ -129,7 +129,11 @@ else
             </div>
             <div>
                 <dt>Failures</dt>
-                <dd class="font-mono @(m.IndexRefresh.Failures > 0 ? "text-sec-error" : "")">@m.IndexRefresh.Failures</dd>
+                <dd class="font-mono">@m.IndexRefresh.Failures</dd>
+            </div>
+            <div>
+                <dt>Consecutive failures</dt>
+                <dd class="font-mono @(m.IndexRefresh.ConsecutiveFailures > 0 ? "text-sec-error" : "")">@m.IndexRefresh.ConsecutiveFailures</dd>
             </div>
             <div>
                 <dt>Last started</dt>

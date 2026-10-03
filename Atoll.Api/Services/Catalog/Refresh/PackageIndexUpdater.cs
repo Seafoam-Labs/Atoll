@@ -19,6 +19,7 @@ public sealed class PackageIndexUpdater(
     private DateTimeOffset? _lastModified;
     private bool _pruneConfirmationPending;
     private long _attempts;
+    private long _consecutiveFailures;
     private long _failures;
     private DateTimeOffset? _lastFailedUtc;
     private DateTimeOffset? _lastLoadedFromCacheUtc;
@@ -40,6 +41,7 @@ public sealed class PackageIndexUpdater(
                 Interlocked.Read(ref _attempts),
                 Interlocked.Read(ref _successes),
                 Interlocked.Read(ref _failures),
+                Interlocked.Read(ref _consecutiveFailures),
                 _lastStartedUtc,
                 _lastSucceededUtc,
                 _lastFailedUtc,
@@ -143,6 +145,7 @@ public sealed class PackageIndexUpdater(
         catch (Exception ex)
         {
             Interlocked.Increment(ref _failures);
+            Interlocked.Increment(ref _consecutiveFailures);
             lock (_timeLock)
             {
                 _lastFailedUtc = DateTimeOffset.UtcNow;
@@ -156,6 +159,7 @@ public sealed class PackageIndexUpdater(
     private void RecordSuccess()
     {
         Interlocked.Increment(ref _successes);
+        Interlocked.Exchange(ref _consecutiveFailures, 0);
         lock (_timeLock)
         {
             _lastSucceededUtc = DateTimeOffset.UtcNow;
