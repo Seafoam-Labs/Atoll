@@ -450,9 +450,10 @@ resource "aws_iam_policy" "github_deploy_monitoring" {
           "logs:CreateLogGroup",
           "logs:DeleteLogGroup",
           "logs:PutRetentionPolicy",
-          "logs:TagLogGroup",
-          "logs:UntagLogGroup",
-          "logs:ListTagsLogGroup",
+          # Log group tagging goes through the ARN-keyed logs:TagResource, not
+          # the deprecated logs:TagLogGroup named after the resource.
+          "logs:TagResource",
+          "logs:UntagResource",
           "logs:ListTagsForResource",
         ]
         Resource = [
