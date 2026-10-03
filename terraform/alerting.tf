@@ -104,49 +104,6 @@ resource "aws_cloudwatch_metric_alarm" "origin_5xx" {
   }
 }
 
-# Streak alerting wants atoll_refresh_consecutive_failures, but no collector
-# ships app metrics to CloudWatch (see monitoring.tf), so alarm on the warning
-# the updater logs once per failed cycle instead. With the deployed 5-minute
-# cycle, three events inside 15 minutes are necessarily consecutive: an
-# interleaved success spreads four cycles past the window. Keep the pattern in
-# sync with the LogWarning in PackageIndexUpdater and the window with
-# Atoll__DataSource__RefreshIntervalMinutes.
-resource "aws_cloudwatch_log_metric_filter" "metadata_refresh_failures" {
-  count = local.alarms_enabled ? 1 : 0
-
-  name           = "${var.project_name}-metadata-refresh-failures"
-  log_group_name = aws_cloudwatch_log_group.ecs_logs.name
-  pattern        = "\"Unable to fetch and store new package data.\""
-
-  metric_transformation {
-    name      = "MetadataRefreshFailures"
-    namespace = "Atoll"
-    value     = "1"
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "metadata_refresh_failures" {
-  count = local.alarms_enabled ? 1 : 0
-
-  alarm_name          = "${var.project_name}-metadata-refresh-failures"
-  alarm_description   = "Three consecutive AUR metadata refresh cycles failed; the search index is going stale"
-  namespace           = "Atoll"
-  metric_name         = "MetadataRefreshFailures"
-  statistic           = "Sum"
-  period              = 900
-  evaluation_periods  = 1
-  threshold           = 3
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-
-  alarm_actions = [var.alerting_topic_arn]
-  ok_actions    = [var.alerting_topic_arn]
-
-  tags = {
-    Name = "${var.project_name}-metadata-refresh-failures"
-  }
-}
-
 # DocumentDB saturation. db.t4g.medium is a small instance, so sustained high CPU
 # usually means the refresh or seeding workload outgrew it. Fifteen minutes
 # avoids paging on the startup index build.
