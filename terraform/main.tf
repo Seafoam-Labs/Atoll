@@ -13,6 +13,16 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+
+  # Reaches every taggable resource in this stack, including ones added later.
+  # Tags alone do not reach cost reports; see docs/DEPLOYMENT.md.
+  default_tags {
+    tags = {
+      project    = var.project_name
+      stack      = "main"
+      managed-by = "terraform"
+    }
+  }
 }
 
 data "aws_vpc" "default" {
@@ -296,6 +306,10 @@ resource "aws_ecs_service" "main" {
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = 1
   launch_type     = "FARGATE"
+
+  # Fargate bills per task, and a task inherits tags only at creation, so
+  # already-running tasks stay untagged until the next rollout.
+  propagate_tags = "TASK_DEFINITION"
 
   network_configuration {
     subnets          = data.aws_subnets.default.ids

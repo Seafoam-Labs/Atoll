@@ -104,6 +104,33 @@ Anything else is either a real difference to apply or drift to investigate befor
    (tags are immutable), then `terraform apply -var image_tag=<sha>`. Updating the task definition
    makes ECS roll the service to the new image.
 
+## Resource tags
+
+`terraform/main.tf` sets `default_tags` on the provider, so every taggable resource in the main stack carries
+`project`, `stack` and `managed-by` without anyone remembering to, including resources added later. `project` is
+the key that separates this stack's cost in Cost Explorer, because the AWS account is shared with other stacks.
+
+What the configuration cannot show:
+
+- **Tags alone do not reach Cost Explorer.** Activate `project` under Billing → Cost allocation tags
+  (user-defined). Keys are case-sensitive, an activated key can be deactivated but never deleted, and it takes
+  up to 24 hours to appear plus up to 24 more to take effect, so check the spelling in `terraform/main.tf`
+  first. Backfilling past months is a separate request, one per 24 hours.
+- **Fargate cost needs `propagate_tags`** on the service, or the largest line item carries no `project` tag.
+- An apply touching the distribution blocks for about 15 minutes: `wait_for_deployment` defaults to `true`.
+  That is not a hang.
+
+Not covered:
+
+- The bootstrap stack has no `default_tags`. Applying it needs operator-side grants the CI role deliberately
+  lacks (`s3:PutBucketTagging`, `iam:TagPolicy` with `iam:ListPolicyTags`, `iam:TagOpenIDConnectProvider` with
+  `iam:ListOpenIDConnectProviderTags`, `ecr:TagResource`, `iam:TagRole`), and the GitHub OIDC provider it owns
+  is account-global plumbing that would read `project = atoll-api`.
+- The provider exposes no tags on `aws_cloudwatch_dashboard` or `aws_docdb_cluster_snapshot` and no
+  `copy_tags_to_snapshot` on `aws_docdb_cluster`, so the dashboard and automated backup storage stay invisible
+  to tag filters. The dashboard costs nothing; a manual snapshot can be tagged out of band with
+  `aws docdb add-tags-to-resource`.
+
 ## Instance sizing
 
 Memory is the binding constraint, and 2 GB is the floor. The startup index refresh holds the full
