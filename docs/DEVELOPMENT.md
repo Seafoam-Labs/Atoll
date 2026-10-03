@@ -135,10 +135,11 @@ terraform -chdir=terraform init
 terraform -chdir=terraform plan
 ```
 
-The bootstrap stack (`terraform/bootstrap/`) is one-time per account (state bucket, lock
-table, OIDC provider, deploy role); its state stays local (gitignored). The main stack's
-state lives in the remote bucket created by bootstrap. Real application deploys go through
-GitHub Actions, not a dev machine.
+The bootstrap stack (`terraform/bootstrap/`) is one-time per account (state bucket, OIDC
+provider, deploy role); its state stays local (gitignored) and can lag the account, so a
+plan that wants to create an existing resource means import it, as covered in
+[DEPLOYMENT.md](DEPLOYMENT.md). The main stack's state lives in the remote bucket created by
+bootstrap. Real application deploys go through GitHub Actions, not a dev machine.
 
 ## Generated / ignored files
 

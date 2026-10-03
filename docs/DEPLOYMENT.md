@@ -41,9 +41,15 @@ After that, pushing to `main` deploys; opening a PR from a same-repo branch runs
 
 ## Adopting or recovering existing bootstrap resources
 
-Because the bootstrap stack (`terraform/bootstrap/`) maintains local state, you must import the resources if you are
-running Terraform from a fresh machine against an already bootstrapped account, or if resources like the S3 state
-bucket, ECR repository, or GitHub OIDC provider already exist in the AWS account:
+Because the bootstrap stack (`terraform/bootstrap/`) keeps its state in a gitignored file next to the config, that
+file describes one operator's machine only. A resource a teammate applied from their own checkout is absent from
+yours, and `terraform plan` then proposes to create things the account already has. The role's second managed
+policy, `aws_iam_policy.github_deploy_monitoring` plus its attachment, is the usual case: it was applied from
+another checkout before the `_monitoring` addresses existed in `main.tf`.
+
+Import rather than apply. `iam:CreatePolicy` on a duplicate name fails with `EntityAlreadyExists`, and a failed
+apply leaves the account and state half-changed. The commands below cover all 11 managed resources in the stack,
+so they also serve a fresh checkout against an already bootstrapped account:
 
 ```bash
 cd terraform/bootstrap
@@ -66,14 +72,22 @@ terraform import aws_ecr_repository.app "${PROJECT_NAME}"
 # 3. GitHub OIDC Provider (only one allowed per AWS account)
 terraform import aws_iam_openid_connect_provider.github "arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
 
-# 4. IAM Role, Policy, and Attachment
+# 4. IAM role, both managed policies attached to it, and both attachments
 terraform import aws_iam_role.github_deploy "${PROJECT_NAME}-github-deploy"
 terraform import aws_iam_policy.github_deploy "arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-github-deploy"
+terraform import aws_iam_policy.github_deploy_monitoring "arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-github-deploy-monitoring"
 terraform import aws_iam_role_policy_attachment.github_deploy "${PROJECT_NAME}-github-deploy/arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-github-deploy"
+terraform import aws_iam_role_policy_attachment.github_deploy_monitoring "${PROJECT_NAME}-github-deploy/arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-github-deploy-monitoring"
 ```
 
-Once imported, run `terraform plan` to confirm that the local state matches the live infrastructure without unexpected
-changes.
+Import IDs take the bare name for buckets and repositories, the ARN for policies and the OIDC provider, and
+`<role_name>/<policy_arn>` for attachments. A colon or comma instead of the slash is not caught by the
+provider parser: the whole string is sent to `ListAttachedRolePolicies` as the role name, so the failure reads
+`ValidationError: The specified value for roleName is invalid` and blames the role, not the separator. The
+`id` attribute in state (`<role>-<policy arn>`) is a different format; do not copy it into an import command.
+
+Once imported, run `terraform plan` and expect `No changes. Your infrastructure matches the configuration.`
+Anything else is either a real difference to apply or drift to investigate before applying.
 
 > **Note on the Main Stack (`terraform/`):** Unlike bootstrap, the main stack stores its state remotely in the S3 bucket
 > (`terraform/backend.tf`). Once bootstrap is complete, running `terraform init` locally or via GitHub Actions
