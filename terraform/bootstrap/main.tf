@@ -15,6 +15,17 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+
+  # Reaches every taggable resource in this stack, including ones added later.
+  # Only the ECR repository and the state bucket carry cost here; the rest of
+  # the tags are ownership inventory. See docs/DEPLOYMENT.md.
+  default_tags {
+    tags = {
+      project    = var.project_name
+      stack      = "bootstrap"
+      managed-by = "terraform"
+    }
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -90,6 +101,13 @@ resource "aws_iam_openid_connect_provider" "github" {
   url             = data.tls_certificate.github.url
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.github.certificates[0].sha1_fingerprint]
+
+  # AWS allows one GitHub OIDC provider per account, so any other stack in this
+  # account has to share it: `project` would misattribute it. default_tags can be
+  # overridden per key, never excluded for a single resource.
+  tags = {
+    project = "account-shared"
+  }
 }
 
 resource "aws_iam_role" "github_deploy" {
