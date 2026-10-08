@@ -88,7 +88,7 @@ public static partial class TokenCleaning
         var lowered = segment.ToLowerInvariant();
 
         if (segment.Length < MinimumTokenLength && !AllowedShortTerms.Contains(lowered)) return null;
-        if (!segment.All(IsPrintableAscii)) return null;
+        if (segment.AsSpan().ContainsAnyExceptInRange(' ', '\x7F')) return null;
         if (StartsWithTwoDigits(segment)) return null;
         if (segment.All(char.IsAsciiDigit)) return null;
         if (IgnoredTerms.Contains(lowered)) return null;
@@ -115,12 +115,6 @@ public static partial class TokenCleaning
             if (seen.Add(part)) postings.Add(part);
 
         return [.. postings];
-    }
-
-    /// <summary>U+0020–U+007F only; drop if internationalized content is needed.</summary>
-    private static bool IsPrintableAscii(char c)
-    {
-        return (int)c is >= 32 and <= 127;
     }
 
     /// <summary>"30fps" skipped, "3d" passes. Lower the threshold if needed.</summary>

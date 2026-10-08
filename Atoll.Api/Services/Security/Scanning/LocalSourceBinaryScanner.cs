@@ -1,5 +1,6 @@
 namespace Atoll.Api.Services.Security.Scanning;
 
+using System.Buffers;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -157,28 +158,30 @@ internal static partial class LocalSourceBinaryScanner
         return new SecurityFinding(rule.Id, rule.Severity, message, path, path);
     }
 
+    // Cc minus the five whitespace controls, which pass through: [0x00..0x08] +
+    // [0x0E..0x1F] + [0x7F..0x9F]. The binary set adds U+FFFD, where UTF-8 decoding
+    // lands undecodable bytes.
+    private static readonly char[] ControlCharacterValues =
+    [
+        .. Enumerable.Range(0x00, 0x09).Select(i => (char)i),
+        .. Enumerable.Range(0x0E, 0x20 - 0x0E).Select(i => (char)i),
+        .. Enumerable.Range(0x7F, 0xA0 - 0x7F).Select(i => (char)i),
+    ];
+
+    private static readonly SearchValues<char> ControlCharacters =
+        SearchValues.Create(ControlCharacterValues);
+
+    private static readonly SearchValues<char> BinaryCharacters =
+        SearchValues.Create([.. ControlCharacterValues, '\uFFFD']);
+
     private static bool HasBinaryCharacters(string content)
     {
-        foreach (var character in content)
-        {
-            if (character is '\uFFFD' or '\0')
-                return true;
-
-            if (IsControlCharacter(character))
-                return true;
-        }
-
-        return false;
+        return content.AsSpan().ContainsAny(BinaryCharacters);
     }
 
     /// <summary>True when the content contains NUL or control characters (U+FFFD alone does not count).</summary>
     private static bool HasControlCharacters(string content)
     {
-        return content.Any(IsControlCharacter);
-    }
-
-    private static bool IsControlCharacter(char c)
-    {
-        return char.IsControl(c) && c is not ('\n' or '\r' or '\t' or '\v' or '\f');
+        return content.AsSpan().ContainsAny(ControlCharacters);
     }
 }

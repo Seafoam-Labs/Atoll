@@ -218,7 +218,7 @@ internal static class HomographScanner
 
     private static bool IsPlainAscii(string value)
     {
-        return value.All(c => c <= 0x7F && !char.IsControl(c));
+        return !value.AsSpan().ContainsAnyExceptInRange(' ', '~');
     }
 
     /// <summary>

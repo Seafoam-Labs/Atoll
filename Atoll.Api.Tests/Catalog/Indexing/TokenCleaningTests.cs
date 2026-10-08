@@ -70,6 +70,10 @@ public class TokenCleaningTests
     [InlineData("1337", null)]
     [InlineData("30fps", null)]
     [InlineData("café", null)]
+    // DEL is inside the accepted printable range
+    [InlineData("ab\u007Fc", "ab\u007Fc")]
+    // other controls reject
+    [InlineData("a\u0001bc", null)]
     public void NormalizePosting_Segment_AppliesTheIndexingFilters(string segment, string? expected)
     {
         Assert.Equal(expected, TokenCleaning.NormalizePosting(segment));

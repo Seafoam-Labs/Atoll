@@ -308,6 +308,25 @@ public class LocalSourceBinaryScannerTests
         Assert.Contains("binary data", finding.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    // C0 start of heading
+    [InlineData("\u0001")]
+    // C0 unit separator
+    [InlineData("\u001F")]
+    // DEL
+    [InlineData("\u007F")]
+    // C1 NEL
+    [InlineData("\u0085")]
+    // C1 CSI
+    [InlineData("\u009B")]
+    public void Scan_NonWhitespaceControls_MediumBinaryData(string control)
+    {
+        var finding = LocalSourceBinaryScanner.Scan("abc" + control + "def", "data.bin");
+
+        Assert.Equal(FindingSeverity.Medium, finding!.Severity);
+        Assert.Contains("binary data", finding.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Scan_PlainText_NoFinding()
     {
