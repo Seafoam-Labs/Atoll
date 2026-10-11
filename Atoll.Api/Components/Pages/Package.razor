@@ -64,7 +64,7 @@ else
             <h2 class="mt-0">Metadata</h2>
             <dl class="meta mb-0">
                 <div><dt>Package base</dt><dd class="font-mono">@meta.PackageBase</dd></div>
-                <div><dt>Maintainer</dt><dd>@(meta.Maintainer ?? "-")</dd></div>
+                <div><dt>Maintainer</dt><dd>@(string.IsNullOrEmpty(meta.Maintainer) ? "Orphan" : meta.Maintainer)</dd></div>
                 @if (meta.CoMaintainers.Count > 0)
                 {
                     <div><dt>Co-maintainers</dt><dd>@string.Join(", ", meta.CoMaintainers)</dd></div>

@@ -18,7 +18,11 @@
             {
                 <span class="badge badge-stale">out-of-date</span>
             }
-            @if (!string.IsNullOrEmpty(Meta.Maintainer))
+            @if (string.IsNullOrEmpty(Meta.Maintainer))
+            {
+                <span class="badge" title="No maintainer on the AUR">orphan</span>
+            }
+            else
             {
                 <span class="text-ink-faint">· maintained by @Meta.Maintainer</span>
             }

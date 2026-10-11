@@ -296,6 +296,20 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
+    public async Task RootPage_BadgesOrphanedPackages()
+    {
+        var body = await GetBodyAsync("/");
+
+        // shelly-bin has a maintainer in the sample corpus; portable-kit and portable-pro do not.
+        Assert.Multiple(() =>
+        {
+            Assert.Contains(">orphan</span>", body, StringComparison.Ordinal);
+            Assert.Equal(3, body.Split(">orphan</span>", StringSplitOptions.None).Length);
+            Assert.DoesNotContain("maintained by alice", body, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task PackageDetails_RendersMetadataForKnownUnseededPackage()
     {
         var response = await _client.GetAsync("/package/portable-kit", TestContext.Current.CancellationToken);
@@ -308,6 +322,22 @@ public sealed partial class UiPagesTests : IDisposable
             Assert.Contains("Metadata", body, StringComparison.Ordinal);
             Assert.Contains("not seeded yet", body, StringComparison.Ordinal);
             Assert.Contains("Seed from AUR", body, StringComparison.Ordinal);
+            Assert.Contains("<dt>Maintainer</dt><dd>Orphan</dd>", body, StringComparison.Ordinal);
+            Assert.Contains(">orphan</span>", body, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task PackageDetails_RendersMaintainerInsteadOfOrphanBadge()
+    {
+        var body = await (await _client.GetAsync("/package/shelly-bin", TestContext.Current.CancellationToken))
+            .Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("<dt>Maintainer</dt><dd>alice</dd>", body, StringComparison.Ordinal);
+            Assert.Contains("maintained by alice", body, StringComparison.Ordinal);
+            Assert.DoesNotContain(">orphan</span>", body, StringComparison.Ordinal);
         });
     }
 

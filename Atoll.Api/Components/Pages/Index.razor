@@ -193,6 +193,7 @@ else if (_result is not null)
                         @foreach (var row in _result.Rows)
                         {
                             var package = row.Package;
+                            var orphaned = string.IsNullOrEmpty(package.Maintainer);
                             <tr>
                                 <td class="w-40 sm:w-64">
                                     <div class="flex flex-col gap-1 max-w-[10rem] sm:max-w-[16rem]">
@@ -201,9 +202,13 @@ else if (_result is not null)
                                         {
                                             <div class="text-ink-faint text-[13px] truncate -mt-1" title="base: @package.PackageBase">base: @package.PackageBase</div>
                                         }
-                                        @if (!row.IsSeeded || row.Head is not null)
+                                        @if (!row.IsSeeded || row.Head is not null || orphaned)
                                         {
                                             <div class="flex flex-wrap gap-1 -ml-1">
+                                                @if (orphaned)
+                                                {
+                                                    <span class="badge" title="No maintainer on the AUR">orphan</span>
+                                                }
                                                 @if (!row.IsSeeded)
                                                 {
                                                     <span class="badge badge-pending">Index-only</span>
