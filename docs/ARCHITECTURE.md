@@ -112,7 +112,7 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   no I/O.
 - **Package CRUD:** `PackageService` delegates to `MongoPackageRepository`; seeding is orchestrated by
   `DirectPackageSeeder` (`Services/Sync/Direct`), which fetches the AUR Git tree to a temp directory, reads the
-  files, and persists them to MongoDB via `IPackageService.SeedFilesAsync`.
+  files as raw bytes, and persists them to MongoDB via `IPackageService.SeedFilesAsync`.
 - **AUR RPC v5:** `AurRpcService` serves legacy GET or form-encoded POST requests at `/rpc` and path-style `/rpc/v5/…`
   requests from the in-memory catalog. Responses expose Atoll's standard `/{pkgbase}.git` aliases as `URLPath`.
 - **Git Smart HTTP:** `GitTransferService` asks `IGitRepositoryCache` for a current bare repository, then pipes
@@ -129,9 +129,14 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
 - **MongoDB (authoritative):**
   - `packages` — Root package documents. Stores metadata, embedded revision headers (ID, author, timestamp, message),
     `headRevisionId` pointer, and refresh sync watermarks (`lastSyncedUpstreamHead`, `lastSyncAttemptAt`,
-    `lastSyncSucceededAt`, `lastSyncError`). Indexed on `packageName` at startup.
+    `lastSyncSucceededAt`, `lastSyncError`). `schemaVersion` is 3, informational on this collection: revision content
+    representation is chosen by field presence in `package-revisions`. Indexed on `packageName` at startup.
   - `package-revisions` — Normalized snapshot file content (one document per retained revision, keyed by
-    `{packageName}:{revisionId}`). History length does not bloat root package documents; snapshots are capped by
+    `{packageName}:{revisionId}`). Each file is stored as raw bytes (`contentBytes`, BSON binary) with its byte
+    size and SHA-256; `schemaVersion` is 3. Documents written before schema 3 may still carry the legacy UTF-8
+    string `content`, which is dual-read and re-encoded to the exact bytes that were hashed when written. New
+    writes never produce `content`, and readers pick the representation by field presence, not by version, so no
+    migration is required. History length does not bloat root package documents; snapshots are capped by
     MongoDB's 16 MiB BSON limit.
   - `package-security-scans` — Security state and findings per revision (keyed by `{packageName}:{revisionId}`).
     Indexed on `(status, requiredPolicyVersion, leaseUntil)` for the policy-aware scanner work queue,
@@ -152,12 +157,20 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   - `MaxRevisions` (default 10) caps retained revision history per package. Append-time trimming only
     bounds packages that change, so a startup sweep (`PackageRevisionCompactionWorker`) trims stored
     history down to a lowered cap.
-  - `MaxFileBytes` (default 5 MB) is enforced on UTF-8 content bytes; each file stores its SHA-256 hash.
-  - Revision IDs hash the package name plus ordinally sorted file names and hashes, independent of input order.
+  - `MaxFileBytes` (default 5 MB) is enforced on the raw byte length of each file; each file stores its SHA-256
+    over those bytes. The rule applies to invalid UTF-8 and BOM-prefixed content exactly as it does to text.
+  - Revision IDs hash the package name plus ordinally sorted file names and per-file hashes (over raw bytes),
+    independent of input order. Because revision IDs are content hashes, existing documents are never rewritten in
+    place.
   - The 16 MiB BSON limit applies per revision document. A conservative estimate avoids routine serialization; documents
     near the limit are measured exactly. Oversized packages are recorded in `seed-exclusions`.
   - Disk growth for bare repos is unbounded (~116k bare repos if full AUR is seeded). Use `Seed:Mode=Off` or monitor
     storage/inodes.
+- **Schema rollout and rollback:** Schema 3 is forward-only: pre-fix binaries have no mapping for `contentBytes`,
+  so stop the old instance before the first new write and take a database backup. `git-v5` and security policy 5
+  take effect on startup; policy 5 requeues every older scan, and content/Git stay gated until the worker catches
+  up (`atoll_securityscan_pending`). Rolling back requires restoring the pre-deploy database or deleting/reseeding
+  packages written by the new code; do not run pre-fix and post-fix binaries concurrently against one database.
 
 ## API
 
@@ -175,6 +188,13 @@ unhandled exceptions to RFC 9457 `ProblemDetails`):
   `ProducesJsonOneOf` supplies this metadata because ASP.NET Core 10 otherwise retains only one response type per
   status code and content type. Revisit the helper when upgrading to .NET 11, which supports this composition
   natively.
+- **Package content shape:** `GET /v1/packages/{name}` and `GET /v1/packages/{name}/versions/{sha}` return
+  `PackageFiles`. `files` maps every valid-UTF-8 file to text; `binaryFiles` maps every invalid-UTF-8 file to base64
+  and is omitted when empty, so text-only responses are unchanged. A file is text exactly when its whole byte array
+  is valid UTF-8, the condition
+  under which a JSON string round-trips losslessly; clients that need the full tree must merge both maps. Every
+  legacy content string is valid UTF-8 by construction, so a corrupt legacy binary stays in `files` until the
+  package is re-ingested.
 
 ### Search parameters
 
@@ -248,9 +268,9 @@ external UI clients:
 | GET | `/rpc/v5/{operation}/…` | Path-style aurweb RPC v5 endpoint (version-neutral) |
 | GET | `/v1/packages?page=…&limit=…&sortBy=…&order=…` | Paged seeded-package listing for UI clients (default 50, max 200 per page; `sortBy` one of `name`\|`votes`\|`popularity`\|`version` with `order` `asc`\|`desc`, defaulting to `asc`; rows carry nullable catalog fields `description`/`version`/`numVotes`/`popularity`/`outOfDate`/`url`/`maintainer`/`packageBase`/`firstSubmitted`/`lastModified`/`license`/`depends`/`makeDepends`/`optDepends`/`provides` joined from the live index) |
 | POST | `/v1/packages/{name}/seed` | Clone from AUR and persist (409 if exists). `403` when `Atoll:Mutations:Enabled=false` |
-| GET | `/v1/packages/{name}` | Get head revision files |
+| GET | `/v1/packages/{name}` | Get head revision files (`files` text map plus optional base64 `binaryFiles`) |
 | GET | `/v1/packages/{name}/versions` | Get revision history |
-| GET | `/v1/packages/{name}/versions/{sha}` | Get specific revision files |
+| GET | `/v1/packages/{name}/versions/{sha}` | Get specific revision files (`files` text map plus optional base64 `binaryFiles`) |
 | GET | `/v1/packages/{name}/tarball` | Download a revision snapshot as `.tar.gz` (`?rev={sha}`, defaults to head; ungated human review surface, see the SECURITY.md gating section) |
 | DELETE | `/v1/packages/{name}` | Delete package data, security scans, and materialized Git repo. `403` when `Atoll:Mutations:Enabled=false` |
 | GET | `/v1/packages/{name}/security` | Get per-revision security status (`?revision={sha}` for one revision) |
@@ -289,6 +309,7 @@ configuration, and limitations are documented in [Package security scanning](SEC
 | --- | --- | --- | --- |
 | In-memory search index (no Elasticsearch) | Fast reads (< 10 ms); full AUR metadata fits easily in RAM (~100 MB). | Must rebuild on restart; no typo tolerance (deterministic tier ranking only). | Active |
 | Normalized `package-revisions` storage | Avoids 16 MiB document growth as revisions accumulate; keeps `packages` documents lean. | Content reads take an extra indexed query; two-document writes on append without distributed transactions. | Active |
+| Raw-byte package content | One authoritative `byte[]` representation from ingestion through storage and serving removes the lossy decode/re-encode round trip; strict UTF-8 applies only at REST/UI/diff text edges, and the scanner gets a separate BOM-aware scan-only view. | Legacy revisions keep a string `content` until re-ingested (dual-read shim); binary REST responses grow ~33% from base64; storage is forward-only at schema 3. | Active |
 | Subprocess execution for `git upload-pack` | Reuses complete and standard Git smart HTTP protocol implementation. | Requires `git` binary in container; small process-spawn overhead per Git fetch. | Active |
 | Atomic snapshot swap in `PackageIndexStore` | Lock-free, zero-contention reads; consistent view per query. | Full index rebuild on refresh; temporary 2× peak memory during rebuild. | Active |
 | Name-keyed delta sync of `aur-metadata` | The dump moves ~4-185 packages per 5-minute cycle, so diffing against the in-memory index and upserting only the difference cut ~240k write operations per cycle to O(hundreds) and removed the collection's secondary index. | Loses the atomic pointer swap: a boot landing mid-write reads a mixed collection, which converges on the next cycle. Migration deploys boot with an empty index until the first full sync lands. | Active |
@@ -309,7 +330,11 @@ older local caches rebuild lazily and receive new synthesized SHAs once. The `gi
 store and feeds only the marker string, so that rebuild leaves the served SHAs untouched. The `git-v4` marker pins
 commit timestamps to UTC: a bare unix timestamp made git stamp the host's local timezone offset into the commit
 object, so hosts in different timezones (or across a DST switch) synthesized different SHAs for the same history.
-That rebuild changes the served SHAs once more.
+That rebuild changes the served SHAs once more. The `git-v5` marker records raw-byte materialization: blobs are
+written from the stored bytes instead of a re-encoded string. It forces a one-time lazy rebuild of every bare repo;
+an unchanged stored revision produces the same bytes and synthesized history, so unaffected packages keep their
+served SHAs, while a package whose bytes are corrected by re-ingestion changes SHAs only when the corrected
+revision becomes the head.
 
 ## Operations
 
@@ -343,6 +368,9 @@ That rebuild changes the served SHAs once more.
   errored, and unscanned historical revisions while security is enabled.
 - Evaluate content-addressed deduplication or GridFS/chunked storage for revision snapshots larger than MongoDB's 16 MiB
   document limit.
+- Remove the legacy `content` dual-read once no `package-revisions` document carries a string `content` field (query
+  `files` with `$objectToArray` and `$type`). Do not rewrite documents in place to reach zero: revision IDs are
+  content hashes, so shim removal needs a deliberate cleanup or a full resync.
 - `PackageCatalogService` substring queries and seeded/security filters still walk the full sorted view on every call
   (~10-25 ms at ~85k packages, even for a single-hit query) - a real substring/prefix index would be needed to remove
   this floor. The per-row seeded/head probe is a frozen-collection lookup, so the walk itself is what remains.

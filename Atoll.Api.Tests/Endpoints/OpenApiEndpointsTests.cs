@@ -106,11 +106,18 @@ public sealed class OpenApiEndpointsTests : IDisposable
             var packageFilesRequired = packageFilesSchema.GetProperty("required")
                 .EnumerateArray()
                 .Select(property => property.GetString())
-                .ToHashSet(StringComparer.Ordinal);
-            Assert.Superset(new HashSet<string?>(StringComparer.Ordinal) { "files" }, packageFilesRequired);
-            Assert.DoesNotContain("binaryFiles", packageFilesRequired);
-            // byte[] serializes as a base64 string; the generator represents it as string/byte.
-            Assert.Contains("byte", packageFilesProperties.GetProperty("binaryFiles").GetRawText(), StringComparison.Ordinal);
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            Assert.Equal(["files"], packageFilesRequired);
+            // binaryFiles is additive: present only when a file is invalid UTF-8, and byte[] serializes
+            // as a base64 string (the generator represents it as string/byte).
+            var binaryFilesSchema = packageFilesProperties.GetProperty("binaryFiles");
+            var binaryFilesTypes = SchemaTypes(binaryFilesSchema);
+            Assert.Contains("object", binaryFilesTypes, StringComparer.Ordinal);
+            Assert.Contains("null", binaryFilesTypes, StringComparer.Ordinal);
+            var binaryFileValueSchema = binaryFilesSchema.GetProperty("additionalProperties");
+            Assert.Equal("string", Assert.Single(SchemaTypes(binaryFileValueSchema)), StringComparer.Ordinal);
+            Assert.Equal("byte", binaryFileValueSchema.GetProperty("format").GetString());
             Assert.True(schemas.TryGetProperty("PackageVersion", out _));
             Assert.True(schemas.TryGetProperty("PackageIndexResponse", out _));
             Assert.True(schemas.TryGetProperty("PackageIndexEntry", out var indexEntrySchema));
@@ -129,6 +136,15 @@ public sealed class OpenApiEndpointsTests : IDisposable
             Assert.True(schemas.TryGetProperty("PackageSecurityHistoryResponse", out _));
             Assert.True(schemas.TryGetProperty("PackageSecurityRevisionResponse", out _));
         });
+    }
+
+    // Nullable schemas carry type: ["object", "null"]; non-nullable ones carry a single string.
+    private static string[] SchemaTypes(JsonElement schema)
+    {
+        var type = schema.GetProperty("type");
+        return type.ValueKind == JsonValueKind.Array
+            ? [.. type.EnumerateArray().Select(value => value.GetString() ?? string.Empty)]
+            : [type.GetString() ?? string.Empty];
     }
 
     private static JsonElement JsonSchema(JsonElement responses, string statusCode)

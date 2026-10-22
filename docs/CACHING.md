@@ -32,7 +32,7 @@ a request. The two warms differ on purpose:
 | 3 | Catalog sorted views | `PackageCatalogService._sortedViews` (UI) | `AurPackageMetadata[]` pre-sorted for each catalog sort, keyed on the index instance | Rebuilt per index generation; primed after each swap by the worker's warm; dropped structurally when the replaced `SearchIndexData` becomes unreachable | Same as #1; the default sorts are rebuilt off the request path by the warm |
 | 4 | Catalog seeded snapshot | `PackageCatalogService` (UI) | `FrozenSet` of seeded names plus a `FrozenDictionary` of head scan statuses | HybridCache key `atoll.ui.seeded-snapshot` under the `catalog` tag only: seed/delete drop `catalog`; head-status changes (a queued rescan, a completed or errored head scan, a refresh-promoted head) drop nothing and heal through the TTL; the worker's warm fills it without re-arming, so the TTL keeps running | Immediate for seeds and deletes; up to one TTL (600 s) of stale badge display for any head-status change, accepted because access gating reads live statuses; a build racing a tag removal serves its pre-write value for up to one TTL |
 | 5 | Status dashboard model | `StatusDashboardService` (UI) | One assembled `StatusDashboardModel` | HybridCache key `atoll.ui.status-dashboard`, no tags, `Atoll:Caching:DashboardTtlSeconds` TTL, single-flight | One TTL |
-| 6 | Git bare repos | `GitRepositoryCache` under `Atoll:Git:RepositoriesPath` (`data/repos/`) | Materialized cloneable history per package | The `.atoll-head` marker is recomputed from MongoDB on every Git request; a mismatch rebuilds lazily under a per-path lock | None (checked per request); changes cost a rebuild inside request latency |
+| 6 | Git bare repos | `GitRepositoryCache` under `Atoll:Git:RepositoriesPath` (`data/repos/`) | Materialized cloneable history per package; blobs are the stored raw bytes | The `.atoll-head` marker (prefixed with the materialization version, currently `git-v5`) is recomputed from MongoDB on every Git request; a mismatch rebuilds lazily under a per-path lock. A version bump invalidates every repository once; the rebuild reads stored bytes, so an unchanged revision re-materializes to the same objects and a re-ingested revision changes only when the corrected head is materialized | None (checked per request); changes cost a rebuild inside request latency |
 | 7 | AUR mirror | `AurMirror` under `Atoll:Seed:Bulk:CachePath` / `Atoll:Refresh:CachePath` (`data/aur-mirror/`) | Bare shallow mirror, refs under `refs/atoll/<pkgbase>` | Shared by bulk seeding and refresh; a pkgbase is fetched again when its upstream SHA moves or the `MaxStalenessHours` (24 h) sweep fires | Refresh cadence, up to 24 h |
 | 8 | AUR metadata dump copy | Mongo `aur-metadata` collection | Persisted dump for warm starts and `304` cycles | Delta-synced: only the packages whose content changed are written | Same as #1 |
 | 9 | HTTP validators | `PackageIndexUpdater._etag` / `_lastModified` | Conditional-request headers for the dump | Updated per full download; deliberately withheld while a suspicious shrink awaits confirmation | Refresh interval |
@@ -96,9 +96,10 @@ Ranked by how likely you are to notice.
    upstream until the refresh worker runs (`Atoll:Refresh:Enabled`).
 4. **Git bare repos (correctness-safe, latency-exposed).** The marker is recomputed per request, so a rescan that
    flips Verified to Flagged, a revision trim, or a security toggle triggers a lazy rebuild on the next clone or
-   advertise. Caveats: missing revision content leaves the marker unwritten, so every request re-attempts
-   materialization; the marker lives inside the repo directory, so hand edits to `data/repos/` are trusted as up to
-   date.
+   advertise. The marker also carries the `git-v5` materialization version, so the first Git request after deploy
+   rebuilds a repository even when its head and statuses are unchanged; unaffected packages keep the same objects.
+   Caveats: missing revision content leaves the marker unwritten, so every request re-attempts materialization; the
+   marker lives inside the repo directory, so hand edits to `data/repos/` are trusted as up to date.
 5. **Smaller windows.** The dashboard's 5 s TTL covers already-approximate sources (the page stamps its assembly
    time). After a restart the index comes from the `aur-metadata` copy, so search reflects the last successful
    download, not startup time. Worker counters reset on restart; `/metrics` gauges start from zero.

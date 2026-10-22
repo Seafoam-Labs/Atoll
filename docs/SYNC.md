@@ -6,6 +6,10 @@ This document describes how Atoll gets package content from AUR into MongoDB and
 - **Periodic refresh** re-syncs already-seeded packages when upstream changes.
 - **Upstream reconciliation** removes seeded package names that disappear from a successfully parsed full AUR snapshot.
 
+Both content paths are byte-preserving: they copy the upstream tree exactly, including invalid UTF-8, BOMs, UTF-16
+files, and binary assets. Text is decoded only at text-facing REST/UI edges (strict UTF-8) and in the scanner's
+scan-only view; storage, revision hashes, Git, and tarballs use the raw bytes.
+
 It is intended for maintainers changing a seed or refresh worker or their shared Git transport, and for operators
 diagnosing a failed sync. System context lives in [Architecture Overview](ARCHITECTURE.md); the security gating applied
 to refreshed revisions is documented in [Package security scanning](SECURITY.md).
@@ -34,6 +38,22 @@ pkgname:  libfoo ──┘
 
 Both bulk seeding and refresh resolve pkgname to pkgbase before discovery and fetching, then fan the fetched tree back
 out to each member pkgname individually.
+
+## Byte-preserving ingestion
+
+Both seed paths copy the upstream tree without decoding:
+
+- **Direct:** `AurGitPackageSource` clones `aur.archlinux.org/{pkgbase}.git` into a unique temporary checkout and reads
+  each file with `File.ReadAllBytesAsync`; `.git` paths are excluded.
+- **Bulk and refresh:** `AurMirror.ReadFilesAsync` extracts `refs/atoll/{pkgbase}` with `git archive` and copies each
+  regular tar entry's `DataStream` into a byte array. It no longer uses `StreamReader`, so UTF-8 BOMs are preserved,
+  UTF-16/32 files are not decoded, and invalid UTF-8 is not replaced.
+
+`PackageSnapshotFactory` measures the byte-array length, hashes the bytes, and derives the revision ID from those
+hashes. `package-revisions` stores the bytes as BSON binary `contentBytes` and stamps `schemaVersion: 3`;
+`MaxFileBytes` applies to the raw byte length. Legacy documents with a string `content` are dual-read and re-encoded
+to the bytes that were hashed, and new writes never produce the string field. Because both paths agree, a BOM-marked
+or UTF-16 file now produces the same revision ID whether it was seeded directly or from the mirror.
 
 ## Metadata polling and authoritative reconciliation
 
@@ -126,9 +146,9 @@ finding and seeding missing packages. The Direct and Bulk configuration sections
 1. Reads the current metadata index and waits 15 seconds if it is empty.
 2. Lists packages already in the package repository and selects missing pkgnames.
 3. Runs `DirectPackageSeeder` once per missing pkgname: it rejects packages already present, maps the pkgname to
-   its pkgbase via the index, fetches `aur.archlinux.org/{pkgbase}.git` through `AurGitPackageSource`, and delegates
-   persistence to `IPackageService.SeedFilesAsync`. The source uses a unique temporary checkout, excludes `.git`, and
-   removes the checkout after success, failure, or cancellation.
+   its pkgbase via the index, fetches `aur.archlinux.org/{pkgbase}.git` through `AurGitPackageSource`, reads the tree
+   as raw bytes, and delegates persistence to `IPackageService.SeedFilesAsync`. The source uses a unique temporary
+   checkout, excludes `.git`, and removes the checkout after success, failure, or cancellation.
 4. Waits for `Atoll:Seed:Direct:SeedDelayMs` after every attempt, including a failed attempt or a conflict caused by
    another request seeding the package first.
 5. Checks again after one minute when all indexed packages are present, limiting the delay after a metadata refresh.
@@ -167,8 +187,9 @@ For each seed cycle, `PackageBulkSeedWorker`:
 4. **Mirror Intersection:** Queries `git ls-remote --heads` on the mirror and keeps only advertised branches.
 5. **Pipelined Batch Fetching:** Fetches target pkgbase branches into a persistent bare cache (`--depth=1`). Fetching
    runs ahead as a pipeline stage while previous batches are extracted and persisted.
-6. **Archive & Seeding:** Extracts each pkgbase tree via `git archive` and invokes `SeedFilesAsync` concurrently across
-   members (`Parallelism`), assigning each split pkgname its deterministic revision snapshot in `package-revisions`.
+6. **Archive & Seeding:** Extracts each pkgbase tree via `git archive` into raw byte arrays and invokes
+   `SeedFilesAsync` concurrently across members (`Parallelism`), assigning each split pkgname its deterministic
+   revision snapshot in `package-revisions`.
 
 This replaces one network clone per pkgname with one batched request per group of pkgbases. It retains the existing seed
 validation and persistence path. In particular, each split pkgname is still seeded separately and receives its normal
@@ -241,7 +262,8 @@ Refresh runs every minute (backing off on error). Each cycle executes the follow
    Candidates are ordered least-recently-synced first.
 5. **Selective Batch Fetch:**
    - Pkgbases whose remote SHA has not moved (staleness sweep only) skip fetching entirely; their watermarks advance
-     directly.
+     directly. They are **not re-read**, so a fixed ingestion path or a later decoder change does not heal existing
+     content on its own; see [Repairing legacy content corruption](#repairing-legacy-content-corruption).
    - Pkgbases with actual SHA movement are batch-fetched into the mirror cache (bounded by `MaxPackagesPerRun`).
 6. **Archive & Revision Append:**
    - Extracts the pkgbase tree via `git archive`.
@@ -264,6 +286,86 @@ If a revision snapshot exceeds MongoDB's 16 MiB document limit (checked before i
 deterministically; the worker records the pkgbase in `seed-exclusions` (reason `mongo-document-too-large`) and skips
 it — together with all other excluded pkgbases — in every subsequent cycle instead of re-fetching it forever. Clearing
 the exclusion re-enables refresh for that pkgbase.
+
+### Repairing legacy content corruption
+
+Revisions stored before schema 3 were decoded to a string during ingestion. A non-UTF-8 source file (a PNG, an ELF, a
+legacy-encoded patch) could therefore be stored with `U+FFFD` expansions, and `StreamReader` BOM detection could strip
+a UTF-8 BOM or decode UTF-16/32. New writes are byte-exact, and existing revision documents are never rewritten in
+place: the revision ID is a content hash and security scans are keyed by it. Old revisions stay corrupt until they are
+re-ingested and eventually age out of `MaxRevisions`.
+
+Refresh alone does not repair them. The worker splits candidates into `needsFetch` and `noFetch`; a package whose
+upstream head equals `lastSyncedUpstreamHead` goes to `noFetch` even when the staleness sweep selected it, so the
+worker advances the watermark without re-reading the tree.
+
+**Force a re-read.** With `Atoll:Refresh:Enabled=true`, clear the watermark for the affected packages, where
+`candidateNames` is the name list from the query below:
+
+```javascript
+db.packages.updateMany(
+  { packageName: { $in: candidateNames } },
+  { $unset: { lastSyncedUpstreamHead: "" } }
+);
+```
+
+The next refresh cycle treats each package as a candidate, fetches its ref, reads the current tree with the fixed
+ingestion, and appends a corrected revision when the revision ID differs. The old corrupt revision remains in history
+until `MaxRevisions` prunes it.
+
+To find candidates, list revisions that still carry a legacy string `content` with a `U+FFFD`:
+
+```javascript
+db["package-revisions"].aggregate([
+  { $match: { $expr: { $anyElementTrue: { $map: {
+      input: { $objectToArray: { $ifNull: ["$files", {}] } },
+      as: "f",
+      in: { $cond: [
+        { $eq: [{ $type: "$$f.v.content" }, "string"] },
+        { $regexMatch: { input: "$$f.v.content", regex: "\\x{FFFD}" } },
+        false
+      ] }
+  } } } } },
+  { $group: { _id: "$packageName" } },
+  { $sort: { _id: 1 } }
+]);
+```
+
+New documents have `contentBytes` and no `content`; the `$type` guard keeps them out. The query lists a package if
+**any retained revision** matches, so a repaired package stays listed until its old revision is pruned. Verify the
+head against a fresh upstream clone before deleting anything; a legitimate `U+FFFD` in a text file is a false
+positive.
+
+`U+FFFD` cannot identify BOM-stripped or UTF-16 content because those decodes leave no replacement character. A
+complete repair therefore needs a full re-read. Take a database backup first; the pass is bulk work:
+
+```javascript
+db.packages.updateMany({}, { $unset: { lastSyncedUpstreamHead: "" } });
+```
+
+It is bounded by `MaxPackagesPerRun` (default 10,000) per cycle, so a ~122,000-package corpus takes about 13 cycles.
+A corrected file that now exceeds `MaxFileBytes` or the 16 MiB document limit fails the append and keeps the old
+revision; a pkgbase recorded in `seed-exclusions` is skipped entirely. Packages whose upstream branch disappeared are
+not refresh candidates; use upstream reconciliation instead.
+
+Corrected heads are gated like any new revision: REST content and Git return `403` while the revision is `Pending` or
+`Flagged`, and a full clone can still include a retained corrupt ancestor. The ungated tarball and Files tab remain
+available for review, and `atoll_securityscan_pending` shows the backlog.
+
+**Clean history.** After confirming the mismatch, delete and reseed instead (requires
+`Atoll:Mutations:Enabled=true`):
+
+```bash
+curl -fsS -X DELETE "$ATOLL/v1/packages/$name"
+curl -fsS -X POST "$ATOLL/v1/packages/$name/seed"
+```
+
+The DELETE path removes package/revision documents, scan records, and the bare repo; the reseed uses the
+byte-preserving direct path and starts `Pending`. This discards history, so do not use it for a false positive.
+
+After repair, clone the package and compare the file hash with upstream or the PKGBUILD. For `burpsuite`,
+`icon64.png` must be `d31232a7dbdab9d5723f12aa25c52d13fd46ef2e8837a85fb9a08c3a7f151541`; also confirm that a text-only
+package's revision ID did not change.
 
 ### Revision retention compaction
 

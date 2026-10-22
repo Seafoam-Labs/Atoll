@@ -9,6 +9,8 @@ history, exposes searchable package metadata, and serves package content over Gi
 
 - AUR metadata indexing and fast in-memory search
 - Package seeding, version history, file browsing, and revision diffs
+- Byte-exact package content: raw bytes are stored, hashed, and served over Git and tarballs; UTF-8 decoding is
+  limited to text-facing REST/UI surfaces and the scanner's pattern-matching view
 - Git-compatible clone/fetch access for seeded packages
 - AUR RPC v5 and standard clone URLs for yay/paru compatibility
 - Versioned REST API under `/v1/…` (URL-segment versioning; RPC and Git Smart HTTP stay protocol-fixed)

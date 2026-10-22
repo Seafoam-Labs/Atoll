@@ -48,6 +48,12 @@ Accept: application/json
 GET {{baseUrl}}/v1/packages/shelly
 Accept: application/json
 
+### Get Specific Package (binary files)
+# `files` carries every valid-UTF-8 file as text; invalid UTF-8 moves to the optional `binaryFiles`
+# map as base64 (the key is omitted entirely when the revision is text-only).
+GET {{baseUrl}}/v1/packages/burpsuite
+Accept: application/json
+
 ### Get Package Versions
 GET {{baseUrl}}/v1/packages/shelly/versions
 Accept: application/json

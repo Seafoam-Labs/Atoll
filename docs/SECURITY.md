@@ -91,11 +91,21 @@ content documents stay free of scanner metadata.
 ## Scanner
 
 `PkgBuildSecurityScanner` is deterministic and side-effect free: same input, same findings, no code executed. Every file
-is first checked for binary content (whole-file, regardless of extension): recognized executable formats (ELF, PE/`MZ`)
-are `Critical`, any other binary content — archives, inert media, certificate/signature files, undecodable text — is a
-non-blocking `Medium` (`local-binary`), as is an ELF file named as a shared library (`*.so`, `*.so.N`). Script-like
-files (the `PKGBUILD` plus `.sh`, `.bash`, `.install`, `.hook`, `.py`, `.pl`, `.rb`, `.service`, `.csh`, `.zsh`) are
-then scanned line by line; other text files are ignored.
+is checked whole, regardless of extension, from two views of the same bytes: the original bytes for magic matching and
+a scan-only text view for the shell/PKGBUILD rules and control-character classification. Recognized executable formats
+(ELF, and PE/`MZ` in binary content) are `Critical`; archives, inert media, certificate/signature files, and undecodable
+or binary text are a non-blocking `Medium` (`local-binary`), as is an ELF file named as a shared library (`*.so`,
+`*.so.N`). Archive and inert-media magic is consulted only after the text view classifies the file as binary, so an
+all-ASCII file that begins with `GIF89a`, `BM`, `%PDF`, or `ustar` stays text; ELF is recognized from its raw signature
+regardless of the text view.
+
+The scan-only text view comes from `PackageText.DecodeForScanning`, which deliberately matches the old `StreamReader`
+ingestion semantics: UTF-8 with BOM detection (a leading UTF-8 BOM is stripped), UTF-16/32 decoding when a BOM marks the
+encoding, and replacement fallback (`U+FFFD`) for invalid UTF-8. That view exists only for pattern matching; storage,
+hashing, Git, tarballs, and REST/UI text use the raw bytes or a strict UTF-8 decode. It preserves shell-rule coverage
+for legacy-encoded PKGBUILDs while removing the lossy decode from the serving path. Script-like files (the `PKGBUILD`
+plus `.sh`, `.bash`, `.install`, `.hook`, `.py`, `.pl`, `.rb`, `.service`, `.csh`, `.zsh`) are then scanned line by
+line; other text files are ignored.
 
 Each script line is processed as follows:
 
@@ -135,7 +145,7 @@ as ordinary lines.
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
 | `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking). |
 | `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
-| `local-binary` | Critical (Medium for non-executable content and shared libraries) | A source file containing binary bytes; only recognized executable formats (ELF, PE/`MZ`) block, and an ELF named as a shared library (`*.so`, `*.so.N`) is packaged payload like an archive's contents. |
+| `local-binary` | Critical (Medium for non-executable content and shared libraries) | A source file whose raw bytes start with executable magic (ELF, or PE/`MZ` in binary content), or whose scan-only text view contains control characters or U+FFFD. Only recognized executable formats block, and an ELF named as a shared library (`*.so`, `*.so.N`) is packaged payload like an archive's contents. |
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after),
 so `sudo` inside `pseudo` or `sudoku` is not flagged. A word must also be in **command position** — see
@@ -251,8 +261,9 @@ instance after restart) reclaims it after 5 minutes.
 ### Policy versioning and startup
 
 Persisted results are stamped with a monotonically increasing integer policy version
-(`PkgBuildSecurityScanner.CurrentPolicyVersion`, stored as `policyVersion`). Increment it whenever a scanner change
-requires existing verdicts to be recomputed; versions must never be reused or decremented.
+(`PkgBuildSecurityScanner.CurrentPolicyVersion`, stored as `policyVersion`). The current version is 5: raw-byte magic
+detection plus the scan-only text view. Increment it whenever a rule, the raw magic set, or the scan-only decoding
+semantics change requires existing verdicts to be recomputed; versions must never be reused or decremented.
 
 Every pending document additionally carries `requiredPolicyVersion` — the minimum scanner policy allowed to claim
 and persist it. It is retained after completion and only ever raised (`$max` semantics in both enqueue and
@@ -377,9 +388,11 @@ These checks need only `curl` (or a Git client) and read access to the running A
 
 - **Static analysis only.** Shell and obfuscation outside the matched patterns are not detected, and binary contents
   cannot be inspected for malicious behavior. Do not treat `Verified` as a guarantee.
-- **Binary detection runs on UTF-8-decoded strings.** Invalid byte sequences collapse to U+FFFD before inspection.
-  This catches ELF/NUL/control content, but magic matching is weaker than raw-byte detection (which would require
-  the seed paths to surface raw bytes).
+- **Binary detection combines raw magic with a decoded text view.** Executable (ELF, and PE/`MZ` in binary content),
+  archive, and inert media formats are recognized from the original bytes. Everything else is classified from the
+  scan-only text view: control characters or U+FFFD mark it binary, so an unknown binary format with neither (and no
+  recognized magic) can pass the binary check. Certificate and signature files are recognized by extension, not
+  verified.
 - **Heredoc prose can still block.** Only the non-blocking expansion rules are suppressed in quoted-delimiter bodies;
   `sudo`/redirect-looking prose can still yield blocking findings. Extending suppression requires safely handling
   pipe-to-installer patterns first.
