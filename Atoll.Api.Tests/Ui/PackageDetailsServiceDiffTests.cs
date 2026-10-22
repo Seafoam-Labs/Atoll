@@ -1,4 +1,3 @@
-using System.Text;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
@@ -173,6 +172,53 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         // Binary wins over "added", so the size delta is what preserves the direction of the change.
         Assert.Equal(0, binary.OldSize);
         Assert.Equal(binaryContent.Length, binary.NewSize);
+    }
+
+    [Fact]
+    public async Task GetDiffAsync_InvalidUtf8Side_ClassifiedBinaryWithoutCallingDiffer()
+    {
+        // A real PNG signature followed by invalid UTF-8; the whole array fails the strict decode.
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0xFF];
+
+        await SeedAsync("rev-1", Files("pkgname=old\n"));
+        await AppendAsync("rev-2",
+            new Dictionary<string, PackageFile>(StringComparer.Ordinal)
+            {
+                ["PKGBUILD"] = File("pkgname=new\n"),
+                ["icon64.png"] = File(png)
+            });
+
+        var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(diff);
+        var binary = Assert.Single(diff!.Files, f => string.Equals(f.Path, "icon64.png", StringComparison.Ordinal));
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(DiffChangeKind.Binary, binary.Kind);
+            Assert.Null(binary.UnifiedDiff);
+            Assert.Equal(png.Length, binary.NewSize);
+            Assert.DoesNotContain(_differ.Calls,
+                entry => string.Equals(entry.Path, "icon64.png", StringComparison.Ordinal));
+        });
+    }
+
+    [Fact]
+    public async Task GetDiffAsync_BinaryToTextChange_ClassifiedBinary()
+    {
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0xFF];
+
+        await SeedAsync("rev-1",
+            new Dictionary<string, PackageFile>(StringComparer.Ordinal) { ["icon64.png"] = File(png) });
+        // Present on both sides but only one decodes as text: still binary, so the differ is not called.
+        await AppendAsync("rev-2",
+            new Dictionary<string, PackageFile>(StringComparer.Ordinal) { ["icon64.png"] = File("now text\n") });
+
+        var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(diff);
+        var binary = Assert.Single(diff!.Files);
+        Assert.Equal(DiffChangeKind.Binary, binary.Kind);
+        Assert.Empty(_differ.Calls);
     }
 
     [Fact]
@@ -366,8 +412,9 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         Assert.Equal(1, diff.Files.Count);
     }
 
-    private static PackageFile File(string content) =>
-        new() { ContentBytes = Encoding.UTF8.GetBytes(content), Size = Encoding.UTF8.GetByteCount(content), Hash = "h" };
+    private static PackageFile File(string content) => PackageFileFactory.FromText(content);
+
+    private static PackageFile File(byte[] content) => PackageFileFactory.FromBytes(content);
 
     private static Dictionary<string, PackageFile> Files(string pkgbuild) =>
         new(StringComparer.Ordinal) { ["PKGBUILD"] = File(pkgbuild) };

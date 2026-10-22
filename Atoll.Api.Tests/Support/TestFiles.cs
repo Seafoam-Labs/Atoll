@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Atoll.Api.Services.Packages.Persistence;
 
@@ -32,14 +33,28 @@ internal static class TestFiles
 
 internal static class PackageFileFactory
 {
-    internal static PackageFile FromText(string content, string hash = "h", long? size = null)
+    /// <summary>
+    ///     Builds a stored file fixture. The default hash is the real SHA-256 of the content so
+    ///     fixtures that compare or skip by hash behave like production documents; pass
+    ///     <paramref name="hash" /> explicitly only when a test needs a synthetic identity.
+    /// </summary>
+    internal static PackageFile FromText(string content, string? hash = null, long? size = null)
     {
-        var bytes = Encoding.UTF8.GetBytes(content);
-        return new PackageFile { ContentBytes = bytes, Size = size ?? bytes.Length, Hash = hash };
+        return FromBytes(Encoding.UTF8.GetBytes(content), hash, size);
     }
 
-    internal static PackageFile FromBytes(byte[] content, string hash = "h", long? size = null)
+    internal static PackageFile FromBytes(byte[] content, string? hash = null, long? size = null)
     {
-        return new PackageFile { ContentBytes = content, Size = size ?? content.Length, Hash = hash };
+        return new PackageFile
+        {
+            ContentBytes = content,
+            Size = size ?? content.Length,
+            Hash = hash ?? ContentHash(content)
+        };
+    }
+
+    private static string ContentHash(byte[] content)
+    {
+        return $"sha256:{Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant()}";
     }
 }

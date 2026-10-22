@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Text;
 using Atoll.Api.Services.Caching;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
@@ -211,11 +210,20 @@ public sealed class PackageService(
         return true;
     }
 
-    private static PackageFiles ToPackageFiles(IReadOnlyDictionary<string, PackageFile> files)
+    private static PackageFiles ToPackageFiles(Dictionary<string, PackageFile> files)
     {
-        // The REST surface still exposes text; binary files are decoded with replacement until
-        // the binaryFiles split lands.
-        return new PackageFiles(files.ToDictionary(
-            kv => kv.Key, kv => Encoding.UTF8.GetString(kv.Value.Content), StringComparer.Ordinal));
+        var text = new Dictionary<string, string>(files.Count, StringComparer.Ordinal);
+        Dictionary<string, byte[]>? binary = null;
+
+        foreach (var (name, file) in files)
+        {
+            var bytes = file.Content;
+            if (PackageText.TryDecodeUtf8(bytes, out var decoded))
+                text[name] = decoded;
+            else
+                (binary ??= new Dictionary<string, byte[]>(StringComparer.Ordinal))[name] = bytes;
+        }
+
+        return new PackageFiles(text, binary);
     }
 }

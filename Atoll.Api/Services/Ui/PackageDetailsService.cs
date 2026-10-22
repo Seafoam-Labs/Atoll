@@ -1,10 +1,10 @@
-using System.Text;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Git;
+using Atoll.Api.Services.Packages;
+using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
-using Atoll.Api.Services.Packages.Persistence;
 
 namespace Atoll.Api.Services.Ui;
 
@@ -234,10 +234,11 @@ public sealed class PackageDetailsService(
             if (revision.Files.TryGetValue(path, out var file))
             {
                 var bytes = file.Content;
-                var text = Encoding.UTF8.GetString(bytes);
                 contentBytes = file.Size;
-                if (LooksBinary(text))
+                if (!PackageText.TryDecodeUtf8(bytes, out var text) || LooksBinary(text))
+                {
                     isBinary = true;
+                }
                 else if (text.Length > ContentRenderChars)
                 {
                     content = text[..ContentRenderChars];
@@ -312,8 +313,12 @@ public sealed class PackageDetailsService(
             oldFiles.TryGetValue(path, out var oldFile);
             newFiles.TryGetValue(path, out var newFile);
 
+            // Per-file hashes are the stored content identity, so equal hashes mean identical bytes -
+            // no decode or differ work needed for an unchanged file. A missing hash (only possible on
+            // malformed legacy data) cannot prove equality, so those files fall through to the differ.
             if (oldFile is not null && newFile is not null
-                && oldFile.Content.AsSpan().SequenceEqual(newFile.Content))
+                && oldFile.Hash.Length != 0
+                && string.Equals(oldFile.Hash, newFile.Hash, StringComparison.Ordinal))
                 continue;
 
             changedFileCount++;
@@ -323,23 +328,21 @@ public sealed class PackageDetailsService(
                 continue;
             }
 
-            var kind = Classify(oldFile, newFile, out var tooLarge);
-            var view = new DiffFileView(path, kind, null, oldFile?.Size ?? 0, newFile?.Size ?? 0);
+            var comparison = Compare(oldFile, newFile);
+            var view = new DiffFileView(path, comparison.Kind, null, oldFile?.Size ?? 0, newFile?.Size ?? 0);
             files.Add(view);
 
-            if (tooLarge || kind is DiffChangeKind.Binary)
+            if (comparison.Kind is DiffChangeKind.Binary or DiffChangeKind.TooLarge)
                 continue;
 
-            var oldText = oldFile is null ? null : Encoding.UTF8.GetString(oldFile.Content);
-            var newText = newFile is null ? null : Encoding.UTF8.GetString(newFile.Content);
-            totalChars += (oldText?.Length ?? 0) + (newText?.Length ?? 0);
+            totalChars += (comparison.OldText?.Length ?? 0) + (comparison.NewText?.Length ?? 0);
             if (totalChars > ContentRenderChars)
             {
                 totalTruncated = true;
                 continue;
             }
 
-            pending.Add(new TextDiffEntry(path, oldText, newText));
+            pending.Add(new TextDiffEntry(path, comparison.OldText, comparison.NewText));
         }
 
         IReadOnlyDictionary<string, string> chunks = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -411,32 +414,63 @@ public sealed class PackageDetailsService(
     }
 
     /// <summary>
-    ///     Decides what the page shows for one changed file. Binary and oversized win over added/removed because
-    ///     they describe whether a diff can be rendered at all; the page still shows the size delta, so the
-    ///     direction of the change is not lost.
+    ///     One changed file resolved for rendering: the classification plus the strictly decoded text each
+    ///     present side contributes to the differ. Text stays null for an absent or binary side.
     /// </summary>
-    private static DiffChangeKind Classify(PackageFile? oldFile, PackageFile? newFile, out bool tooLarge)
-    {
-        var oldText = oldFile is null ? null : Encoding.UTF8.GetString(oldFile.Content);
-        var newText = newFile is null ? null : Encoding.UTF8.GetString(newFile.Content);
+    private readonly record struct FileComparison(DiffChangeKind Kind, string? OldText, string? NewText);
 
-        tooLarge = oldText is { Length: > DiffFileRenderChars }
-            || newText is { Length: > DiffFileRenderChars };
-        if (tooLarge)
-            return DiffChangeKind.TooLarge;
+    /// <summary>
+    ///     Decides what the page shows for one changed file. Invalid UTF-8 and NUL-bearing text are binary
+    ///     before the size cap, because a binary payload has no meaningful character length; binary and
+    ///     oversized then win over added/removed because they describe whether a diff can be rendered at
+    ///     all. The page still shows the size delta, so the direction of the change is not lost.
+    /// </summary>
+    private static FileComparison Compare(PackageFile? oldFile, PackageFile? newFile)
+    {
+        if (!TryDecodeText(oldFile, out var oldText) || !TryDecodeText(newFile, out var newText))
+            return new FileComparison(DiffChangeKind.Binary, null, null);
 
         if (LooksBinary(oldText) || LooksBinary(newText))
-            return DiffChangeKind.Binary;
+            return new FileComparison(DiffChangeKind.Binary, oldText, newText);
 
-        if (oldFile is null)
-            return DiffChangeKind.Added;
+        if (oldText is { Length: > DiffFileRenderChars }
+            || newText is { Length: > DiffFileRenderChars })
+            return new FileComparison(DiffChangeKind.TooLarge, oldText, newText);
 
-        return newFile is null ? DiffChangeKind.Removed : DiffChangeKind.Modified;
+        var kind = oldFile is null
+            ? DiffChangeKind.Added
+            : newFile is null
+                ? DiffChangeKind.Removed
+                : DiffChangeKind.Modified;
+
+        return new FileComparison(kind, oldText, newText);
     }
 
     /// <summary>
-    ///     Binary heuristic: stored content is UTF-8–decoded, and NUL bytes survive that decoding while
-    ///     invalid sequences collapse to U+FFFD - so NUL in the leading probe means binary payload.
+    ///     Strictly decodes one side for diffing. An absent side succeeds with null text; a present side
+    ///     that is not valid UTF-8 fails, because there is no lossless string to hand the differ.
+    /// </summary>
+    private static bool TryDecodeText(PackageFile? file, out string? text)
+    {
+        if (file is null)
+        {
+            text = null;
+            return true;
+        }
+
+        if (!PackageText.TryDecodeUtf8(file.Content, out var decoded))
+        {
+            text = null;
+            return false;
+        }
+
+        text = decoded;
+        return true;
+    }
+
+    /// <summary>
+    ///     NUL probe for strictly decoded text. Invalid UTF-8 never reaches this check - the caller rejects
+    ///     it first - so NUL in the leading probe is a strong binary signal on its own.
     /// </summary>
     private static bool LooksBinary(string? content)
     {

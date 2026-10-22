@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
@@ -146,6 +147,84 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             TryCleanup(reposRoot);
             TryCleanup(cloneDir);
         }
+    }
+
+    [Fact]
+    public async Task EnsureRepositoryAsync_BinaryFile_ClonesByteExact()
+    {
+        var (service, cache, security, reposRoot) = CreateService();
+        var cloneDir = Path.Combine(Path.GetTempPath(), $"atoll-clone-{Guid.NewGuid():N}");
+        try
+        {
+            byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01, 0xFF];
+            var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            {
+                ["PKGBUILD"] = Encoding.UTF8.GetBytes("pkgname=shelly\n"),
+                ["icon64.png"] = png
+            };
+
+            await service.SeedFilesAsync("shelly", files);
+            await security.MarkHeadVerifiedAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
+
+            var gitDir = cache.GetRepositoryPath("shelly")!;
+            string[] args = ["clone", "--quiet", gitDir, cloneDir];
+            await GitClient.ExecuteAsync(Directory.GetCurrentDirectory(), args, null, null, CancellationToken.None);
+
+            var cloned = await File.ReadAllBytesAsync(Path.Combine(cloneDir, "icon64.png"), TestContext.Current.CancellationToken);
+            var blobSize = (await GitClient.ExecuteAsync(gitDir, ["cat-file", "-s", "main:icon64.png"], null, null,
+                CancellationToken.None)).Trim();
+
+            Assert.Multiple(() =>
+            {
+                Assert.Equal(png, cloned);
+                Assert.Equal(png.Length.ToString(CultureInfo.InvariantCulture), blobSize);
+            });
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+            TryCleanup(cloneDir);
+        }
+    }
+
+    [Fact]
+    public async Task EnsureRepositoryAsync_ExecBit_RequiresRawShebang()
+    {
+        var (service, cache, security, reposRoot) = CreateService();
+        try
+        {
+            var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            {
+                ["script"] = Encoding.UTF8.GetBytes("#!/bin/sh\n"),
+                ["bom-script"] = Encoding.UTF8.GetBytes("\uFEFF#!/bin/sh\n"),
+                ["helper.sh"] = Encoding.UTF8.GetBytes("echo hi\n")
+            };
+
+            await service.SeedFilesAsync("shelly", files);
+            await security.MarkHeadVerifiedAsync("shelly");
+            await cache.EnsureRepositoryAsync("shelly", TestContext.Current.CancellationToken);
+
+            var gitDir = cache.GetRepositoryPath("shelly")!;
+            var tree = await GitClient.ExecuteAsync(gitDir, ["ls-tree", "main"], null, null, CancellationToken.None);
+
+            Assert.Multiple(() =>
+            {
+                Assert.Contains("100755 blob", Line(tree, "script"), StringComparison.Ordinal);
+                Assert.Contains("100644 blob", Line(tree, "bom-script"), StringComparison.Ordinal);
+                Assert.Contains("100755 blob", Line(tree, "helper.sh"), StringComparison.Ordinal);
+            });
+        }
+        finally
+        {
+            TryCleanup(reposRoot);
+        }
+    }
+
+    private static string Line(string multiLine, string name)
+    {
+        return multiLine.Split('\n')
+            .Single(line => line.EndsWith("\t" + name, StringComparison.Ordinal));
     }
 
     [Fact]

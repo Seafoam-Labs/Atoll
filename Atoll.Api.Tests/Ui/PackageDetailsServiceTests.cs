@@ -1,3 +1,4 @@
+using System.Text;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
@@ -194,6 +195,44 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
 
         Assert.True(view!.IsBinary);
         Assert.Null(view.Content);
+    }
+
+    [Fact]
+    public async Task GetFilesAsync_InvalidUtf8_IsBinaryAndReportsRawSize()
+    {
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0xFF];
+        await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>(StringComparer.Ordinal)
+        {
+            ["icon64.png"] = PackageFileFactory.FromBytes(png)
+        });
+
+        var view = await _service.GetFilesAsync(Name, null, "icon64.png", TestContext.Current.CancellationToken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.True(view!.IsBinary);
+            Assert.Null(view.Content);
+            Assert.Equal(png.Length, view.ContentBytes);
+        });
+    }
+
+    [Fact]
+    public async Task GetFilesAsync_Utf8BomAndMultibyteText_IsDisplayedUnchanged()
+    {
+        const string text = "\uFEFFpkgdesc=\"naïve 日本語\"\n";
+        await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>(StringComparer.Ordinal)
+        {
+            ["PKGBUILD"] = PackageFileFactory.FromText(text)
+        });
+
+        var view = await _service.GetFilesAsync(Name, null, "PKGBUILD", TestContext.Current.CancellationToken);
+
+        Assert.Multiple(() =>
+        {
+            Assert.False(view!.IsBinary);
+            Assert.Equal(text, view.Content);
+            Assert.Equal(Encoding.UTF8.GetByteCount(text), view.ContentBytes);
+        });
     }
 
     [Fact]

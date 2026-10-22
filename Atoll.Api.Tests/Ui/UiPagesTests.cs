@@ -584,6 +584,43 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
+    public async Task FilesTab_InvalidUtf8File_RendersBinaryPlaceholder()
+    {
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0xFF];
+        await _factory.Repository.InsertSeedAsync(
+            Doc("shelly-bin"),
+            new PackageRevisionContentDocument
+            {
+                Id = PackageSchema.RevisionDocumentId("shelly-bin", "rev-1"),
+                PackageName = "shelly-bin",
+                RevisionId = "rev-1",
+                CreatedAt = DateTimeOffset.UtcNow,
+                Author = "test",
+                Message = "seed",
+                Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
+                {
+                    ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test\n", size: 12),
+                    ["icon64.png"] = PackageFileFactory.FromBytes(png)
+                }
+            },
+            TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.ScanRevisionAsync(
+            "shelly-bin", "rev-1", SecurityStatus.Verified);
+
+        var response = await _client.GetAsync(
+            "/package/shelly-bin/files?path=icon64.png", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("Binary file", body, StringComparison.Ordinal);
+            Assert.Contains("is not previewed", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("code-view", body, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task FilesTab_FallsBackToHeadForUnknownRevision()
     {
         await SeedAsync("shelly-bin", SecurityStatus.Verified);

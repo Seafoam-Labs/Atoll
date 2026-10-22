@@ -79,6 +79,50 @@ public class PackageServiceTests
             Assert.Equivalent(SampleFiles.Keys, files.Files.Keys, strict: true);
             Assert.Equal("pkgname=shelly\npkgver=1.0\n", files.Files["PKGBUILD"]);
             Assert.Equal("pkgname = shelly\n", files.Files[".SRCINFO"]);
+            Assert.Null(files.BinaryFiles);
+        });
+    }
+
+    [Fact]
+    public async Task GetAsync_BinaryFile_MovesToBinaryFiles()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo);
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0xFF];
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["PKGBUILD"] = "pkgname=shelly\n"u8.ToArray(),
+            ["icon64.png"] = png
+        };
+
+        await service.SeedFilesAsync("shelly", files);
+        var result = await service.GetAsync("shelly");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal("pkgname=shelly\n", result.Files["PKGBUILD"]);
+            Assert.False(result.Files.ContainsKey("icon64.png"));
+            Assert.Equal(png, result.BinaryFiles!["icon64.png"]);
+        });
+    }
+
+    [Fact]
+    public async Task GetAsync_ValidUtf8WithNul_StaysInTextFiles()
+    {
+        var repo = new InMemoryPackageRepository();
+        var service = CreateService(repo);
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["blob.txt"] = "abc\0def"u8.ToArray()
+        };
+
+        await service.SeedFilesAsync("shelly", files);
+        var result = await service.GetAsync("shelly");
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal("abc\0def", result.Files["blob.txt"]);
+            Assert.Null(result.BinaryFiles);
         });
     }
 

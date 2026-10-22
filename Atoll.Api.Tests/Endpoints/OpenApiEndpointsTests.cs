@@ -101,7 +101,16 @@ public sealed class OpenApiEndpointsTests : IDisposable
             Assert.True(schemas.TryGetProperty("AurPackageMetadata", out _));
             Assert.True(schemas.TryGetProperty("AurRpcResponse", out _));
             Assert.True(schemas.TryGetProperty("AurRpcPackage", out _));
-            Assert.True(schemas.TryGetProperty("PackageFiles", out _));
+            Assert.True(schemas.TryGetProperty("PackageFiles", out var packageFilesSchema));
+            var packageFilesProperties = packageFilesSchema.GetProperty("properties");
+            var packageFilesRequired = packageFilesSchema.GetProperty("required")
+                .EnumerateArray()
+                .Select(property => property.GetString())
+                .ToHashSet(StringComparer.Ordinal);
+            Assert.Superset(new HashSet<string?>(StringComparer.Ordinal) { "files" }, packageFilesRequired);
+            Assert.DoesNotContain("binaryFiles", packageFilesRequired);
+            // byte[] serializes as a base64 string; the generator represents it as string/byte.
+            Assert.Contains("byte", packageFilesProperties.GetProperty("binaryFiles").GetRawText(), StringComparison.Ordinal);
             Assert.True(schemas.TryGetProperty("PackageVersion", out _));
             Assert.True(schemas.TryGetProperty("PackageIndexResponse", out _));
             Assert.True(schemas.TryGetProperty("PackageIndexEntry", out var indexEntrySchema));

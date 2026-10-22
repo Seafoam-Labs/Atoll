@@ -20,7 +20,7 @@ public sealed class GitRepositoryCache(
     IOptions<AtollOptions> options,
     ILogger<GitRepositoryCache> logger) : IGitRepositoryCache
 {
-    private const string MaterializationVersion = "git-v4";
+    private const string MaterializationVersion = "git-v5";
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepoLocks = new(StringComparer.Ordinal);
     private readonly AtollOptions _options = options.Value;
 

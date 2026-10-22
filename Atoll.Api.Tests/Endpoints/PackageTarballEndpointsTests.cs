@@ -1,6 +1,7 @@
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Net;
+using System.Text;
 using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
@@ -31,7 +32,10 @@ public sealed class PackageTarballEndpointsTests : IDisposable
         _factory.Dispose();
     }
 
-    private sealed record TarEntryData(string Name, UnixFileMode Mode, TarEntryType EntryType, string Content);
+    private sealed record TarEntryData(string Name, UnixFileMode Mode, TarEntryType EntryType, byte[] Content)
+    {
+        public string Text => Encoding.UTF8.GetString(Content);
+    }
 
     [Fact]
     public async Task TarballAsync_PendingHeadRevision_ServesTarball()
@@ -50,7 +54,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
         {
             Assert.Equal("pkg/PKGBUILD", entries[0].Name);
             Assert.Equal(TarEntryType.RegularFile, entries[0].EntryType);
-            Assert.Equal("pkgname=test\n", entries[0].Content);
+            Assert.Equal("pkgname=test\n", entries[0].Text);
             Assert.Equal(RegularFileMode, entries[0].Mode);
         });
     }
@@ -82,10 +86,10 @@ public sealed class PackageTarballEndpointsTests : IDisposable
         {
             Assert.Equal(HttpStatusCode.OK, flagged.StatusCode);
             Assert.Equal("pkg-rev-2.tar.gz", flagged.Content.Headers.ContentDisposition?.FileName);
-            Assert.Equal("pkgname=test2\n", (await ReadTarballAsync(flagged)).Single().Content);
+            Assert.Equal("pkgname=test2\n", (await ReadTarballAsync(flagged)).Single().Text);
 
             Assert.Equal(HttpStatusCode.OK, verified.StatusCode);
-            Assert.Equal("pkgname=test\n", (await ReadTarballAsync(verified)).Single().Content);
+            Assert.Equal("pkgname=test\n", (await ReadTarballAsync(verified)).Single().Text);
         });
     }
 
@@ -126,6 +130,24 @@ public sealed class PackageTarballEndpointsTests : IDisposable
             Assert.Equal(RegularFileMode, entries.Single(e => string.Equals(e.Name, "pkg/PKGBUILD", StringComparison.Ordinal)).Mode);
             Assert.Equal(ExecutableFileMode, entries.Single(e => string.Equals(e.Name, "pkg/helper.sh", StringComparison.Ordinal)).Mode);
         });
+    }
+
+    [Fact]
+    public async Task TarballAsync_BinaryFile_PreservesRawBytes()
+    {
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01, 0xFF];
+        await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg", new Dictionary<string, PackageFile>(StringComparer.Ordinal)
+        {
+            ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test\n", size: 13),
+            ["icon64.png"] = PackageFileFactory.FromBytes(png)
+        }), TestContext.Current.CancellationToken);
+        await _factory.SecurityRepository.ScanRevisionAsync("pkg", "rev-1", SecurityStatus.Verified);
+
+        var response = await _client.GetAsync("/v1/packages/pkg/tarball", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var entries = await ReadTarballAsync(response);
+        Assert.Equal(png, entries.Single(e => string.Equals(e.Name, "pkg/icon64.png", StringComparison.Ordinal)).Content);
     }
 
     private async Task SeedAsync(SecurityStatus status)
@@ -209,8 +231,9 @@ public sealed class PackageTarballEndpointsTests : IDisposable
         while (await tar.GetNextEntryAsync(cancellationToken: TestContext.Current.CancellationToken) is { } entry)
         {
             if (entry.DataStream is not { } data) continue;
-            using var reader = new StreamReader(data);
-            entries.Add(new TarEntryData(entry.Name, entry.Mode, entry.EntryType, await reader.ReadToEndAsync(TestContext.Current.CancellationToken)));
+            using var buffer = new MemoryStream();
+            await data.CopyToAsync(buffer, TestContext.Current.CancellationToken);
+            entries.Add(new TarEntryData(entry.Name, entry.Mode, entry.EntryType, buffer.ToArray()));
         }
 
         return entries;
