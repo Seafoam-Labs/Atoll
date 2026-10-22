@@ -1,3 +1,4 @@
+using System.Text;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Git;
@@ -232,17 +233,19 @@ public sealed class PackageDetailsService(
         {
             if (revision.Files.TryGetValue(path, out var file))
             {
+                var bytes = file.Content;
+                var text = Encoding.UTF8.GetString(bytes);
                 contentBytes = file.Size;
-                if (LooksBinary(file.Content))
+                if (LooksBinary(text))
                     isBinary = true;
-                else if (file.Content.Length > ContentRenderChars)
+                else if (text.Length > ContentRenderChars)
                 {
-                    content = file.Content[..ContentRenderChars];
+                    content = text[..ContentRenderChars];
                     isTruncated = true;
                 }
                 else
                 {
-                    content = file.Content;
+                    content = text;
                 }
             }
             else
@@ -310,7 +313,7 @@ public sealed class PackageDetailsService(
             newFiles.TryGetValue(path, out var newFile);
 
             if (oldFile is not null && newFile is not null
-                && string.Equals(oldFile.Content, newFile.Content, StringComparison.Ordinal))
+                && oldFile.Content.AsSpan().SequenceEqual(newFile.Content))
                 continue;
 
             changedFileCount++;
@@ -327,14 +330,16 @@ public sealed class PackageDetailsService(
             if (tooLarge || kind is DiffChangeKind.Binary)
                 continue;
 
-            totalChars += (oldFile?.Content.Length ?? 0) + (newFile?.Content.Length ?? 0);
+            var oldText = oldFile is null ? null : Encoding.UTF8.GetString(oldFile.Content);
+            var newText = newFile is null ? null : Encoding.UTF8.GetString(newFile.Content);
+            totalChars += (oldText?.Length ?? 0) + (newText?.Length ?? 0);
             if (totalChars > ContentRenderChars)
             {
                 totalTruncated = true;
                 continue;
             }
 
-            pending.Add(new TextDiffEntry(path, oldFile?.Content, newFile?.Content));
+            pending.Add(new TextDiffEntry(path, oldText, newText));
         }
 
         IReadOnlyDictionary<string, string> chunks = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -412,8 +417,8 @@ public sealed class PackageDetailsService(
     /// </summary>
     private static DiffChangeKind Classify(PackageFile? oldFile, PackageFile? newFile, out bool tooLarge)
     {
-        var oldText = oldFile?.Content;
-        var newText = newFile?.Content;
+        var oldText = oldFile is null ? null : Encoding.UTF8.GetString(oldFile.Content);
+        var newText = newFile is null ? null : Encoding.UTF8.GetString(newFile.Content);
 
         tooLarge = oldText is { Length: > DiffFileRenderChars }
             || newText is { Length: > DiffFileRenderChars };

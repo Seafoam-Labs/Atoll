@@ -53,7 +53,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
             Message = "seed",
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = "pkgname=atoll-test\n", Size = 18, Hash = "h" }
+                ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=atoll-test\n", size: 18)
             }
         };
         await repo.InsertSeedAsync(new PackageDocument
@@ -113,7 +113,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
                 Message = "seed",
                 Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
-                    ["PKGBUILD"] = new() { Content = $"pkgname={name}\n", Size = 8 + name.Length, Hash = "h" }
+                    ["PKGBUILD"] = PackageFileFactory.FromText($"pkgname={name}\n", size: 8 + name.Length)
                 }
             }, TestContext.Current.CancellationToken);
         }
@@ -157,7 +157,7 @@ public sealed class MongoApiEndpointsTests : IAsyncLifetime
             Message = "seed",
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = "pkgname=to-delete\n", Size = 18, Hash = "h" }
+                ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=to-delete\n", size: 18)
             }
         };
         await repo.InsertSeedAsync(new PackageDocument

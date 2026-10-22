@@ -1,11 +1,10 @@
-using System.Text;
 using Atoll.Api.Services.Git;
 
 namespace Atoll.Api.Services.Sync.Direct;
 
 public sealed class AurGitPackageSource : IAurPackageSource
 {
-    public async Task<IReadOnlyDictionary<string, string>> FetchFilesAsync(
+    public async Task<IReadOnlyDictionary<string, byte[]>> FetchFilesAsync(
         string packageBase, CancellationToken ct = default)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"atoll-{packageBase}-{Guid.NewGuid():N}");
@@ -13,7 +12,7 @@ public sealed class AurGitPackageSource : IAurPackageSource
         {
             Directory.CreateDirectory(tempPath);
             await GitClient.CloneAsync($"https://aur.archlinux.org/{packageBase}.git", tempPath, ct);
-            return await ReadFilesAsync(tempPath);
+            return await ReadFilesAsync(tempPath, ct);
         }
         finally
         {
@@ -22,9 +21,9 @@ public sealed class AurGitPackageSource : IAurPackageSource
         }
     }
 
-    private static async Task<Dictionary<string, string>> ReadFilesAsync(string workDir)
+    internal static async Task<Dictionary<string, byte[]>> ReadFilesAsync(string workDir, CancellationToken ct)
     {
-        var files = new Dictionary<string, string>(StringComparer.Ordinal);
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
 
         foreach (var path in Directory.EnumerateFiles(workDir, "*", SearchOption.AllDirectories))
         {
@@ -34,8 +33,7 @@ public sealed class AurGitPackageSource : IAurPackageSource
                 relative.StartsWith(".git/", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var bytes = await File.ReadAllBytesAsync(path);
-            files[relative] = Encoding.UTF8.GetString(bytes);
+            files[relative] = await File.ReadAllBytesAsync(path, ct);
         }
 
         return files;

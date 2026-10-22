@@ -1,3 +1,4 @@
+using System.Text;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Ui;
@@ -366,7 +367,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
     }
 
     private static PackageFile File(string content) =>
-        new() { Content = content, Size = content.Length, Hash = "h" };
+        new() { ContentBytes = Encoding.UTF8.GetBytes(content), Size = Encoding.UTF8.GetByteCount(content), Hash = "h" };
 
     private static Dictionary<string, PackageFile> Files(string pkgbuild) =>
         new(StringComparer.Ordinal) { ["PKGBUILD"] = File(pkgbuild) };

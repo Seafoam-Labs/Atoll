@@ -13,12 +13,12 @@ namespace Atoll.Api.Tests.Catalog.Refresh;
 
 public class UpstreamPackageReconcilerTests
 {
-    private static readonly IReadOnlyDictionary<string, string> Files =
+    private static readonly IReadOnlyDictionary<string, byte[]> Files =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = demo\n"
-        };
+        }.AsByteFiles();
 
     [Fact]
     public async Task ReconcileAsync_NamesAbsentUpstream_DeletesPackageAndDerivedState()

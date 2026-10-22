@@ -58,7 +58,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
             Message = "seed",
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
+                ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test\n", size: 12)
             }
         };
     }
@@ -179,7 +179,7 @@ public sealed class SecurityGatingEndpointsTests : IDisposable
             Message = "update",
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = "pkgname=test2\n", Size = 13, Hash = "h2" }
+                ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test2\n", hash: "h2", size: 13)
             }
         };
 

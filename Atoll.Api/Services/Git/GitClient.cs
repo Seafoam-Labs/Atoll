@@ -7,12 +7,46 @@ namespace Atoll.Api.Services.Git;
 
 public static class GitClient
 {
-    public static async Task<string> ExecuteAsync(
+    public static Task<string> ExecuteAsync(
         string workingDirectory,
         string[] arguments,
         string? input,
         IReadOnlyDictionary<string, string>? env,
         CancellationToken cancellationToken = default)
+    {
+        return ExecuteCoreAsync(
+            workingDirectory,
+            arguments,
+            input is null ? null : PipeSource.FromString(input),
+            env,
+            cancellationToken);
+    }
+
+    /// <summary>
+    ///     Runs git with a byte-exact stdin. Use this instead of <see cref="ExecuteAsync" /> when the input
+    ///     is file content: decoding to a string and re-encoding would replace invalid UTF-8.
+    /// </summary>
+    public static Task<string> ExecuteWithInputAsync(
+        string workingDirectory,
+        string[] arguments,
+        byte[] input,
+        IReadOnlyDictionary<string, string>? env,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteCoreAsync(
+            workingDirectory,
+            arguments,
+            PipeSource.FromBytes(input),
+            env,
+            cancellationToken);
+    }
+
+    private static async Task<string> ExecuteCoreAsync(
+        string workingDirectory,
+        string[] arguments,
+        PipeSource? input,
+        IReadOnlyDictionary<string, string>? env,
+        CancellationToken cancellationToken)
     {
         var output = new StringBuilder();
         var error = new StringBuilder();
@@ -25,7 +59,7 @@ public static class GitClient
             .WithStandardErrorPipe(PipeTarget.ToStringBuilder(error));
 
         if (input is not null)
-            cmd = cmd.WithStandardInputPipe(PipeSource.FromString(input));
+            cmd = cmd.WithStandardInputPipe(input);
 
         if (env is not null)
             cmd = cmd.WithEnvironmentVariables(b =>

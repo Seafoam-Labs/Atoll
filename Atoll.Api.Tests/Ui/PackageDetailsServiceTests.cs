@@ -187,7 +187,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     {
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified, files: new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
-            ["blob.bin"] = new() { Content = "abc\0def", Size = 7, Hash = "h" }
+            ["blob.bin"] = PackageFileFactory.FromText("abc\0def", size: 7)
         });
 
         var view = await _service.GetFilesAsync(Name, null, "blob.bin", TestContext.Current.CancellationToken);
@@ -201,7 +201,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
     {
         var large = new string('a', PackageDetailsService.ContentRenderChars + 1000);
         await SeedRevisionAsync("rev-1", "seed", SecurityStatus.Verified,
-            files: new Dictionary<string, PackageFile>(StringComparer.Ordinal) { ["big.txt"] = new() { Content = large, Size = large.Length, Hash = "h" } });
+            files: new Dictionary<string, PackageFile>(StringComparer.Ordinal) { ["big.txt"] = PackageFileFactory.FromText(large) });
 
         var view = await _service.GetFilesAsync(Name, null, "big.txt", TestContext.Current.CancellationToken);
 
@@ -257,7 +257,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
 
     private static PackageFile File(string content)
     {
-        return new PackageFile { Content = content, Size = content.Length, Hash = "h" };
+        return PackageFileFactory.FromText(content);
     }
 
     private async Task InsertDocAsync()

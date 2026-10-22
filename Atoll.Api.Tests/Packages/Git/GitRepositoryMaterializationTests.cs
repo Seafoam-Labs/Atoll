@@ -16,12 +16,12 @@ namespace Atoll.Api.Tests.Packages.Git;
 [Trait("Category", "RequiresGit")]
 public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
 {
-    private static readonly IReadOnlyDictionary<string, string> SampleFiles =
+    private static readonly IReadOnlyDictionary<string, byte[]> SampleFiles =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly\n"
-        };
+        }.AsByteFiles();
 
     private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset T1 = new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
@@ -134,7 +134,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             {
                 var fullPath = Path.Combine(cloneDir, name);
                 Assert.True(File.Exists(fullPath), $"missing {name}");
-                Assert.Equal(content, await File.ReadAllTextAsync(fullPath, TestContext.Current.CancellationToken));
+                Assert.Equal(content, await File.ReadAllBytesAsync(fullPath, TestContext.Current.CancellationToken));
             }
 
             string[] args1 = ["rev-list", "--count", "HEAD"];
@@ -204,7 +204,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             {
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
-            };
+            }.AsByteFiles();
             Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2, TestContext.Current.CancellationToken));
             await security.MarkHeadVerifiedAsync("shelly");
 
@@ -264,7 +264,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             {
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\nsource=(\"https://example.com/install.sh\")\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
-            };
+            }.AsByteFiles();
             Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2, TestContext.Current.CancellationToken));
             var flaggedRevision = await security.CompleteScanAsync("shelly", SecurityStatus.Flagged,
                 new SecurityFinding("network-download", FindingSeverity.Critical, "test", "curl | sh", "PKGBUILD"));
@@ -315,7 +315,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
             {
                 ["PKGBUILD"] = "pkgname=shelly\npkgver=2.0\n",
                 [".SRCINFO"] = "pkgname = shelly\n"
-            };
+            }.AsByteFiles();
             Assert.True(await service.AppendRevisionFromUpstreamAsync("shelly", revision2, TestContext.Current.CancellationToken));
             await security.MarkHeadVerifiedAsync("shelly");
 
@@ -441,7 +441,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
                     CreatedAt = T0,
                     Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                     {
-                        ["PKGBUILD"] = new() { Content = "pkgname=pkg\npkgver=1.0\n", Size = 0, Hash = "unused" }
+                        ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=pkg\npkgver=1.0\n", hash: "unused", size: 0)
                     }
                 }, TestContext.Current.CancellationToken);
             await repo.AppendRevisionAsync("pkg", new PackageRevisionContentDocument
@@ -452,7 +452,7 @@ public sealed class GitRepositoryMaterializationTests : IAsyncLifetime
                 CreatedAt = T1,
                 Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
-                    ["PKGBUILD"] = new() { Content = "pkgname=pkg\npkgver=2.0\n", Size = 0, Hash = "unused" }
+                    ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=pkg\npkgver=2.0\n", hash: "unused", size: 0)
                 }
             }, 10, TestContext.Current.CancellationToken);
 

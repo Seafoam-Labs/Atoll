@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Packages;
+using Atoll.Api.Tests.Support;
 using MongoDB.Bson;
 using Xunit;
 using Atoll.Api.Services.Packages.Persistence;
@@ -67,7 +68,7 @@ public class PackageDocumentSizeValidatorTests
             Id = PackageSchema.RevisionDocumentId("shelly", "rev"),
             PackageName = "shelly",
             RevisionId = "rev",
-            Files = files.ToDictionary(f => f.Name, f => new PackageFile { Content = f.Content, Size = f.Size }, StringComparer.Ordinal)
+            Files = files.ToDictionary(f => f.Name, f => PackageFileFactory.FromText(f.Content, size: f.Size), StringComparer.Ordinal)
         };
     }
 }

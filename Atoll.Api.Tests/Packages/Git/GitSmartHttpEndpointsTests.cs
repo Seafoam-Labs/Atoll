@@ -13,12 +13,12 @@ namespace Atoll.Api.Tests.Packages.Git;
 [Trait("Category", "RequiresGit")]
 public sealed class GitSmartHttpEndpointsTests : IDisposable
 {
-    private static readonly IReadOnlyDictionary<string, string> SampleFiles =
+    private static readonly IReadOnlyDictionary<string, byte[]> SampleFiles =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly\n"
-        };
+        }.AsByteFiles();
 
     private readonly HttpClient _client;
 

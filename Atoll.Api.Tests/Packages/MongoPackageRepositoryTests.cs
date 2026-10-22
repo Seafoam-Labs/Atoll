@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
@@ -65,6 +67,90 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         {
             Assert.Equal(PackageSchema.CurrentVersion, head!.SchemaVersion);
             Assert.Equal(PackageSchema.CurrentVersion, storedRevision!.SchemaVersion);
+        });
+    }
+
+    [Fact]
+    public async Task InsertSeedAsync_NewSeed_WritesContentBytesAndOmitsLegacyContent()
+    {
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0xFF, 0xFE];
+        var revision = NewRevisionContent("burpsuite", "rev-0", "seed from AUR",
+            new Dictionary<string, PackageFile>(StringComparer.Ordinal)
+            {
+                ["icon64.png"] = PackageFileFactory.FromBytes(png)
+            });
+        var now = DateTimeOffset.UtcNow;
+        var doc = new PackageDocument
+        {
+            Id = "pkg/burpsuite",
+            PackageName = "burpsuite",
+            CreatedAt = now,
+            UpdatedAt = now,
+            HeadRevisionId = "rev-0",
+            Revisions =
+            [
+                new PackageRevisionDocument
+                {
+                    RevisionId = "rev-0",
+                    CreatedAt = revision.CreatedAt,
+                    Author = "test",
+                    Message = "seed from AUR"
+                }
+            ]
+        };
+
+        await _repo.InsertSeedAsync(doc, revision, CancellationToken.None);
+
+        var raw = await RevisionDocuments
+            .Find(Builders<BsonDocument>.Filter.Eq("_id", PackageSchema.RevisionDocumentId("burpsuite", "rev-0")))
+            .FirstAsync(CancellationToken.None);
+        var file = raw["files"].AsBsonDocument["icon64.png"].AsBsonDocument;
+
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(BsonType.Binary, file["contentBytes"].BsonType);
+            Assert.False(file.Contains("content"));
+            Assert.Equal(png, file["contentBytes"].AsByteArray);
+        });
+    }
+
+    [Fact]
+    public async Task GetRevisionAsync_LegacyContentString_ReEncodesToTheSameBytes()
+    {
+        var content = "pkgname=legacy\n";
+        var bytes = Encoding.UTF8.GetBytes(content);
+        var hash = $"sha256:{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";
+        var legacy = new BsonDocument
+        {
+            ["_id"] = PackageSchema.RevisionDocumentId("legacy", "rev-0"),
+            ["packageName"] = "legacy",
+            ["revisionId"] = "rev-0",
+            ["createdAt"] = new BsonDateTime(DateTime.UtcNow),
+            ["author"] = "test",
+            ["message"] = "seed from AUR",
+            ["schemaVersion"] = 2,
+            ["files"] = new BsonDocument
+            {
+                ["PKGBUILD"] = new BsonDocument
+                {
+                    ["content"] = content,
+                    ["size"] = bytes.Length,
+                    ["hash"] = hash
+                }
+            }
+        };
+        await RevisionDocuments.InsertOneAsync(legacy, cancellationToken: CancellationToken.None);
+
+        var stored = await _repo.GetRevisionAsync("legacy", "rev-0", CancellationToken.None);
+        var file = stored!.Files["PKGBUILD"];
+
+        Assert.Multiple(() =>
+        {
+            Assert.Null(file.ContentBytes);
+            Assert.Equal(content, file.ContentText);
+            Assert.Equal(bytes, file.Content);
+            Assert.Equal(bytes.Length, file.Size);
+            Assert.Equal(hash, file.Hash);
         });
     }
 
@@ -480,6 +566,9 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
     private IMongoCollection<PackageDocument> Packages =>
         _client.GetDatabase(_database).GetCollection<PackageDocument>("packages");
 
+    private IMongoCollection<BsonDocument> RevisionDocuments =>
+        _client.GetDatabase(_database).GetCollection<BsonDocument>(RevisionCollection);
+
     private static (PackageDocument Doc, PackageRevisionContentDocument Revision) NewSeed(
         string id,
         string packageName,
@@ -537,7 +626,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         var content = $"pkgname={packageName}\n# {revisionId}\n";
         return new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
-            ["PKGBUILD"] = new() { Content = content, Size = content.Length, Hash = revisionId }
+            ["PKGBUILD"] = PackageFileFactory.FromText(content, hash: revisionId)
         };
     }
 }

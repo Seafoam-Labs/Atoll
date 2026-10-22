@@ -1,6 +1,5 @@
 using System.Formats.Tar;
 using System.IO.Compression;
-using System.Text;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Packages.Persistence;
 
@@ -56,11 +55,12 @@ public sealed class PackageTarballService(IPackageRepository repository)
         {
             foreach (var (path, file) in revision.Files.OrderBy(f => f.Key, StringComparer.Ordinal))
             {
-                using var content = new MemoryStream(Encoding.UTF8.GetBytes(file.Content));
+                var content = file.Content;
+                using var stream = new MemoryStream(content, writable: false);
                 var entry = new PaxTarEntry(TarEntryType.RegularFile, $"{packageName}/{path}")
                 {
-                    DataStream = content,
-                    Mode = GitRepositoryCache.IsExecutable(path, file.Content)
+                    DataStream = stream,
+                    Mode = GitRepositoryCache.IsExecutable(path, content)
                         ? ExecutableFileMode
                         : RegularFileMode,
                     ModificationTime = revision.CreatedAt

@@ -54,7 +54,7 @@ public class PackageSecurityStatusServiceTests
                 Message = "seed",
                 Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
-                    ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
+                    ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test\n", size: 12)
                 }
             }, TestContext.Current.CancellationToken);
     }

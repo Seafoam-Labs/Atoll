@@ -16,12 +16,12 @@ namespace Atoll.Api.Tests.Sync.Refresh;
 
 public class PackageRefreshWorkerTests
 {
-    private static readonly IReadOnlyDictionary<string, string> BaseFiles =
+    private static readonly IReadOnlyDictionary<string, byte[]> BaseFiles =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = demo\n"
-        };
+        }.AsByteFiles();
 
     private static AtollOptions EnabledOptions()
     {
@@ -52,7 +52,7 @@ public class PackageRefreshWorkerTests
         return store;
     }
 
-    private static async Task SeedAsync(IPackageService service, string name, IReadOnlyDictionary<string, string> files)
+    private static async Task SeedAsync(IPackageService service, string name, IReadOnlyDictionary<string, byte[]> files)
     {
         await service.SeedFilesAsync(name, files);
     }
@@ -97,7 +97,7 @@ public class PackageRefreshWorkerTests
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
-                }
+                }.AsByteFiles()
             }
         };
         var status = new RefreshStatusStore(true);
@@ -138,7 +138,7 @@ public class PackageRefreshWorkerTests
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
-                }
+                }.AsByteFiles()
             }
         };
         var worker = CreateWorker(store, repo, service, mirror, new InMemorySeedExclusionRepository(), new RefreshStatusStore(true));
@@ -206,7 +206,7 @@ public class PackageRefreshWorkerTests
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
-                }
+                }.AsByteFiles()
             }
         };
         var status = new RefreshStatusStore(true);
@@ -252,7 +252,7 @@ public class PackageRefreshWorkerTests
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
-                }
+                }.AsByteFiles()
             }
         };
         var status = new RefreshStatusStore(true);
@@ -331,7 +331,7 @@ public class PackageRefreshWorkerTests
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
-                }
+                }.AsByteFiles()
             }
         };
         var status = new RefreshStatusStore(true);
@@ -369,7 +369,7 @@ public class PackageRefreshWorkerTests
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
-                }
+                }.AsByteFiles()
             }
         };
         var status = new RefreshStatusStore(true);
@@ -507,7 +507,7 @@ public class PackageRefreshWorkerTests
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
             [".SRCINFO"] = "pkgname = demo\n"
-        };
+        }.AsByteFiles();
         var mirror = new FakeRefreshMirror();
         foreach (var meta in metas)
         {
@@ -580,7 +580,7 @@ public class PackageRefreshWorkerTests
                 {
                     ["big-1.txt"] = new('x', 9_000_000),
                     ["big-2.txt"] = new('x', 9_000_000)
-                }
+                }.AsByteFiles()
             }
         };
         var status = new RefreshStatusStore(true);
@@ -633,7 +633,7 @@ public class PackageRefreshWorkerTests
                 {
                     ["PKGBUILD"] = "pkgname=demo\npkgver=2.0\n",
                     [".SRCINFO"] = "pkgname = demo\n"
-                }
+                }.AsByteFiles()
             }
         };
         var status = new RefreshStatusStore(true);
@@ -654,7 +654,7 @@ public class PackageRefreshWorkerTests
     {
         public Dictionary<string, string> BranchHeads { get; } = new(StringComparer.Ordinal);
         public HashSet<string> FetchFails { get; } = new(StringComparer.Ordinal);
-        public Dictionary<string, IReadOnlyDictionary<string, string>> FilesFor { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, IReadOnlyDictionary<string, byte[]>> FilesFor { get; } = new(StringComparer.Ordinal);
         public List<IReadOnlyList<string>> FetchedBatches { get; } = [];
 
         public Task EnsureInitializedAsync(CancellationToken ct = default)
@@ -683,7 +683,7 @@ public class PackageRefreshWorkerTests
             return Task.FromResult(new BulkFetchResult(succeeded, failed));
         }
 
-        public Task<IReadOnlyDictionary<string, string>> ReadFilesAsync(string pkgBase, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, byte[]>> ReadFilesAsync(string pkgBase, CancellationToken ct = default)
         {
             return Task.FromResult(FilesFor.TryGetValue(pkgBase, out var files) ? files : BaseFiles);
         }

@@ -14,18 +14,18 @@ namespace Atoll.Api.Tests.Sync.Direct;
 
 public class DirectPackageSeederTests
 {
-    private static readonly IReadOnlyDictionary<string, string> BaseFiles =
+    private static readonly IReadOnlyDictionary<string, byte[]> BaseFiles =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = demo\n"
-        };
+        }.AsByteFiles();
 
     private sealed class FakeAurPackageSource : IAurPackageSource
     {
         public List<string> FetchedBases { get; } = [];
 
-        public Task<IReadOnlyDictionary<string, string>> FetchFilesAsync(
+        public Task<IReadOnlyDictionary<string, byte[]>> FetchFilesAsync(
             string packageBase, CancellationToken ct = default)
         {
             FetchedBases.Add(packageBase);

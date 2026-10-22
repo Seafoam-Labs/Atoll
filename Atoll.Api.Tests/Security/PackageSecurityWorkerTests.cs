@@ -1,4 +1,5 @@
 using Atoll.Api.Services.Security;
+using Atoll.Api.Tests.Support;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,7 +41,7 @@ public class PackageSecurityWorkerTests
             Message = "seed",
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = content, Size = content.Length, Hash = "h" }
+                ["PKGBUILD"] = PackageFileFactory.FromText(content)
             }
         };
     }

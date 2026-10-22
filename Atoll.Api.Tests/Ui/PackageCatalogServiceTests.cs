@@ -280,7 +280,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         {
             ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly-bin\n"
-        });
+        }.AsByteFiles());
 
         var seeded = await SearchSeededAsync(catalog, ct);
 
@@ -328,7 +328,7 @@ public sealed class PackageCatalogServiceTests : IAsyncLifetime
         {
             ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly-bin\n"
-        });
+        }.AsByteFiles());
         await security.CompleteScanAsync("shelly-bin", SecurityStatus.Verified);
 
         // Warming lists the names twice: once for the ranker, once for the snapshot. Only a ranked

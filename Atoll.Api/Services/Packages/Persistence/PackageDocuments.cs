@@ -1,3 +1,4 @@
+using System.Text;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -5,7 +6,7 @@ namespace Atoll.Api.Services.Packages.Persistence;
 
 public static class PackageSchema
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     public static string RevisionDocumentId(string packageName, string revisionId)
     {
@@ -50,7 +51,20 @@ public sealed class PackageDocument
 
 public sealed class PackageFile
 {
-    [BsonElement("content")] public string Content { get; init; } = string.Empty;
+    // New writes store the raw bytes. Legacy documents store the old UTF-8 string; the
+    // fallback re-encodes exactly the bytes that were hashed when the document was written.
+    // The returned array is shared with storage; consumers must not mutate it.
+    [BsonElement("contentBytes")]
+    [BsonIgnoreIfNull]
+    public byte[]? ContentBytes { get; init; }
+
+    [BsonElement("content")]
+    [BsonIgnoreIfNull]
+    public string? ContentText { get; init; }
+
+    [BsonIgnore]
+    public byte[] Content => ContentBytes
+        ?? (ContentText is null ? [] : Encoding.UTF8.GetBytes(ContentText));
 
     [BsonElement("size")] public long Size { get; init; }
 

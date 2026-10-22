@@ -17,12 +17,12 @@ namespace Atoll.Api.Tests.Sync.Bulk;
 
 public class PackageBulkSeedWorkerTests
 {
-    private static readonly IReadOnlyDictionary<string, string> BaseFiles =
+    private static readonly IReadOnlyDictionary<string, byte[]> BaseFiles =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=demo\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = demo\n"
-        };
+        }.AsByteFiles();
 
     private static AtollOptions BulkOptions()
     {
@@ -312,7 +312,7 @@ public class PackageBulkSeedWorkerTests
     {
         public HashSet<string> Branches { get; } = new(StringComparer.Ordinal);
         public HashSet<string> FetchFails { get; } = new(StringComparer.Ordinal);
-        private static IReadOnlyDictionary<string, string> Files => BaseFiles;
+        private static IReadOnlyDictionary<string, byte[]> Files => BaseFiles;
         public List<IReadOnlyList<string>> FetchedBatches { get; } = [];
 
         public Task EnsureInitializedAsync(CancellationToken ct = default)
@@ -343,7 +343,7 @@ public class PackageBulkSeedWorkerTests
             return Task.FromResult(new BulkFetchResult(succeeded, failed));
         }
 
-        public virtual Task<IReadOnlyDictionary<string, string>> ReadFilesAsync(string pkgBase, CancellationToken ct = default)
+        public virtual Task<IReadOnlyDictionary<string, byte[]>> ReadFilesAsync(string pkgBase, CancellationToken ct = default)
         {
             var result = Files;
             return Task.FromResult(result);
@@ -389,7 +389,7 @@ public class PackageBulkSeedWorkerTests
             _readFails = new HashSet<string>(readFails, StringComparer.Ordinal);
         }
 
-        public override Task<IReadOnlyDictionary<string, string>> ReadFilesAsync(
+        public override Task<IReadOnlyDictionary<string, byte[]>> ReadFilesAsync(
             string pkgBase,
             CancellationToken ct = default)
         {

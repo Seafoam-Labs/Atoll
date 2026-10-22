@@ -112,8 +112,8 @@ public sealed class PackageTarballEndpointsTests : IDisposable
     {
         await _factory.Repository.InsertSeedAsync(Doc("pkg"), SeedRevision("pkg", new Dictionary<string, PackageFile>(StringComparer.Ordinal)
         {
-            ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 13, Hash = "h" },
-            ["helper.sh"] = new() { Content = "#!/bin/sh\necho hi\n", Size = 18, Hash = "h2" }
+            ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test\n", size: 13),
+            ["helper.sh"] = PackageFileFactory.FromText("#!/bin/sh\necho hi\n", hash: "h2", size: 18)
         }), TestContext.Current.CancellationToken);
         await _factory.SecurityRepository.MarkPendingAsync("pkg", "rev-1", true, PkgBuildSecurityScanner.CurrentPolicyVersion, TestContext.Current.CancellationToken);
 
@@ -146,7 +146,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
             Message = "update",
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = "pkgname=test2\n", Size = 14, Hash = "h2" }
+                ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test2\n", hash: "h2", size: 14)
             }
         };
 
@@ -194,7 +194,7 @@ public sealed class PackageTarballEndpointsTests : IDisposable
             Message = "seed",
             Files = files ?? new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 13, Hash = "h" }
+                ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test\n", size: 13)
             }
         };
     }

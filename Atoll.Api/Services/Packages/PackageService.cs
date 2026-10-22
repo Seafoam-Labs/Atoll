@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text;
 using Atoll.Api.Services.Caching;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
@@ -164,7 +165,7 @@ public sealed class PackageService(
         await hybridCache.RemoveByTagAsync(AtollCacheKeys.TagCatalog, ct);
     }
 
-    public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
+    public async Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, byte[]> files)
     {
         var snapshot = PackageSnapshotFactory.Create(
             packageName, files, _options.Mongo.MaxFileBytes, "aur", "seed from AUR");
@@ -187,7 +188,7 @@ public sealed class PackageService(
 
     public async Task<bool> AppendRevisionFromUpstreamAsync(
         string packageName,
-        IReadOnlyDictionary<string, string> files,
+        IReadOnlyDictionary<string, byte[]> files,
         CancellationToken ct = default)
     {
         var snapshot = PackageSnapshotFactory.Create(
@@ -212,6 +213,9 @@ public sealed class PackageService(
 
     private static PackageFiles ToPackageFiles(IReadOnlyDictionary<string, PackageFile> files)
     {
-        return new PackageFiles(files.ToDictionary(kv => kv.Key, kv => kv.Value.Content, StringComparer.Ordinal));
+        // The REST surface still exposes text; binary files are decoded with replacement until
+        // the binaryFiles split lands.
+        return new PackageFiles(files.ToDictionary(
+            kv => kv.Key, kv => Encoding.UTF8.GetString(kv.Value.Content), StringComparer.Ordinal));
     }
 }

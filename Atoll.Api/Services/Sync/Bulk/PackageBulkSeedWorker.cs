@@ -267,7 +267,7 @@ public sealed class PackageBulkSeedWorker(
             new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = ct },
             async (pkgBase, token) =>
             {
-                IReadOnlyDictionary<string, string> files;
+                IReadOnlyDictionary<string, byte[]> files;
                 try
                 {
                     files = await mirror.ReadFilesAsync(pkgBase, token);

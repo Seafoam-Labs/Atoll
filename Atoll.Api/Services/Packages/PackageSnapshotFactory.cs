@@ -21,7 +21,7 @@ internal static class PackageSnapshotFactory
 {
     public static PackageSnapshot Create(
         string packageName,
-        IReadOnlyDictionary<string, string> files,
+        IReadOnlyDictionary<string, byte[]> files,
         int maxFileBytes,
         string author,
         string message)
@@ -53,14 +53,13 @@ internal static class PackageSnapshotFactory
     }
 
     private static Dictionary<string, PackageFile> BuildAndValidatePackageFiles(
-        IReadOnlyDictionary<string, string> files,
+        IReadOnlyDictionary<string, byte[]> files,
         int maxFileBytes)
     {
         var result = new Dictionary<string, PackageFile>(files.Count, StringComparer.Ordinal);
 
-        foreach (var (name, content) in files)
+        foreach (var (name, bytes) in files)
         {
-            var bytes = Encoding.UTF8.GetBytes(content);
             if (bytes.Length > maxFileBytes)
                 throw new InvalidOperationException(
                     $"File '{name}' is {bytes.Length.ToString(CultureInfo.InvariantCulture)} bytes " +
@@ -69,7 +68,7 @@ internal static class PackageSnapshotFactory
             var hash = SHA256.HashData(bytes);
             result[name] = new PackageFile
             {
-                Content = content,
+                ContentBytes = bytes,
                 Size = bytes.Length,
                 Hash = $"sha256:{Convert.ToHexString(hash).ToLowerInvariant()}"
             };

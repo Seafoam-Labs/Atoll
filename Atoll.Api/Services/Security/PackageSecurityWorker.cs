@@ -1,3 +1,4 @@
+using System.Text;
 using Atoll.Api.Services.Security.Persistence;
 using Microsoft.Extensions.Options;
 using Atoll.Api.Services.Packages.Persistence;
@@ -136,7 +137,8 @@ public sealed partial class PackageSecurityWorker(
                 return true;
             }
 
-            var files = revision.Files.ToDictionary(kv => kv.Key, kv => kv.Value.Content, StringComparer.Ordinal);
+            var files = revision.Files.ToDictionary(
+                kv => kv.Key, kv => Encoding.UTF8.GetString(kv.Value.Content), StringComparer.Ordinal);
             var result = scanner.Scan(files);
             var persisted = await securityRepo.CompleteScanAsync(
                 claim.PackageName, claim.RevisionId, _owner, result, scanner.PolicyVersion, ct);

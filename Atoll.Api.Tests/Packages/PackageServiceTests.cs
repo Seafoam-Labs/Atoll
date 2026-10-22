@@ -16,12 +16,12 @@ namespace Atoll.Api.Tests.Packages;
 
 public class PackageServiceTests
 {
-    private static readonly IReadOnlyDictionary<string, string> SampleFiles =
+    private static readonly IReadOnlyDictionary<string, byte[]> SampleFiles =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly\n"
-        };
+        }.AsByteFiles();
 
     private static PackageService CreateService(
         InMemoryPackageRepository repo,
@@ -77,8 +77,8 @@ public class PackageServiceTests
         Assert.Multiple(() =>
         {
             Assert.Equivalent(SampleFiles.Keys, files.Files.Keys, strict: true);
-            Assert.Equal(SampleFiles["PKGBUILD"], files.Files["PKGBUILD"]);
-            Assert.Equal(SampleFiles[".SRCINFO"], files.Files[".SRCINFO"]);
+            Assert.Equal("pkgname=shelly\npkgver=1.0\n", files.Files["PKGBUILD"]);
+            Assert.Equal("pkgname = shelly\n", files.Files[".SRCINFO"]);
         });
     }
 
@@ -115,7 +115,7 @@ public class PackageServiceTests
         Assert.Multiple(() =>
         {
             Assert.Equivalent(SampleFiles.Keys, byRevision.Files.Keys, strict: true);
-            Assert.Equal(SampleFiles["PKGBUILD"], byRevision.Files["PKGBUILD"]);
+            Assert.Equal("pkgname=shelly\npkgver=1.0\n", byRevision.Files["PKGBUILD"]);
         });
     }
 
@@ -145,7 +145,7 @@ public class PackageServiceTests
         var big = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["big.bin"] = new('x', 2_048)
-        };
+        }.AsByteFiles();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await service.SeedFilesAsync("big-pkg", big));
 
@@ -166,7 +166,7 @@ public class PackageServiceTests
         {
             ["large-1.txt"] = new('x', 9_000_000),
             ["large-2.txt"] = new('x', 9_000_000)
-        };
+        }.AsByteFiles();
 
         var ex = await Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () => await service.SeedFilesAsync("too-large", files));
         var packageExists = await repo.ExistsAsync("too-large", TestContext.Current.CancellationToken);
@@ -195,7 +195,7 @@ public class PackageServiceTests
         {
             ["large-1.txt"] = new('x', 9_000_000),
             ["large-2.txt"] = new('x', 9_000_000)
-        };
+        }.AsByteFiles();
 
         await Assert.ThrowsAsync<PackageDocumentTooLargeException>(async () =>
             await service.AppendRevisionFromUpstreamAsync("pkg", oversizedFiles, TestContext.Current.CancellationToken));
@@ -785,7 +785,7 @@ public class PackageServiceTests
         {
             ["large-1.txt"] = new('x', perFile),
             ["large-2.txt"] = new('x', perFile)
-        };
+        }.AsByteFiles();
 
         await service.SeedFilesAsync("boundary", files);
 

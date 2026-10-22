@@ -299,7 +299,7 @@ public sealed partial class PackageRefreshWorker(
             new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = ct },
             async (candidate, token) =>
             {
-                IReadOnlyDictionary<string, string> files;
+                IReadOnlyDictionary<string, byte[]> files;
                 try
                 {
                     files = await mirror.ReadFilesAsync(candidate.PackageBase, token);

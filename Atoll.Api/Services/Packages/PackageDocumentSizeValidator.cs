@@ -13,7 +13,7 @@ internal static class PackageDocumentSizeValidator
 {
     public const long MongoMaxDocumentSizeBytes = 16 * 1024 * 1024;
 
-    // Per-file BSON overhead: hash string, size field, element names, and framing.
+    // Per-file BSON overhead: hash string, size field, element names, and binary framing.
     private const int FileEntryOverheadBytes = 160;
 
     // Revision-document-level overhead: identifiers, timestamps, and revision metadata.

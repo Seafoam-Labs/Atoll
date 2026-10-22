@@ -85,9 +85,9 @@ public class AurMirror : IAurMirror
         }
     }
 
-    public async Task<IReadOnlyDictionary<string, string>> ReadFilesAsync(string pkgBase, CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<string, byte[]>> ReadFilesAsync(string pkgBase, CancellationToken ct = default)
     {
-        var files = new Dictionary<string, string>(StringComparer.Ordinal);
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
 
         using var buffer = new MemoryStream();
         var archiveCmd = Cli.Wrap("git")
@@ -123,10 +123,16 @@ public class AurMirror : IAurMirror
                 continue;
 
             var data = entry.DataStream;
-            if (data is null) continue;
+            if (data is null)
+            {
+                // git archive emits zero-length regular files without a data stream.
+                files[name] = [];
+                continue;
+            }
 
-            using var streamReader = new StreamReader(data, leaveOpen: false);
-            files[name] = await streamReader.ReadToEndAsync(ct);
+            using var content = new MemoryStream();
+            await data.CopyToAsync(content, ct);
+            files[name] = content.ToArray();
         }
 
         return files;

@@ -468,7 +468,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
                 Message = "seed",
                 Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
-                    ["PKGBUILD"] = new() { Content = $"pkgname={name}\n", Size = 8 + name.Length, Hash = revisionId }
+                    ["PKGBUILD"] = PackageFileFactory.FromText($"pkgname={name}\n", size: 8 + name.Length)
                 }
             }, TestContext.Current.CancellationToken);
     }
@@ -488,7 +488,7 @@ public sealed class PackageIndexEndpointsTests : IDisposable
                 Message = "append",
                 Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
                 {
-                    ["PKGBUILD"] = new() { Content = $"pkgname={name}\n# {revisionId}\n", Size = 10 + name.Length, Hash = revisionId }
+                    ["PKGBUILD"] = PackageFileFactory.FromText($"pkgname={name}\n# {revisionId}\n", hash: revisionId, size: 10 + name.Length)
                 }
             },
             10, TestContext.Current.CancellationToken);

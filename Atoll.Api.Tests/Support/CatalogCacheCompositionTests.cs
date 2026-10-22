@@ -29,7 +29,7 @@ public class CatalogCacheCompositionTests
         {
             ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly-bin\n"
-        });
+        }.AsByteFiles());
 
         Assert.Equal(["shelly-bin"], (await SearchSeededAsync(catalog, ct)).Rows.Select(row => row.Package.Name), StringComparer.Ordinal);
     }
@@ -46,7 +46,7 @@ public class CatalogCacheCompositionTests
         {
             ["PKGBUILD"] = "pkgname=shelly-bin\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly-bin\n"
-        });
+        }.AsByteFiles());
         await factory.SecurityRepository.MarkHeadVerifiedAsync("shelly-bin");
 
         // Warms the snapshot with a Verified head.

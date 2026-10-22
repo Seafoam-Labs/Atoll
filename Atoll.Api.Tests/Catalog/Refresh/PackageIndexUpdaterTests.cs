@@ -453,11 +453,11 @@ public class PackageIndexUpdaterTests
         public Task<IReadOnlyList<PackageVersion>> GetHistoryAsync(string packageName)
             => throw new NotSupportedException();
 
-        public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
+        public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, byte[]> files)
             => throw new NotSupportedException();
 
         public Task<bool> AppendRevisionFromUpstreamAsync(
-            string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
+            string packageName, IReadOnlyDictionary<string, byte[]> files, CancellationToken ct = default)
             => throw new NotSupportedException();
 
     }

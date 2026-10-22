@@ -77,7 +77,7 @@ public sealed class PackageDiffGitTabTests : IAsyncLifetime
             Message = message,
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = pkgbuild, Size = pkgbuild.Length, Hash = "h" }
+                ["PKGBUILD"] = PackageFileFactory.FromText(pkgbuild)
             }
         };
     }

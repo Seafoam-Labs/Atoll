@@ -58,7 +58,7 @@ public sealed partial class UiPagesTests : IDisposable
             Message = "seed",
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = "pkgname=test\n", Size = 12, Hash = "h" }
+                ["PKGBUILD"] = PackageFileFactory.FromText("pkgname=test\n", size: 12)
             }
         };
     }
@@ -108,8 +108,8 @@ public sealed partial class UiPagesTests : IDisposable
             Message = message,
             Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
             {
-                ["PKGBUILD"] = new() { Content = pkgbuild, Size = pkgbuild.Length, Hash = "h" },
-                [".SRCINFO"] = new() { Content = "pkgname = test\n", Size = 15, Hash = "h" }
+                ["PKGBUILD"] = PackageFileFactory.FromText(pkgbuild),
+                [".SRCINFO"] = PackageFileFactory.FromText("pkgname = test\n", size: 15)
             }
         };
     }

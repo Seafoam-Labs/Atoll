@@ -18,12 +18,12 @@ namespace Atoll.Api.Tests.Packages.Git;
 [Trait("Category", "RequiresGit")]
 public sealed class GitTransferServiceTests : IAsyncLifetime
 {
-    private static readonly IReadOnlyDictionary<string, string> SampleFiles =
+    private static readonly IReadOnlyDictionary<string, byte[]> SampleFiles =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PKGBUILD"] = "pkgname=shelly\npkgver=1.0\n",
             [".SRCINFO"] = "pkgname = shelly\n"
-        };
+        }.AsByteFiles();
 
     private static async Task<bool> GitIsAvailableAsync()
     {
@@ -143,7 +143,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
             {
                 var fullPath = Path.Combine(cloneDir, name);
                 Assert.True(File.Exists(fullPath), $"missing {name}");
-                Assert.Equal(content, await File.ReadAllTextAsync(fullPath, TestContext.Current.CancellationToken));
+                Assert.Equal(content, await File.ReadAllBytesAsync(fullPath, TestContext.Current.CancellationToken));
             }
         }
         finally

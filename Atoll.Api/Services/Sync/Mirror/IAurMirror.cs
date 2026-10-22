@@ -14,5 +14,5 @@ public interface IAurMirror
 
     Task<BulkFetchResult> FetchAsync(IReadOnlyList<string> pkgBases, CancellationToken ct = default);
 
-    Task<IReadOnlyDictionary<string, string>> ReadFilesAsync(string pkgBase, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, byte[]>> ReadFilesAsync(string pkgBase, CancellationToken ct = default);
 }

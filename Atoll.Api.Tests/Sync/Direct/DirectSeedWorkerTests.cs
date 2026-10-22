@@ -2,6 +2,7 @@ using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Sync.Direct;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
+using Atoll.Api.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -47,14 +48,14 @@ public class DirectSeedWorkerTests
 
         public Task DeleteAsync(string packageName, CancellationToken ct = default) => throw new NotSupportedException();
 
-        public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, string> files)
+        public Task SeedFilesAsync(string packageName, IReadOnlyDictionary<string, byte[]> files)
         {
             SeedCalls.Add(packageName);
             return Task.CompletedTask;
         }
 
         public Task<bool> AppendRevisionFromUpstreamAsync(
-            string packageName, IReadOnlyDictionary<string, string> files, CancellationToken ct = default)
+            string packageName, IReadOnlyDictionary<string, byte[]> files, CancellationToken ct = default)
             => throw new NotSupportedException();
     }
 
@@ -65,7 +66,7 @@ public class DirectSeedWorkerTests
 
         public CancellationTokenSource? CancelDuringFetch { get; set; }
 
-        public async Task<IReadOnlyDictionary<string, string>> FetchFilesAsync(
+        public async Task<IReadOnlyDictionary<string, byte[]>> FetchFilesAsync(
             string packageBase, CancellationToken ct = default)
         {
             if (CancelDuringFetch is not null)
@@ -74,7 +75,7 @@ public class DirectSeedWorkerTests
             if (FailFor.Contains(packageBase))
                 throw new InvalidOperationException("boom");
 
-            return new Dictionary<string, string>(StringComparer.Ordinal) { ["PKGBUILD"] = "pkgname=x\n" };
+            return TestFiles.Text(("PKGBUILD", "pkgname=x\n"));
         }
     }
 

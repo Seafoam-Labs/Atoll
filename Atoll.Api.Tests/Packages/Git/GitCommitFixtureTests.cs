@@ -175,7 +175,7 @@ public sealed class GitCommitFixtureTests : IAsyncLifetime
             Message = message,
             Files = files.ToDictionary(
                 kv => kv.Key,
-                kv => new PackageFile { Content = kv.Value, Size = 0, Hash = "unused" }, StringComparer.Ordinal)
+                kv => PackageFileFactory.FromText(kv.Value, hash: "unused", size: 0), StringComparer.Ordinal)
         };
     }
 

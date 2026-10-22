@@ -241,9 +241,11 @@ public sealed class GitRepositoryCache(
 
         foreach (var (name, file) in files)
         {
-            var blob = (await GitClient.ExecuteAsync(repoPath, ["hash-object", "--stdin", "-w"], file.Content, env, ct)).Trim();
+            var content = file.Content;
+            var blob = (await GitClient.ExecuteWithInputAsync(
+                repoPath, ["hash-object", "--stdin", "-w"], content, env, ct)).Trim();
 
-            var mode = IsExecutable(name, file.Content) ? "100755" : "100644";
+            var mode = IsExecutable(name, content) ? "100755" : "100644";
 
             await GitClient.ExecuteAsync(repoPath, ["update-index", "--add", "--cacheinfo", mode, blob, name], null, env, ct);
         }
@@ -252,12 +254,12 @@ public sealed class GitRepositoryCache(
     }
 
     // Shared with the tarball snapshot builder so downloads and clones agree on exec bits.
-    internal static bool IsExecutable(string name, string? content)
+    internal static bool IsExecutable(string name, ReadOnlySpan<byte> content)
     {
         if (name.EndsWith(".sh", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        return !string.IsNullOrEmpty(content) && content.StartsWith("#!", StringComparison.Ordinal);
+        return content.StartsWith("#!"u8);
     }
 
     private static async Task<string> WriteCommitAsync(
