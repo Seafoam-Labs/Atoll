@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Security.Scanning;
 
 namespace Atoll.Api.Services.Security;
@@ -5,30 +6,42 @@ namespace Atoll.Api.Services.Security;
 public sealed class PkgBuildSecurityScanner : IPackageSecurityScanner
 {
     // Increment whenever a scanner rule change requires persisted verdicts to be refreshed.
-    public const int CurrentPolicyVersion = 4;
+    // Version 5 scans raw bytes for magic detection instead of the UTF-8-decoded text.
+    public const int CurrentPolicyVersion = 5;
 
     public int PolicyVersion => CurrentPolicyVersion;
 
-    public ScanResult Scan(IReadOnlyDictionary<string, string> files)
+    public ScanResult Scan(IReadOnlyDictionary<string, byte[]> files)
     {
         var findings = new List<SecurityFinding>();
-        var pkgBuildText = files.FirstOrDefault(f => PackageBuildFileClassifier.IsPkgbuild(f.Key)).Value;
 
-        foreach (var (path, content) in files)
+        // Decode each file exactly once: the binary classifier and the shell rules must see
+        // the same scan-only text view, and the PKGBUILD lookup must reuse it rather than
+        // decoding the file a second time.
+        var decoded = new List<(string Path, byte[] Bytes, string Text)>(files.Count);
+        foreach (var (path, bytes) in files)
+            decoded.Add((path, bytes, PackageText.DecodeForScanning(bytes)));
+
+        var pkgBuildText = decoded
+            .Where(file => PackageBuildFileClassifier.IsPkgbuild(file.Path))
+            .Select(file => file.Text)
+            .FirstOrDefault();
+
+        foreach (var (path, bytes, text) in decoded)
         {
-            var binaryFinding = LocalSourceBinaryScanner.Scan(content, path);
+            var binaryFinding = LocalSourceBinaryScanner.Scan(bytes, text, path);
             if (binaryFinding is not null)
                 findings.Add(binaryFinding);
 
-            if (string.IsNullOrWhiteSpace(content) || !PackageBuildFileClassifier.IsScannable(path))
+            if (string.IsNullOrWhiteSpace(text) || !PackageBuildFileClassifier.IsScannable(path))
                 continue;
 
-            findings.AddRange(ShellContentScanner.Scan(content, path, IsReferencedByPkgBuild(path, pkgBuildText)));
+            findings.AddRange(ShellContentScanner.Scan(text, path, IsReferencedByPkgBuild(path, pkgBuildText)));
 
             if (PackageBuildFileClassifier.IsPkgbuild(path))
             {
-                findings.AddRange(PkgBuildSourceUrlScanner.Scan(content, path));
-                findings.AddRange(HomographScanner.Scan(content, path));
+                findings.AddRange(PkgBuildSourceUrlScanner.Scan(text, path));
+                findings.AddRange(HomographScanner.Scan(text, path));
             }
         }
 

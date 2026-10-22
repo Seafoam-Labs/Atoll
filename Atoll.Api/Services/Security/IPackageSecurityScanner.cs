@@ -4,5 +4,5 @@ public interface IPackageSecurityScanner
 {
     int PolicyVersion { get; }
 
-    ScanResult Scan(IReadOnlyDictionary<string, string> files);
+    ScanResult Scan(IReadOnlyDictionary<string, byte[]> files);
 }

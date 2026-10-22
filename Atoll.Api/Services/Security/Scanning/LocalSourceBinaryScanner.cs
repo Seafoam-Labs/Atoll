@@ -10,19 +10,37 @@ internal static partial class LocalSourceBinaryScanner
     // recognized by extension. ELF still takes precedence and stays Critical regardless.
     private static readonly string[] CertificateExtensions = [".sig", ".asc", ".gpg", ".cer", ".crt", ".pem"];
 
+    // Raw signatures. The scanner receives the original bytes, so the values are the
+    // formats' actual magic rather than the U+FFFD-shadowed shapes a text decode leaves.
+    private static ReadOnlySpan<byte> ElfMagic => [0x7F, 0x45, 0x4C, 0x46];
+    private static ReadOnlySpan<byte> PngMagic => [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    private static ReadOnlySpan<byte> JpegMagic => [0xFF, 0xD8, 0xFF];
+    private static ReadOnlySpan<byte> IconMagic => [0x00, 0x00, 0x01, 0x00];
+    private static ReadOnlySpan<byte> TrueTypeMagic => [0x00, 0x01, 0x00, 0x00];
+    private static ReadOnlySpan<byte> GzipMagic => [0x1F, 0x8B];
+    private static ReadOnlySpan<byte> SevenZipMagic => [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
+    private static ReadOnlySpan<byte> XzMagic => [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00];
+    private static ReadOnlySpan<byte> ZstdMagic => [0x28, 0xB5, 0x2F, 0xFD];
+
     // Shared libraries are named by the linker convention (*.so, *.so.N[.N...]). e_type
     // cannot distinguish them - PIE executables are ET_DYN like libraries - so the file
     // name is the signal.
     [GeneratedRegex(@"\.so(?:\.\d+)*$", RegexOptions.Compiled | RegexOptions.IgnoreCase, 250)]
     private static partial Regex SharedLibraryName { get; }
 
-    public static SecurityFinding? Scan(string content, string path)
+    /// <summary>
+    ///     Classifies a local source file from two views of the same content: the raw bytes
+    ///     for magic matching, and a scan-only decoded text for binary classification. The text
+    ///     must come from <c>PackageText.DecodeForScanning</c>, so the classifier and the shell
+    ///     rules in <see cref="PkgBuildSecurityScanner" /> agree on one view.
+    /// </summary>
+    public static SecurityFinding? Scan(ReadOnlySpan<byte> raw, string text, string path)
     {
-        var hasBinaryCharacters = HasBinaryCharacters(content);
-        var isElf = content.StartsWith("\u007fELF", StringComparison.Ordinal);
+        var hasBinaryCharacters = HasBinaryCharacters(text);
+        var isElf = raw.StartsWith(ElfMagic);
         // "MZ" is ASCII and can open an ordinary text file, so it only counts as a PE
-        // header when the content is binary anyway.
-        var isWindowsExecutable = hasBinaryCharacters && content.StartsWith("MZ", StringComparison.Ordinal);
+        // header when the decoded content is binary anyway.
+        var isWindowsExecutable = hasBinaryCharacters && raw.StartsWith("MZ"u8);
         if (!isElf && !isWindowsExecutable && !hasBinaryCharacters)
             return null;
 
@@ -42,15 +60,17 @@ internal static partial class LocalSourceBinaryScanner
             return CreateFinding(SecurityFindingRules.LocalBinary, path,
                 string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinary.Description, path, "a Windows executable"));
 
-        if (IsArchive(content))
+        // Magic matching runs only after the text view classified the file as binary: an
+        // all-ASCII PDF, GIF header, or tar header spelled in prose is text, not inert media.
+        if (IsArchive(raw))
             return CreateFinding(SecurityFindingRules.LocalBinaryArchive, path,
                 string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryArchive.Description, path));
 
-        if (IsInertMedia(content) || IsCertificateOrSignature(path))
+        if (IsInertMedia(raw) || IsCertificateOrSignature(path))
             return CreateFinding(SecurityFindingRules.LocalBinaryInertMedia, path,
                 string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryInertMedia.Description, path));
 
-        if (!HasControlCharacters(content))
+        if (!HasControlCharacters(text))
             return CreateFinding(SecurityFindingRules.LocalBinaryUnencodableText, path,
                 string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryUnencodableText.Description, path));
 
@@ -59,91 +79,64 @@ internal static partial class LocalSourceBinaryScanner
     }
 
     /// <summary>
-    ///     Recognizes inert media formats by their magic bytes. Content reaches the scanner
-    ///     UTF-8-decoded, so signatures are anchored on the parts that survive decoding:
-    ///     undecodable lead bytes arrive as U+FFFD, low bytes (NUL, control, ASCII) verbatim.
-    ///     Archives are recognized separately by <see cref="IsArchive" />.
+    ///     Recognizes inert media formats by their raw magic bytes. Archives are recognized
+    ///     separately by <see cref="IsArchive" />, and both are only consulted once the text
+    ///     view has established that the file is binary.
     /// </summary>
-    private static bool IsInertMedia(string content)
+    private static bool IsInertMedia(ReadOnlySpan<byte> raw)
     {
-        if (content.Length < 4)
-            return false;
-
-        if (content.StartsWith("\uFFFDPNG\r\n\u001a\n", StringComparison.Ordinal) ||
-            content.StartsWith("GIF87a", StringComparison.Ordinal) ||
-            content.StartsWith("GIF89a", StringComparison.Ordinal) ||
-            content.StartsWith("%PDF", StringComparison.Ordinal) ||
-            content.StartsWith("OTTO", StringComparison.Ordinal) ||
-            content.StartsWith("wOFF", StringComparison.Ordinal) ||
-            content.StartsWith("wOF2", StringComparison.Ordinal) ||
-            content.StartsWith("\0\0\u0001\0", StringComparison.Ordinal) ||
-            content.StartsWith("\0\u0001\0\0", StringComparison.Ordinal))
+        if (raw.StartsWith(PngMagic) ||
+            raw.StartsWith("GIF87a"u8) ||
+            raw.StartsWith("GIF89a"u8) ||
+            raw.StartsWith("%PDF"u8) ||
+            raw.StartsWith("OTTO"u8) ||
+            raw.StartsWith("wOFF"u8) ||
+            raw.StartsWith("wOF2"u8) ||
+            raw.StartsWith(IconMagic) ||
+            raw.StartsWith(TrueTypeMagic) ||
+            raw.StartsWith(JpegMagic))
             return true;
 
         // Tracker music modules and Allegro packed datafiles: audio/game asset containers
-        // that cannot execute on their own. All three magics are pure ASCII.
-        if (content.StartsWith("Extended Module: ", StringComparison.Ordinal) ||
-            content.StartsWith("IMPM", StringComparison.Ordinal) ||
-            content.StartsWith("slh!", StringComparison.Ordinal))
+        // that cannot execute on their own.
+        if (raw.StartsWith("Extended Module: "u8) ||
+            raw.StartsWith("IMPM"u8) ||
+            raw.StartsWith("slh!"u8))
             return true;
 
-        // JPEG: FF D8 FF decodes to three replacements; JFIF/Exif marker at offset 6.
-        if (content.Length >= 10 &&
-            content.StartsWith("\uFFFD\uFFFD\uFFFD", StringComparison.Ordinal) &&
-            (content.AsSpan(6).StartsWith("JFIF") || content.AsSpan(6).StartsWith("Exif")))
+        // BMP: "BM" plus the four reserved header bytes.
+        if (raw.StartsWith("BM"u8) &&
+            raw.Length >= 14 &&
+            raw[6] == 0 && raw[7] == 0 && raw[8] == 0 && raw[9] == 0)
             return true;
 
-        // BMP: "BM" plus the reserved NUL pair near the header. The offset is loose because
-        // the size field can contain multi-byte-valid sequences that merge during decoding.
-        if (content.StartsWith("BM", StringComparison.Ordinal) &&
-            content.Length >= 14 &&
-            content.AsSpan(0, 14).Contains('\0'))
+        // WebP: "RIFF", a four-byte size, then "WEBP".
+        if (raw.StartsWith("RIFF"u8) && raw.Length >= 12 && raw[8..].StartsWith("WEBP"u8))
             return true;
 
-        // WebP: "RIFF" ... "WEBP". The 4 size bytes decode to 1-4 characters, shifting the
-        // "WEBP" offset, so it is located in a window instead of at a fixed position.
-        if (content.StartsWith("RIFF", StringComparison.Ordinal))
-        {
-            var webp = content.IndexOf("WEBP", StringComparison.Ordinal);
-            if (webp is >= 4 and <= 12)
-                return true;
-        }
-
-        // S3M tracker module: "SCRM" signature at byte offset 44. Multi-byte sequences can
-        // only merge during decoding, shifting the offset earlier, so the window is bounded.
-        var s3m = content.IndexOf("SCRM", StringComparison.Ordinal);
-        if (s3m is >= 0 and <= 44)
-            return true;
-
-        return false;
+        // S3M tracker module: "SCRM" signature at byte offset 44.
+        return raw.Length >= 48 && raw[44..].StartsWith("SCRM"u8);
     }
 
     /// <summary>
-    ///     Recognizes archive formats by their magic bytes so they can be downgraded to a
-    ///     non-blocking finding: an archive cannot execute on its own and is versioned in
-    ///     the repository, making it more auditable than an equivalent remote source URL.
-    ///     Signatures are anchored the same way as <see cref="IsInertMedia" /> - on the
-    ///     parts that survive UTF-8 decoding.
+    ///     Recognizes archive formats by their raw magic bytes so they can be downgraded to a
+    ///     non-blocking finding: an archive cannot execute on its own and is versioned in the
+    ///     repository, making it more auditable than an equivalent remote source URL.
     /// </summary>
-    private static bool IsArchive(string content)
+    private static bool IsArchive(ReadOnlySpan<byte> raw)
     {
-        if (content.Length < 4)
-            return false;
-
-        if (content.StartsWith("\u001F\uFFFD", StringComparison.Ordinal) || // gzip: 1F 8B
-            content.StartsWith("BZh", StringComparison.Ordinal) || // bzip2
-            content.StartsWith("PK\u0003\u0004", StringComparison.Ordinal) || // zip local header
-            content.StartsWith("PK\u0005\u0006", StringComparison.Ordinal) || // zip end-of-central-directory
-            content.StartsWith("Rar!\u001A\u0007", StringComparison.Ordinal) || // RAR
-            content.StartsWith("7z\uFFFD\uFFFD'\u001C", StringComparison.Ordinal) || // 7z: BC AF 27 1C
-            content.StartsWith("\uFFFD7zXZ\u0000", StringComparison.Ordinal) || // xz: FD "7zXZ" 00
-            content.StartsWith("(\uFFFD/\uFFFD", StringComparison.Ordinal)) // zstd: 28 B5 2F FD
+        if (raw.StartsWith(GzipMagic) ||
+            raw.StartsWith("BZh"u8) || // bzip2
+            raw.StartsWith("PK\x03\x04"u8) || // zip local header
+            raw.StartsWith("PK\x05\x06"u8) || // zip end-of-central-directory
+            raw.StartsWith("Rar!\x1A\x07"u8) || // RAR
+            raw.StartsWith(SevenZipMagic) ||
+            raw.StartsWith(XzMagic) ||
+            raw.StartsWith(ZstdMagic))
             return true;
 
-        // tar: "ustar" at byte offset 257. Multi-byte sequences in the preceding header can
-        // only merge during decoding, shifting the offset earlier, so the window is bounded.
-        var ustar = content.IndexOf("ustar", StringComparison.Ordinal);
-        return ustar is >= 0 and <= 257;
+        // tar: "ustar" at byte offset 257, after the first 512-byte header block.
+        return raw.Length >= 262 && raw[257..].StartsWith("ustar"u8);
     }
 
     private static bool IsCertificateOrSignature(string path)
@@ -159,7 +152,7 @@ internal static partial class LocalSourceBinaryScanner
     }
 
     // Cc minus the five whitespace controls, which pass through: [0x00..0x08] +
-    // [0x0E..0x1F] + [0x7F..0x9F]. The binary set adds U+FFFD, where UTF-8 decoding
+    // [0x0E..0x1F] + [0x7F..0x9F]. The binary set adds U+FFFD, where the scan-only decode
     // lands undecodable bytes.
     private static readonly char[] ControlCharacterValues =
     [
@@ -174,14 +167,14 @@ internal static partial class LocalSourceBinaryScanner
     private static readonly SearchValues<char> BinaryCharacters =
         SearchValues.Create([.. ControlCharacterValues, '\uFFFD']);
 
-    private static bool HasBinaryCharacters(string content)
+    private static bool HasBinaryCharacters(string text)
     {
-        return content.AsSpan().ContainsAny(BinaryCharacters);
+        return text.AsSpan().ContainsAny(BinaryCharacters);
     }
 
     /// <summary>True when the content contains NUL or control characters (U+FFFD alone does not count).</summary>
-    private static bool HasControlCharacters(string content)
+    private static bool HasControlCharacters(string text)
     {
-        return content.AsSpan().ContainsAny(ControlCharacters);
+        return text.AsSpan().ContainsAny(ControlCharacters);
     }
 }
