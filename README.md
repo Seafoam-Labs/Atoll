@@ -123,3 +123,7 @@ and should not be exposed broadly without network controls.
 
 Atoll was inspired by [faur](https://github.com/fosskers/faur), a community-driven AUR mirror project made in Clojure by
 [fosskers](https://github.com/fosskers).
+
+## License
+
+See [LICENSE](LICENSE) and [NOTICE](NOTICE) for the exact terms.

@@ -172,6 +172,28 @@ public sealed partial class UiPagesTests : IDisposable
     }
 
     [Fact]
+    public async Task RootPage_RendersLicenseAttribution()
+    {
+        var body = await (await _client.GetAsync("/", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        var footerStart = body.IndexOf("<footer", StringComparison.Ordinal);
+        var footerEnd = body.IndexOf("</footer>", StringComparison.Ordinal);
+        Assert.True(footerStart >= 0 && footerEnd > footerStart);
+        var footer = body[footerStart..footerEnd];
+
+        Assert.Multiple(() =>
+        {
+            Assert.Contains("Atoll by", footer, StringComparison.Ordinal);
+            Assert.Contains("Seafoam Labs</a>", footer, StringComparison.Ordinal);
+            Assert.Contains("© 2026", footer, StringComparison.Ordinal);
+            Assert.Contains("GPL-3.0", footer, StringComparison.Ordinal);
+            Assert.Contains("no warranty", footer, StringComparison.Ordinal);
+            Assert.Contains("https://github.com/Seafoam-Labs/Atoll", footer, StringComparison.Ordinal);
+            Assert.Contains("https://www.patreon.com/cw/SeafoamLabs", footer, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task RootPage_RanksWithBestMatchByDefault()
     {
         var body = await GetBodyAsync("/?q=portable");

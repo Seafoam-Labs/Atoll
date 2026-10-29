@@ -41,4 +41,5 @@ RUN dotnet publish "./Atoll.Api.csproj" -c $BUILD_CONFIGURATION --no-restore -o 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY ["LICENSE", "NOTICE", "/app/"]
 ENTRYPOINT ["dotnet", "Atoll.Api.dll"]

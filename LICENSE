@@ -672,3 +672,54 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
+
+===============================================================================
+
+Atoll copyright notice and additional terms
+
+Copyright (C) 2026 Seafoam Labs
+
+The GNU General Public License, version 3, reproduced above governs Atoll.
+The following additional terms are added under section 7 of that license.
+They apply only to material for which Seafoam Labs holds copyright.
+Material contributed by other authors remains under the GNU General Public
+License, version 3, unless its author adopts these terms.
+
+1. Attribution notice
+
+   Anyone who conveys Atoll, or a work based on Atoll, must preserve the
+   following attribution notice in the Appropriate Legal Notices displayed
+   by the work's interactive user interface, including any web interface:
+
+       Atoll, developed by Seafoam Labs
+       https://github.com/Seafoam-Labs/Atoll
+       https://www.patreon.com/cw/SeafoamLabs
+
+   The notice must be convenient and prominently visible. It may appear in a
+   footer, header, sidebar, About screen, or another part of the interface.
+   Its wording and placement may change as the interface evolves, provided it
+   still identifies Atoll, credits Seafoam Labs as the original developer, and
+   includes the source and support links above.
+
+2. Modified versions
+
+   A modified version must not misrepresent its origin. If a modified version
+   retains the attribution notice, the notice must remain accurate: it must
+   not state or imply that Seafoam Labs wrote changes it did not write. A
+   modified version may mark its changes and add its own copyright notice and
+   attribution alongside the notice.
+
+3. Status under the GNU GPL
+
+   These are additional requirements under section 7 of the GNU GPL version 3,
+   not additional permissions. Section 7 does not authorize their removal. A
+   conveyance that does not comply with them is outside the permissions
+   granted by the GNU GPL version 3 for the material to which they apply.
+
+4. Severability
+
+   If any part of these additional terms is held not to be a permitted
+   additional requirement under section 7, that part is severable and the
+   remaining terms continue to apply. In particular, the requirement to
+   identify Atoll and Seafoam Labs as the original developer remains in effect
+   even if the requirement to include the support link does not.
