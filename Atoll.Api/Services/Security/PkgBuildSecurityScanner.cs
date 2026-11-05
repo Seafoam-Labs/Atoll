@@ -6,8 +6,9 @@ namespace Atoll.Api.Services.Security;
 public sealed class PkgBuildSecurityScanner : IPackageSecurityScanner
 {
     // Increment whenever a scanner rule change requires persisted verdicts to be refreshed.
-    // Version 5 scans raw bytes for magic detection instead of the UTF-8-decoded text.
-    public const int CurrentPolicyVersion = 5;
+    // Version 6 skips text rules for binary content; the requeue also discards stored
+    // snippets and verdicts that may contain raw binary bytes.
+    public const int CurrentPolicyVersion = 6;
 
     public int PolicyVersion => CurrentPolicyVersion;
 
@@ -29,11 +30,16 @@ public sealed class PkgBuildSecurityScanner : IPackageSecurityScanner
 
         foreach (var (path, bytes, text) in decoded)
         {
-            var binaryFinding = LocalSourceBinaryScanner.Scan(bytes, text, path);
-            if (binaryFinding is not null)
-                findings.Add(binaryFinding);
+            var binaryScan = LocalSourceBinaryScanner.Classify(bytes, text, path);
+            if (binaryScan.Finding is not null)
+                findings.Add(binaryScan.Finding);
 
-            if (string.IsNullOrWhiteSpace(text) || !PackageBuildFileClassifier.IsScannable(path))
+            // Binary content has no reviewable text, even when its name ends in a script
+            // extension: scanning the decoded bytes would emit meaningless findings whose
+            // snippets leak raw binary data.
+            if (binaryScan.IsBinaryContent ||
+                string.IsNullOrWhiteSpace(text) ||
+                !PackageBuildFileClassifier.IsScannable(path))
                 continue;
 
             findings.AddRange(ShellContentScanner.Scan(text, path, IsReferencedByPkgBuild(path, pkgBuildText)));

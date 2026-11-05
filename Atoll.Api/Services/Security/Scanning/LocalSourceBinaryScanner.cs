@@ -6,6 +6,13 @@ using System.Text.RegularExpressions;
 
 internal static partial class LocalSourceBinaryScanner
 {
+    /// <summary>
+    ///     Binary classification of one file: the finding to report and whether the content is
+    ///     binary. Binary content must not be scanned by any text rule, including when its file
+    ///     extension would otherwise make it a script.
+    /// </summary>
+    internal readonly record struct LocalSourceBinaryScan(SecurityFinding? Finding, bool IsBinaryContent);
+
     // Certificate/signature data has no reliable magic bytes, so these inert kinds are
     // recognized by extension. ELF still takes precedence and stays Critical regardless.
     private static readonly string[] CertificateExtensions = [".sig", ".asc", ".gpg", ".cer", ".crt", ".pem"];
@@ -34,7 +41,12 @@ internal static partial class LocalSourceBinaryScanner
     ///     must come from <c>PackageText.DecodeForScanning</c>, so the classifier and the shell
     ///     rules in <see cref="PkgBuildSecurityScanner" /> agree on one view.
     /// </summary>
-    public static SecurityFinding? Scan(ReadOnlySpan<byte> raw, string text, string path)
+    /// <returns>
+    ///     The finding to report, plus whether the content is binary and must be excluded from
+    ///     all text rules. U+FFFD-only content stays text: it is text in an unrecognized legacy
+    ///     encoding, not unreviewable binary.
+    /// </returns>
+    public static LocalSourceBinaryScan Classify(ReadOnlySpan<byte> raw, string text, string path)
     {
         var hasBinaryCharacters = HasBinaryCharacters(text);
         var isElf = raw.StartsWith(ElfMagic);
@@ -42,40 +54,65 @@ internal static partial class LocalSourceBinaryScanner
         // header when the decoded content is binary anyway.
         var isWindowsExecutable = hasBinaryCharacters && raw.StartsWith("MZ"u8);
         if (!isElf && !isWindowsExecutable && !hasBinaryCharacters)
-            return null;
+            return new LocalSourceBinaryScan(null, false);
 
         if (isElf)
         {
             // A shared library is loaded by other programs as package content, the same
             // trust class as binaries inside a vendored archive, so it does not block.
             if (SharedLibraryName.IsMatch(path))
-                return CreateFinding(SecurityFindingRules.LocalBinarySharedLibrary, path,
-                    string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinarySharedLibrary.Description, path));
+                return new LocalSourceBinaryScan(
+                    CreateFinding(SecurityFindingRules.LocalBinarySharedLibrary, path,
+                        string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinarySharedLibrary.Description, path)),
+                    true);
 
-            return CreateFinding(SecurityFindingRules.LocalBinary, path,
-                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinary.Description, path, "an ELF executable"));
+            return new LocalSourceBinaryScan(
+                CreateFinding(SecurityFindingRules.LocalBinary, path,
+                    string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinary.Description, path, "an ELF executable")),
+                true);
         }
 
         if (isWindowsExecutable)
-            return CreateFinding(SecurityFindingRules.LocalBinary, path,
-                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinary.Description, path, "a Windows executable"));
+            return new LocalSourceBinaryScan(
+                CreateFinding(SecurityFindingRules.LocalBinary, path,
+                    string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinary.Description, path, "a Windows executable")),
+                true);
 
         // Magic matching runs only after the text view classified the file as binary: an
         // all-ASCII PDF, GIF header, or tar header spelled in prose is text, not inert media.
         if (IsArchive(raw))
-            return CreateFinding(SecurityFindingRules.LocalBinaryArchive, path,
-                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryArchive.Description, path));
+            return new LocalSourceBinaryScan(
+                CreateFinding(SecurityFindingRules.LocalBinaryArchive, path,
+                    string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryArchive.Description, path)),
+                true);
 
         if (IsInertMedia(raw) || IsCertificateOrSignature(path))
-            return CreateFinding(SecurityFindingRules.LocalBinaryInertMedia, path,
-                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryInertMedia.Description, path));
+            return new LocalSourceBinaryScan(
+                CreateFinding(SecurityFindingRules.LocalBinaryInertMedia, path,
+                    string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryInertMedia.Description, path)),
+                true);
 
+        // U+FFFD without control characters is an unrecognized text encoding: keep the
+        // non-blocking finding but let the shell/PKGBUILD rules scan the replacement text.
         if (!HasControlCharacters(text))
-            return CreateFinding(SecurityFindingRules.LocalBinaryUnencodableText, path,
-                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryUnencodableText.Description, path));
+            return new LocalSourceBinaryScan(
+                CreateFinding(SecurityFindingRules.LocalBinaryUnencodableText, path,
+                    string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryUnencodableText.Description, path)),
+                false);
 
-        return CreateFinding(SecurityFindingRules.LocalBinaryData, path,
-            string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryData.Description, path));
+        return new LocalSourceBinaryScan(
+            CreateFinding(SecurityFindingRules.LocalBinaryData, path,
+                string.Format(CultureInfo.InvariantCulture, SecurityFindingRules.LocalBinaryData.Description, path)),
+            true);
+    }
+
+    /// <summary>
+    ///     Returns only the binary finding. Callers that also run text rules must use
+    ///     <see cref="Classify" /> so binary content is not scanned as shell text.
+    /// </summary>
+    public static SecurityFinding? Scan(ReadOnlySpan<byte> raw, string text, string path)
+    {
+        return Classify(raw, text, path).Finding;
     }
 
     /// <summary>
@@ -169,12 +206,38 @@ internal static partial class LocalSourceBinaryScanner
 
     private static bool HasBinaryCharacters(string text)
     {
-        return text.AsSpan().ContainsAny(BinaryCharacters);
+        return ContainsAnyOutsideAnsiSequences(text, BinaryCharacters);
     }
 
     /// <summary>True when the content contains NUL or control characters (U+FFFD alone does not count).</summary>
     private static bool HasControlCharacters(string text)
     {
-        return text.AsSpan().ContainsAny(ControlCharacters);
+        return ContainsAnyOutsideAnsiSequences(text, ControlCharacters);
+    }
+
+    // Complete ANSI CSI sequences only change terminal styling, never shell parsing, so they
+    // are text for both classification and scanning. A bare ESC or any other control stays
+    // binary.
+    private static bool ContainsAnyOutsideAnsiSequences(string text, SearchValues<char> characters)
+    {
+        for (var i = 0; i < text.Length;)
+        {
+            if (text[i] == '\x1b')
+            {
+                var end = HiddenCharacters.FindAnsiSequenceEnd(text, i);
+                if (end > i)
+                {
+                    i = end;
+                    continue;
+                }
+            }
+
+            if (characters.Contains(text[i]))
+                return true;
+
+            i++;
+        }
+
+        return false;
     }
 }

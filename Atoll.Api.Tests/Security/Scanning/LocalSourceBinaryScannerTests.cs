@@ -15,6 +15,11 @@ public class LocalSourceBinaryScannerTests
         return LocalSourceBinaryScanner.Scan(raw, PackageText.DecodeForScanning(raw), path);
     }
 
+    private static LocalSourceBinaryScanner.LocalSourceBinaryScan Classify(byte[] raw, string path)
+    {
+        return LocalSourceBinaryScanner.Classify(raw, PackageText.DecodeForScanning(raw), path);
+    }
+
     private static SecurityFinding? Scan(string text, string path)
     {
         return Scan(Encoding.UTF8.GetBytes(text), path);
@@ -41,7 +46,7 @@ public class LocalSourceBinaryScannerTests
         var finding = Scan(png, path);
 
         Assert.NotNull(finding);
-        Assert.Equal(FindingSeverity.Medium, finding!.Severity);
+        Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal("local-binary", finding.RuleId);
     }
 
@@ -81,7 +86,7 @@ public class LocalSourceBinaryScannerTests
         var finding = Scan(raw, "file.bin");
 
         Assert.NotNull(finding);
-        Assert.Equal(FindingSeverity.Medium, finding!.Severity);
+        Assert.Equal(FindingSeverity.Medium, finding.Severity);
     }
 
     [Fact]
@@ -339,7 +344,7 @@ public class LocalSourceBinaryScannerTests
         var finding = Scan(raw, path);
 
         Assert.NotNull(finding);
-        Assert.Equal(FindingSeverity.Medium, finding!.Severity);
+        Assert.Equal(FindingSeverity.Medium, finding.Severity);
     }
 
     [Fact]
@@ -394,6 +399,68 @@ public class LocalSourceBinaryScannerTests
     public void Scan_PlainText_NoFinding()
     {
         Assert.Null(Scan("pkgname=foo\npkgver=1.0\n", "PKGBUILD"));
+    }
+
+    [Fact]
+    public void Classify_BinaryContent_ReportsBinary()
+    {
+        byte[] png = [.. PngMagic, .. Utf8("chunkdata")];
+        byte[] nul = [.. Utf8("abc"), 0x00, .. Utf8("def")];
+
+        Assert.True(Classify(png, "icon.png").IsBinaryContent);
+        Assert.True(Classify(Elf(), "tool").IsBinaryContent);
+        Assert.True(Classify(nul, "data.bin").IsBinaryContent);
+    }
+
+    [Fact]
+    public void Classify_PlainText_NotBinary()
+    {
+        var scan = Classify(Utf8("pkgname=foo\npkgver=1.0\n"), "PKGBUILD");
+
+        Assert.False(scan.IsBinaryContent);
+        Assert.Null(scan.Finding);
+    }
+
+    [Fact]
+    public void Classify_ReplacementCharactersOnly_StaysText()
+    {
+        // Legacy Latin-1/mojibake is text in an unrecognized encoding, not unreviewable
+        // binary: it keeps its non-blocking finding and remains scannable by text rules.
+        byte[] legacy = [0x50, 0x61, 0x82, 0x6B, 0x0A];
+
+        var scan = Classify(legacy, "PKGBUILD");
+
+        Assert.False(scan.IsBinaryContent);
+        Assert.NotNull(scan.Finding);
+        Assert.Equal("local-binary", scan.Finding!.RuleId);
+    }
+
+    [Theory]
+    [InlineData("green\e[32mtext\e[0m")]
+    [InlineData("\e[1;33;40m")]
+    [InlineData("a\e[0mb\e[96mc")]
+    public void Classify_CompleteAnsiCsiSequences_StaysText(string text)
+    {
+        var scan = Classify(Utf8(text + "\n"), "foo.install");
+
+        Assert.False(scan.IsBinaryContent);
+        Assert.Null(scan.Finding);
+    }
+
+    [Theory]
+    // OSC sequence, not CSI
+    [InlineData("\u001b]0;title\u0007")]
+    // unterminated CSI
+    [InlineData("\u001b[32")]
+    // bare ESC
+    [InlineData("\u001bx")]
+    public void Classify_NonCsiEscape_ReportsBinaryData(string escape)
+    {
+        var scan = Classify(Utf8("echo " + escape + "\n"), "foo.install");
+
+        Assert.True(scan.IsBinaryContent);
+        Assert.NotNull(scan.Finding);
+        Assert.Equal("local-binary", scan.Finding!.RuleId);
     }
 
     [Fact]

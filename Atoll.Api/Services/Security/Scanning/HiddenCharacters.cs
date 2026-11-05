@@ -73,8 +73,9 @@ internal static class HiddenCharacters
     public readonly record struct HiddenCharacter(int Index, int CodePoint);
 
     // Returns the index after a complete CSI sequence starting at the ESC byte, or -1 when
-    // the sequence is unterminated or not CSI at all.
-    private static int FindAnsiSequenceEnd(string line, int start)
+    // the sequence is unterminated or not CSI at all. Shared with binary classification so
+    // both paths agree that complete ANSI styling is text, not binary data.
+    internal static int FindAnsiSequenceEnd(string line, int start)
     {
         if (start + 1 >= line.Length || line[start + 1] != '[')
             return -1;

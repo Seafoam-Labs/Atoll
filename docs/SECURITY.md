@@ -99,6 +99,15 @@ or binary text are a non-blocking `Medium` (`local-binary`), as is an ELF file n
 all-ASCII file that begins with `GIF89a`, `BM`, `%PDF`, or `ustar` stays text; ELF is recognized from its raw signature
 regardless of the text view.
 
+Binary classification also gates every text rule. A file classified as binary (ELF/PE, archive, inert media,
+certificate/signature, shared library, or control-character binary data) is excluded from the shell, PKGBUILD URL, and
+homograph rules even when its name ends in a script extension: an `icon.png.sh` or `icon.png.install` gets only its
+`local-binary` finding, and shell findings can never leak raw decoded image bytes into snippets.
+
+Complete ANSI CSI escape sequences are treated as text, matching the hidden-character rules: they only affect terminal
+styling, so ANSI-colored install scriptlets and PKGBUILDs stay reviewable. A bare ESC, NUL, or any other control
+character still classifies the file as binary.
+
 The scan-only text view comes from `PackageText.DecodeForScanning`, which deliberately matches the old `StreamReader`
 ingestion semantics: UTF-8 with BOM detection (a leading UTF-8 BOM is stripped), UTF-16/32 decoding when a BOM marks the
 encoding, and replacement fallback (`U+FFFD`) for invalid UTF-8. That view exists only for pattern matching; storage,
@@ -145,7 +154,7 @@ as ordinary lines.
 | `command-substitution` | Medium | `$( … )` or backticks (non-blocking). |
 | `variable-indirection` | Medium | Bash indirect expansion `${!var}` (non-blocking). |
 | `suspicious-source-url` | Medium | A `source=` URL pointing at a raw executable/archive (`.exe`, `.msi`, `.bin`, `.zip`, …). PKGBUILD only. |
-| `local-binary` | Critical (Medium for non-executable content and shared libraries) | A source file whose raw bytes start with executable magic (ELF, or PE/`MZ` in binary content), or whose scan-only text view contains control characters or U+FFFD. Only recognized executable formats block, and an ELF named as a shared library (`*.so`, `*.so.N`) is packaged payload like an archive's contents. |
+| `local-binary` | Critical (Medium for non-executable content and shared libraries) | A source file whose raw bytes start with executable, archive, or inert-media magic, carries certificate/signature data, or whose scan-only text view contains control characters or U+FFFD. Complete ANSI CSI sequences and U+FFFD without other control characters do not classify the file as binary; both stay text. Only recognized executable formats block, and an ELF named as a shared library (`*.so`, `*.so.N`) is packaged payload like an archive's contents. |
 
 Privilege-escalation tools are matched as shell **words** (a shell boundary character before and whitespace after),
 so `sudo` inside `pseudo` or `sudoku` is not flagged. A word must also be in **command position** — see
@@ -261,9 +270,10 @@ instance after restart) reclaims it after 5 minutes.
 ### Policy versioning and startup
 
 Persisted results are stamped with a monotonically increasing integer policy version
-(`PkgBuildSecurityScanner.CurrentPolicyVersion`, stored as `policyVersion`). The current version is 5: raw-byte magic
-detection plus the scan-only text view. Increment it whenever a rule, the raw magic set, or the scan-only decoding
-semantics change requires existing verdicts to be recomputed; versions must never be reused or decremented.
+(`PkgBuildSecurityScanner.CurrentPolicyVersion`, stored as `policyVersion`). The current version is 6: raw-byte magic
+detection, the scan-only text view, and excluding binary-classified files from text rules. Increment it whenever a rule,
+the raw magic set, or the scan-only decoding semantics change requires existing verdicts to be recomputed; versions
+must never be reused or decremented.
 
 Every pending document additionally carries `requiredPolicyVersion` — the minimum scanner policy allowed to claim
 and persist it. It is retained after completion and only ever raised (`$max` semantics in both enqueue and
@@ -390,9 +400,11 @@ These checks need only `curl` (or a Git client) and read access to the running A
   cannot be inspected for malicious behavior. Do not treat `Verified` as a guarantee.
 - **Binary detection combines raw magic with a decoded text view.** Executable (ELF, and PE/`MZ` in binary content),
   archive, and inert media formats are recognized from the original bytes. Everything else is classified from the
-  scan-only text view: control characters or U+FFFD mark it binary, so an unknown binary format with neither (and no
-  recognized magic) can pass the binary check. Certificate and signature files are recognized by extension, not
-  verified.
+  scan-only text view: control characters outside complete ANSI CSI sequences mark it binary, so an unknown binary
+  format with no such characters and no recognized magic can pass the binary check. U+FFFD alone does not mark a file
+  binary: it usually means text in an unrecognized legacy encoding (Latin-1 scriptlets, BOM-less UTF-16), so those files
+  stay text-scannable to preserve legacy PKGBUILD/script coverage. Their findings may still contain noisy replacement
+  characters. Certificate and signature files are recognized by extension, not verified.
 - **Heredoc prose can still block.** Only the non-blocking expansion rules are suppressed in quoted-delimiter bodies;
   `sudo`/redirect-looking prose can still yield blocking findings. Extending suppression requires safely handling
   pipe-to-installer patterns first.
