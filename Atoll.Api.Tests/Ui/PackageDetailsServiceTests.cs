@@ -49,7 +49,7 @@ public sealed class PackageDetailsServiceTests : IAsyncLifetime
         var result = await _service.GetRevisionsAsync(Name, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal(["rev-2", "rev-1"], result!.Rows.Select(row => row.Sha), StringComparer.Ordinal);
+        Assert.Equal(["rev-2", "rev-1"], result.Rows.Select(row => row.Sha), StringComparer.Ordinal);
         Assert.Equal(2, result.TotalRevisions);
         Assert.False(result.IsTruncated);
         Assert.Equal("rev-2", result.HeadRevisionId);

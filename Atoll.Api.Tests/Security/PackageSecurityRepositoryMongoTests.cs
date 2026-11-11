@@ -167,7 +167,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
         Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
-            Assert.Equal(3, scan!.RequiredPolicyVersion);
+            Assert.Equal(3, scan.RequiredPolicyVersion);
             Assert.Equal(SecurityStatus.Pending, scan.Status);
         });
     }
@@ -253,7 +253,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
         Assert.NotNull(doc1);
         Assert.Multiple(() =>
         {
-            Assert.Equal(SecurityStatus.Pending, doc1!.Status);
+            Assert.Equal(SecurityStatus.Pending, doc1.Status);
             Assert.Null(doc1.PolicyVersion);
             Assert.Equal(2, doc1.RequiredPolicyVersion);
             Assert.Null(doc1.ScannedAt);
@@ -266,7 +266,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
         Assert.NotNull(doc2);
         Assert.Multiple(() =>
         {
-            Assert.Equal(SecurityStatus.Pending, doc2!.Status);
+            Assert.Equal(SecurityStatus.Pending, doc2.Status);
             Assert.Null(doc2.PolicyVersion);
             Assert.Empty(doc2.Findings);
         });
@@ -276,7 +276,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
         Assert.NotNull(doc3);
         Assert.Multiple(() =>
         {
-            Assert.Equal(SecurityStatus.Pending, doc3!.Status);
+            Assert.Equal(SecurityStatus.Pending, doc3.Status);
             Assert.Null(doc3.PolicyVersion);
             Assert.False(doc3.IsHead);
         });
@@ -284,14 +284,14 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
         // Verify the pending requirement was raised in place
         var doc6 = await _repo.GetAsync("already-pending", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(doc6);
-        Assert.Equal(2, doc6!.RequiredPolicyVersion);
+        Assert.Equal(2, doc6.RequiredPolicyVersion);
 
         // Verify v2-verified is unchanged
         var doc4 = await _repo.GetAsync("v2-verified", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(doc4);
         Assert.Multiple(() =>
         {
-            Assert.Equal(SecurityStatus.Verified, doc4!.Status);
+            Assert.Equal(SecurityStatus.Verified, doc4.Status);
             Assert.Equal(2, doc4.PolicyVersion);
         });
 
@@ -300,7 +300,7 @@ public sealed class PackageSecurityRepositoryMongoTests : PackageSecurityReposit
         Assert.NotNull(doc5);
         Assert.Multiple(() =>
         {
-            Assert.Equal(SecurityStatus.Verified, doc5!.Status);
+            Assert.Equal(SecurityStatus.Verified, doc5.Status);
             Assert.Equal(3, doc5.PolicyVersion);
         });
 

@@ -96,7 +96,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     [Fact]
     public async Task AdvertiseRefsAsync_SeededPackage_WritesPktLinePreludeAndRefs()
     {
-        var (git, packages, cache, security, reposRoot) = CreateServices();
+        var (git, packages, _, security, reposRoot) = CreateServices();
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);
@@ -156,7 +156,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     [Fact]
     public async Task UploadPackAsync_WantRequest_ReturnsOkWithBody()
     {
-        var (git, packages, cache, security, reposRoot) = CreateServices();
+        var (git, packages, _, security, reposRoot) = CreateServices();
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);
@@ -186,7 +186,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     [Fact]
     public async Task UploadPackAsync_UnknownWant_ReturnsProtocolErrPacket()
     {
-        var (git, packages, cache, security, reposRoot) = CreateServices();
+        var (git, packages, _, security, reposRoot) = CreateServices();
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);
@@ -213,7 +213,7 @@ public sealed class GitTransferServiceTests : IAsyncLifetime
     [Fact]
     public async Task UploadPackAsync_FlushOnlyBody_ReturnsEmptyOk()
     {
-        var (git, packages, cache, security, reposRoot) = CreateServices();
+        var (git, packages, _, security, reposRoot) = CreateServices();
         try
         {
             await packages.SeedFilesAsync("shelly", SampleFiles);

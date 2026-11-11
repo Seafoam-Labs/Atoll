@@ -47,7 +47,7 @@ public class PackageDocumentSizeValidatorTests
         var revision = Revision(("huge.txt", 16 * 1024 * 1024, new string('a', 16 * 1024 * 1024)));
 
         var ex = Assert.Throws<PackageDocumentTooLargeException>(
-            () => PackageDocumentSizeValidator.Validate("big", revision))!;
+            () => PackageDocumentSizeValidator.Validate("big", revision));
 
         var exactSize = revision.ToBson().LongLength;
         Assert.Multiple(() =>

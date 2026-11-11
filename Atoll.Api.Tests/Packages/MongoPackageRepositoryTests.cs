@@ -65,8 +65,8 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         Assert.NotNull(storedRevision);
         Assert.Multiple(() =>
         {
-            Assert.Equal(PackageSchema.CurrentVersion, head!.SchemaVersion);
-            Assert.Equal(PackageSchema.CurrentVersion, storedRevision!.SchemaVersion);
+            Assert.Equal(PackageSchema.CurrentVersion, head.SchemaVersion);
+            Assert.Equal(PackageSchema.CurrentVersion, storedRevision.SchemaVersion);
         });
     }
 
@@ -170,7 +170,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         Assert.NotNull(head);
         Assert.Multiple(() =>
         {
-            Assert.Equal(maxRevisions, head!.Revisions.Count);
+            Assert.Equal(maxRevisions, head.Revisions.Count);
             // Newest revision is pushed at position 0.
             Assert.Equal("rev-10", head.Revisions[0].RevisionId);
             Assert.Equal("rev-10", head.HeadRevisionId);
@@ -199,7 +199,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         Assert.NotNull(stored);
         Assert.Multiple(() =>
         {
-            Assert.Equal(PackageSchema.RevisionDocumentId("shelly", "rev-a"), stored!.Id);
+            Assert.Equal(PackageSchema.RevisionDocumentId("shelly", "rev-a"), stored.Id);
             Assert.Equal("rev-a", stored.RevisionId);
             Assert.Equal("commit a", stored.Message);
             Assert.Contains("PKGBUILD", stored.Files);
@@ -400,7 +400,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
 
         Assert.Multiple(() =>
         {
-            Assert.Equal(maxRevisions, head!.Revisions.Count);
+            Assert.Equal(maxRevisions, head.Revisions.Count);
             Assert.Equal(
                 ["rev-10", "rev-9", "rev-8", "rev-7", "rev-6"],
                 head.Revisions.Select(r => r.RevisionId), StringComparer.Ordinal);
@@ -470,7 +470,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
             Assert.NotNull(head);
             Assert.Equal(
                 ["rev-6", "rev-5", "rev-4", "rev-3", "rev-2"],
-                head!.Revisions.Select(r => r.RevisionId), StringComparer.Ordinal);
+                head.Revisions.Select(r => r.RevisionId), StringComparer.Ordinal);
             Assert.Equal("rev-6", head.HeadRevisionId);
             Assert.Equal(maxRevisions, revisionDocCount);
             Assert.Null(evictedFirst);
@@ -496,7 +496,7 @@ public sealed class MongoPackageRepositoryTests : IAsyncLifetime
         {
             Assert.Equal(0, trimmed);
             Assert.NotNull(head);
-            Assert.Equal(2, head!.Revisions.Count);
+            Assert.Equal(2, head.Revisions.Count);
             Assert.Equal(2, revisionDocCount);
         });
     }

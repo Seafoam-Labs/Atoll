@@ -119,9 +119,15 @@ public sealed class PackageDetailsService(
 
     private const int BinaryProbeChars = 8192;
 
+    /// <param name="name">
+    ///     Package name as indexed. Unknown names return null (404).
+    /// </param>
     /// <param name="requestedRevisionId">
     ///     Optional <c>?rev=</c> pin. Unknown or malformed ids fall back to head with
     ///     <see cref="PackageDetails.RevisionFellBack" /> set rather than failing the page.
+    /// </param>
+    /// <param name="ct">
+    ///     Cancels the page's repository reads.
     /// </param>
     public async Task<PackageDetails?> GetAsync(
         string name,
@@ -264,10 +270,20 @@ public sealed class PackageDetailsService(
     /// <summary>
     ///     Classifies what changed between two stored revisions and renders a unified diff per changed file.
     /// </summary>
+    /// <param name="name">
+    ///     Package name as indexed. Unknown names return null (404).
+    /// </param>
     /// <param name="from">
     ///     Optional <c>?from=</c> base. Empty compares against the revision immediately older than
     ///     <paramref name="to" />; unknown ids fall back to head with
     ///     <see cref="PackageDiffView.FromFellBack" /> set rather than failing the page.
+    /// </param>
+    /// <param name="to">
+    ///     Optional <c>?to=</c> target. Unknown ids fall back to head with
+    ///     <see cref="PackageDiffView.ToFellBack" /> set rather than failing the page.
+    /// </param>
+    /// <param name="ct">
+    ///     Cancels the revision reads and the per-file diff builds.
     /// </param>
     public async Task<PackageDiffView?> GetDiffAsync(
         string name,

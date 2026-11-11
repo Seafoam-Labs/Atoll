@@ -1,5 +1,3 @@
-using Atoll.Api.Services.Catalog.Indexing;
-using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Git;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Tests.Fakes;
@@ -77,7 +75,6 @@ public sealed class GitCommitFixtureTests : IAsyncLifetime
                 Git = new GitOptions { RepositoriesPath = reposRoot }
             });
             var cache = new GitRepositoryCache(repo, security, options, NullLogger<GitRepositoryCache>.Instance);
-            var service = new PackageService(repo, options, security, new PkgBuildSecurityScanner(), cache, TestHybridCache.New(), new PackageIndexStore());
 
             await InsertVerifiedHistoryAsync(repo, security);
             await cache.EnsureRepositoryAsync("fixture", TestContext.Current.CancellationToken);

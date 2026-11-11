@@ -194,7 +194,7 @@ public class PackageSnapshotFactoryTests
 
         Assert.Equal(
             "File 'big.txt' is 11 bytes which exceeds the per-file limit of 10 bytes.",
-            ex!.Message);
+            ex.Message);
     }
 
     [Fact]
@@ -208,7 +208,7 @@ public class PackageSnapshotFactoryTests
 
         Assert.Equal(
             "File 'icon.png' is 11 bytes which exceeds the per-file limit of 10 bytes.",
-            ex!.Message);
+            ex.Message);
     }
 
     [Fact]
@@ -219,6 +219,6 @@ public class PackageSnapshotFactoryTests
 
         Assert.Equal(
             "File 'a.txt' is 8 bytes which exceeds the per-file limit of 7 bytes.",
-            ex!.Message);
+            ex.Message);
     }
 }

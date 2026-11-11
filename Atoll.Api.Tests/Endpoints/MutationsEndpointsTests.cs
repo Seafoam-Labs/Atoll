@@ -121,7 +121,7 @@ public sealed class MutationsEndpointsTests : IDisposable
 
         var scan = await _factory.SecurityRepository.GetHeadAsync("pkg", TestContext.Current.CancellationToken);
         Assert.NotNull(scan);
-        Assert.Equal(SecurityStatus.Pending, scan!.Status);
+        Assert.Equal(SecurityStatus.Pending, scan.Status);
         Assert.Equal("rev-1", scan.RevisionId);
     }
 }

@@ -50,7 +50,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var unseeded = await _service.GetDiffAsync("portable-kit", null, null, TestContext.Current.CancellationToken);
 
         Assert.NotNull(unseeded);
-        Assert.Empty(unseeded!.Files);
+        Assert.Empty(unseeded.Files);
         Assert.Equal(string.Empty, unseeded.ToRevisionId);
         Assert.Empty(_differ.Calls);
     }
@@ -65,7 +65,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, null, null, TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        Assert.Equal("rev-2", diff!.FromRevisionId);
+        Assert.Equal("rev-2", diff.FromRevisionId);
         Assert.Equal("rev-3", diff.ToRevisionId);
         Assert.False(diff.FromFellBack);
         Assert.False(diff.ToFellBack);
@@ -81,7 +81,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
 
         Assert.NotNull(diff);
         // rev-1 is the oldest, so there is no base: an empty base, not a bogus diff against the newer head.
-        Assert.Equal(string.Empty, diff!.FromRevisionId);
+        Assert.Equal(string.Empty, diff.FromRevisionId);
         Assert.False(diff.Identical);
         var file = Assert.Single(diff.Files);
         Assert.Equal(DiffChangeKind.Added, file.Kind);
@@ -96,7 +96,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-1", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        Assert.True(diff!.Identical);
+        Assert.True(diff.Identical);
         Assert.Empty(diff.Files);
         Assert.Equal(0, diff.ChangedFileCount);
         Assert.Empty(_differ.Calls);
@@ -122,7 +122,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        var byPath = diff!.Files.ToDictionary(f => f.Path, StringComparer.Ordinal);
+        var byPath = diff.Files.ToDictionary(f => f.Path, StringComparer.Ordinal);
         Assert.Equal(3, diff.ChangedFileCount);
         Assert.Equal(DiffChangeKind.Modified, byPath["PKGBUILD"].Kind);
         Assert.Equal(DiffChangeKind.Added, byPath["added.txt"].Kind);
@@ -145,7 +145,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
 
         Assert.NotNull(diff);
         // No -w/-b: a trailing-space edit in a PKGBUILD is exactly the change a reviewer needs to see.
-        Assert.Equal(DiffChangeKind.Modified, Assert.Single(diff!.Files).Kind);
+        Assert.Equal(DiffChangeKind.Modified, Assert.Single(diff.Files).Kind);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        var binary = Assert.Single(diff!.Files, f => string.Equals(f.Path, "logo.png", StringComparison.Ordinal));
+        var binary = Assert.Single(diff.Files, f => string.Equals(f.Path, "logo.png", StringComparison.Ordinal));
         Assert.Equal(DiffChangeKind.Binary, binary.Kind);
         Assert.Null(binary.UnifiedDiff);
         Assert.DoesNotContain(_differ.Calls, entry => string.Equals(entry.Path, "logo.png", StringComparison.Ordinal));
@@ -191,7 +191,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        var binary = Assert.Single(diff!.Files, f => string.Equals(f.Path, "icon64.png", StringComparison.Ordinal));
+        var binary = Assert.Single(diff.Files, f => string.Equals(f.Path, "icon64.png", StringComparison.Ordinal));
         Assert.Multiple(() =>
         {
             Assert.Equal(DiffChangeKind.Binary, binary.Kind);
@@ -216,7 +216,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        var binary = Assert.Single(diff!.Files);
+        var binary = Assert.Single(diff.Files);
         Assert.Equal(DiffChangeKind.Binary, binary.Kind);
         Assert.Empty(_differ.Calls);
     }
@@ -235,7 +235,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        var file = Assert.Single(diff!.Files);
+        var file = Assert.Single(diff.Files);
         Assert.Equal(DiffChangeKind.TooLarge, file.Kind);
         Assert.Null(file.UnifiedDiff);
         Assert.Empty(_differ.Calls);
@@ -267,7 +267,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        Assert.True(diff!.Truncated);
+        Assert.True(diff.Truncated);
         Assert.Equal(3, diff.ChangedFileCount);
         // The first file fits under ContentRenderChars; every later one would push past it.
         Assert.Single(_differ.Calls);
@@ -292,7 +292,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        Assert.Equal(PackageDetailsService.TreeRenderCap, diff!.Files.Count);
+        Assert.Equal(PackageDetailsService.TreeRenderCap, diff.Files.Count);
         Assert.Equal(PackageDetailsService.TreeRenderCap + 5, diff.ChangedFileCount);
         Assert.True(diff.Truncated);
     }
@@ -309,12 +309,12 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         Assert.NotNull(badTo);
         Assert.NotNull(badFrom);
         // An unknown target falls back to head, and the default base is then head's parent.
-        Assert.True(badTo!.ToFellBack);
+        Assert.True(badTo.ToFellBack);
         Assert.Equal("rev-2", badTo.ToRevisionId);
         Assert.Equal("rev-1", badTo.FromRevisionId);
         Assert.False(badTo.Identical);
         // An unknown base falls back to head, which is also the target here - so it is the same-revision case.
-        Assert.True(badFrom!.FromFellBack);
+        Assert.True(badFrom.FromFellBack);
         Assert.Equal("rev-2", badFrom.FromRevisionId);
         Assert.True(badFrom.Identical);
     }
@@ -329,7 +329,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        Assert.True(diff!.DiffUnavailable);
+        Assert.True(diff.DiffUnavailable);
         // The classified list still renders: paths, kinds, and sizes need no git.
         Assert.Equal(DiffChangeKind.Modified, Assert.Single(diff.Files).Kind);
         Assert.All(diff.Files, file => Assert.Null(file.UnifiedDiff));
@@ -358,7 +358,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        var file = Assert.Single(diff!.Files);
+        var file = Assert.Single(diff.Files);
         Assert.Equal(DiffChangeKind.Removed, file.Kind);
         Assert.Equal(0, file.NewSize);
     }
@@ -388,7 +388,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
         var diff = await _service.GetDiffAsync(Name, "rev-1", "rev-2", TestContext.Current.CancellationToken);
 
         Assert.NotNull(diff);
-        var byPath = diff!.Files.ToDictionary(f => f.Path, StringComparer.Ordinal);
+        var byPath = diff.Files.ToDictionary(f => f.Path, StringComparer.Ordinal);
         Assert.Equal(2, diff.ChangedFileCount);
         Assert.All(byPath.Values, file => Assert.Equal(DiffChangeKind.Modified, file.Kind));
         // The paths reach the differ verbatim; making a temp tree safe is the differ's job, not this layer's.
@@ -408,7 +408,7 @@ public sealed class PackageDetailsServiceDiffTests : IAsyncLifetime
 
         Assert.NotNull(diff);
         // Same posture as the Files tab: a flagged revision is still inspectable in the UI.
-        Assert.False(diff!.Access.Allowed);
+        Assert.False(diff.Access.Allowed);
         Assert.Equal(1, diff.Files.Count);
     }
 

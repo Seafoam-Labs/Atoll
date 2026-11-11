@@ -13,7 +13,7 @@ public sealed class AtollMetrics : IDisposable
 {
     public const string MeterName = "Atoll.Api";
 
-    private readonly Meter meter;
+    private readonly Meter _meter;
 
     public string ScopeName { get; }
 
@@ -32,22 +32,22 @@ public sealed class AtollMetrics : IDisposable
         // the stable "Atoll.Api".
         ScopeName = environment.IsEnvironment("Testing") ? $"{MeterName}.{Guid.NewGuid():N}" : MeterName;
 
-        meter = meterFactory.Create(ScopeName, "1.0.0");
+        _meter = meterFactory.Create(ScopeName, "1.0.0");
 
         var uptime = Stopwatch.StartNew();
-        meter.CreateObservableGauge(
+        _meter.CreateObservableGauge(
             "atoll.process.uptime",
             () => uptime.Elapsed.TotalSeconds,
             "s",
             "Uptime of the process in seconds.");
 
-        meter.CreateObservableCounter(
+        _meter.CreateObservableCounter(
             "atoll.search.requests.total",
             () => searchService.RequestCount,
             "{request}",
             "Total number of search requests served.");
 
-        meter.CreateObservableGauge(
+        _meter.CreateObservableGauge(
             "atoll.index.size",
             () =>
             {
@@ -62,28 +62,28 @@ public sealed class AtollMetrics : IDisposable
             "{entry}",
             "Number of entries in each search index.");
 
-        RegisterSnapshotCounters(meter, "atoll.refresh", indexUpdater.GetStatus,
+        RegisterSnapshotCounters(_meter, "atoll.refresh", indexUpdater.GetStatus,
             ("attempts.total", "Total metadata refresh attempts.", s => s.Attempts),
             ("successes.total", "Total successful metadata refreshes.", s => s.Successes),
             ("failures.total", "Total failed metadata refreshes.", s => s.Failures));
 
-        meter.CreateObservableGauge(
+        _meter.CreateObservableGauge(
             "atoll.refresh.consecutive_failures",
             () => indexUpdater.GetStatus().ConsecutiveFailures,
             "{cycle}",
             "Consecutive metadata refresh cycles failed since the last one succeeded.");
 
-        RegisterTimestamp(meter, "atoll.refresh.last_started_timestamp",
+        RegisterTimestamp(_meter, "atoll.refresh.last_started_timestamp",
             "Unix time of the last started metadata refresh.",
             () => indexUpdater.GetStatus().LastStartedUtc);
-        RegisterTimestamp(meter, "atoll.refresh.last_succeeded_timestamp",
+        RegisterTimestamp(_meter, "atoll.refresh.last_succeeded_timestamp",
             "Unix time of the last successful metadata refresh.",
             () => indexUpdater.GetStatus().LastSucceededUtc);
-        RegisterTimestamp(meter, "atoll.refresh.last_failed_timestamp",
+        RegisterTimestamp(_meter, "atoll.refresh.last_failed_timestamp",
             "Unix time of the last failed metadata refresh.",
             () => indexUpdater.GetStatus().LastFailedUtc);
 
-        RegisterSnapshotCounters(meter, "atoll.bulkseed", bulkSeedStatus.GetSnapshot,
+        RegisterSnapshotCounters(_meter, "atoll.bulkseed", bulkSeedStatus.GetSnapshot,
             ("batches.attempted.total", "Total bulk seed batches attempted.", s => s.BatchesAttempted),
             ("batches.succeeded.total", "Total bulk seed batches succeeded.", s => s.BatchesSucceeded),
             ("batches.failed.total", "Total bulk seed batches failed.", s => s.BatchesFailed),
@@ -93,14 +93,14 @@ public sealed class AtollMetrics : IDisposable
             ("packages.skipped.total", "Total packages skipped during bulk seeding.", s => s.PackagesSkipped),
             ("packages.excluded.total", "Total packages excluded from bulk seeding.", s => s.PackagesExcluded));
 
-        RegisterTimestamp(meter, "atoll.bulkseed.last_started_timestamp",
+        RegisterTimestamp(_meter, "atoll.bulkseed.last_started_timestamp",
             "Unix time of the last started bulk seed cycle.",
             () => bulkSeedStatus.GetSnapshot().LastStartedUtc);
-        RegisterTimestamp(meter, "atoll.bulkseed.last_finished_timestamp",
+        RegisterTimestamp(_meter, "atoll.bulkseed.last_finished_timestamp",
             "Unix time of the last finished bulk seed cycle.",
             () => bulkSeedStatus.GetSnapshot().LastFinishedUtc);
 
-        RegisterSnapshotCounters(meter, "atoll.packagerefresh", packageRefreshStatus.GetSnapshot,
+        RegisterSnapshotCounters(_meter, "atoll.packagerefresh", packageRefreshStatus.GetSnapshot,
             ("cycles.attempted.total", "Total package refresh cycles attempted.", s => s.CyclesAttempted),
             ("cycles.succeeded.total", "Total package refresh cycles succeeded.", s => s.CyclesSucceeded),
             ("cycles.failed.total", "Total package refresh cycles failed.", s => s.CyclesFailed),
@@ -110,39 +110,39 @@ public sealed class AtollMetrics : IDisposable
             ("refs.skipped.total", "Total mirror refs skipped during package refresh.", s => s.RefsSkipped),
             ("refs.failed.total", "Total mirror refs that failed during package refresh.", s => s.RefsFailed));
 
-        meter.CreateObservableGauge(
+        _meter.CreateObservableGauge(
             "atoll.packagerefresh.candidate_packages",
             () => packageRefreshStatus.GetSnapshot().CandidatePackages,
             "{package}",
             "Candidate packages discovered by package refresh.");
 
-        meter.CreateObservableGauge(
+        _meter.CreateObservableGauge(
             "atoll.packagerefresh.candidate_package_bases",
             () => packageRefreshStatus.GetSnapshot().CandidatePackageBases,
             "{pkgbase}",
             "Candidate package bases discovered by package refresh.");
 
-        RegisterTimestamp(meter, "atoll.packagerefresh.last_started_timestamp",
+        RegisterTimestamp(_meter, "atoll.packagerefresh.last_started_timestamp",
             "Unix time of the last started package refresh cycle.",
             () => packageRefreshStatus.GetSnapshot().LastStartedUtc);
-        RegisterTimestamp(meter, "atoll.packagerefresh.last_finished_timestamp",
+        RegisterTimestamp(_meter, "atoll.packagerefresh.last_finished_timestamp",
             "Unix time of the last finished package refresh cycle.",
             () => packageRefreshStatus.GetSnapshot().LastFinishedUtc);
 
-        RegisterSnapshotCounters(meter, "atoll.securityscan", securityScanStatus.GetSnapshot,
+        RegisterSnapshotCounters(_meter, "atoll.securityscan", securityScanStatus.GetSnapshot,
             ("completed.total", "Total security scans completed.", s => s.ScansCompleted),
             ("verified.total", "Total security scans that verified a clean result.", s => s.ScansVerified),
             ("flagged.total", "Total security scans that flagged findings.", s => s.ScansFlagged),
             ("errored.total", "Total security scans that errored.", s => s.ScansErrored),
             ("dropped.total", "Total security scans dropped.", s => s.ScansDropped));
 
-        meter.CreateObservableGauge(
+        _meter.CreateObservableGauge(
             "atoll.securityscan.pending",
             () => securityScanStatus.GetSnapshot().PendingScans,
             "{scan}",
             "Security scans currently pending.");
 
-        RegisterTimestamp(meter, "atoll.securityscan.last_finished_timestamp",
+        RegisterTimestamp(_meter, "atoll.securityscan.last_finished_timestamp",
             "Unix time of the last finished security scan.",
             () => securityScanStatus.GetSnapshot().LastScanFinishedUtc);
     }
@@ -170,5 +170,5 @@ public sealed class AtollMetrics : IDisposable
             description: description);
     }
 
-    public void Dispose() => meter.Dispose();
+    public void Dispose() => _meter.Dispose();
 }

@@ -82,7 +82,7 @@ public class PackageRevisionCompactionWorkerTests
             Assert.NotNull(head);
             Assert.Equal(
                 ["rev-7", "rev-6", "rev-5", "rev-4", "rev-3"],
-                head!.Revisions.Select(r => r.RevisionId), StringComparer.Ordinal);
+                head.Revisions.Select(r => r.RevisionId), StringComparer.Ordinal);
             Assert.Equal("rev-7", head.HeadRevisionId);
             Assert.Null(evicted);
             Assert.NotNull(retained);

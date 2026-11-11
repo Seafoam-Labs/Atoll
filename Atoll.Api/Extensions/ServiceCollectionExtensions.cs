@@ -18,7 +18,6 @@ using Atoll.Api.Services.Catalog.Refresh;
 using Atoll.Api.Services.Security;
 using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Services.Ui;
-using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;

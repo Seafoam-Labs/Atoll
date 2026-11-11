@@ -285,7 +285,7 @@ public class ShellContentScannerTests
         var findings = Scan(content);
         var finding = findings.FirstOrDefault(f => string.Equals(f.RuleId, "privilege-escalation", StringComparison.Ordinal));
         Assert.NotNull(finding);
-        Assert.Equal(FindingSeverity.High, finding!.Severity);
+        Assert.Equal(FindingSeverity.High, finding.Severity);
         Assert.Contains(tool, finding.Message, StringComparison.Ordinal);
     }
 

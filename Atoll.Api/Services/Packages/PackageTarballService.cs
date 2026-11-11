@@ -21,9 +21,15 @@ public sealed class PackageTarballService(IPackageRepository repository)
     private const UnixFileMode ExecutableFileMode = RegularFileMode
         | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
 
+    /// <param name="packageName">
+    ///     AUR package name as served by the endpoint. Unknown names return null (404).
+    /// </param>
     /// <param name="revisionId">
     ///     Optional <c>?rev=</c> pin. Unknown ids return null (404) rather than falling back to head -
     ///     a download must never silently deliver different bytes than requested.
+    /// </param>
+    /// <param name="ct">
+    ///     Cancels the revision read and the archive build.
     /// </param>
     public async Task<PackageTarball?> BuildAsync(
         string packageName,

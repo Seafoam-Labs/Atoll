@@ -1,6 +1,5 @@
 using Atoll.Api.Services.Packages.Persistence;
 using Atoll.Api.Services.Security;
-using Atoll.Api.Services.Security.Persistence;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
 using Xunit;
@@ -87,7 +86,7 @@ public class PackageSecurityStatusServiceTests
         var history = await _service.GetHistoryAsync("pkg", TestContext.Current.CancellationToken);
 
         Assert.NotNull(history);
-        var tail = history!.Revisions.Skip(1).Select(r => r.ScannedAt!.Value).ToArray();
+        var tail = history.Revisions.Skip(1).Select(r => r.ScannedAt!.Value).ToArray();
 
         Assert.Equivalent(new[] { "rev-1", "rev-2", "rev-3" },
             history.Revisions.Select(r => r.RevisionId), strict: true);
@@ -130,11 +129,11 @@ public class PackageSecurityStatusServiceTests
         {
             Assert.NotNull(head);
             Assert.NotNull(older);
-            Assert.Equal("Pending", head!.Status);
+            Assert.Equal("Pending", head.Status);
             Assert.True(head.IsHead);
             Assert.Null(head.ScannedAt);
             Assert.Equal(0, head.FindingCount);
-            Assert.False(older!.IsHead);
+            Assert.False(older.IsHead);
         });
     }
 
@@ -165,7 +164,7 @@ public class PackageSecurityStatusServiceTests
         {
             Assert.Equal("rev-1", queued);
             Assert.NotNull(scan);
-            Assert.Equal(SecurityStatus.Pending, scan!.Status);
+            Assert.Equal(SecurityStatus.Pending, scan.Status);
             Assert.True(scan.IsHead);
             Assert.Equal(_policyVersion, scan.RequiredPolicyVersion);
         });

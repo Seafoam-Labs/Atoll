@@ -25,7 +25,7 @@ public abstract class PackageSecurityRepositoryContract
         Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
-            Assert.Equal(SecurityStatus.Verified, scan!.Status);
+            Assert.Equal(SecurityStatus.Verified, scan.Status);
             Assert.Equal(2, scan.PolicyVersion);
             Assert.Equal(2, scan.RequiredPolicyVersion);
             Assert.NotNull(scan.ScannedAt);
@@ -50,7 +50,7 @@ public abstract class PackageSecurityRepositoryContract
         Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
-            Assert.Equal(SecurityStatus.Error, scan!.Status);
+            Assert.Equal(SecurityStatus.Error, scan.Status);
             Assert.Equal(2, scan.PolicyVersion);
             Assert.Equal(2, scan.RequiredPolicyVersion);
             Assert.NotNull(scan.ScannedAt);
@@ -81,7 +81,7 @@ public abstract class PackageSecurityRepositoryContract
         Assert.NotNull(scan);
         Assert.Multiple(() =>
         {
-            Assert.Equal(SecurityStatus.Pending, scan!.Status);
+            Assert.Equal(SecurityStatus.Pending, scan.Status);
             Assert.Null(scan.PolicyVersion);
             Assert.Equal(2, scan.RequiredPolicyVersion);
             Assert.Empty(scan.Findings);
@@ -114,7 +114,7 @@ public abstract class PackageSecurityRepositoryContract
 
         var scan = await repo.GetAsync("pkg", "rev-1", TestContext.Current.CancellationToken);
         Assert.NotNull(scan);
-        Assert.Equal(SecurityStatus.Pending, scan!.Status);
+        Assert.Equal(SecurityStatus.Pending, scan.Status);
         Assert.Equal(2, scan.RequiredPolicyVersion);
     }
 
