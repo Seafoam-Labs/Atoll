@@ -2,9 +2,11 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using Atoll.Api.Services.Catalog;
 using Atoll.Api.Services.Catalog.Indexing;
 using Atoll.Api.Services.Catalog.Refresh;
+using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Ui;
 using Atoll.Api.Tests.Fakes;
 using Atoll.Api.Tests.Support;
@@ -32,7 +34,8 @@ public class PackageIndexWorkerTests
 
         var worker = new PackageIndexWorker(
             CreateUpdater(store, new StubHttpMessageHandler(InvalidPayload)),
-            catalog, packages, NullLogger<PackageIndexWorker>.Instance);
+            catalog, packages, new MetadataRefreshMetricPublisher(TextWriter.Null),
+            NullLogger<PackageIndexWorker>.Instance);
 
         await worker.StartAsync(TestContext.Current.CancellationToken);
         await WaitForPrewarmAsync(packages, expectedCalls: 1);
@@ -59,7 +62,8 @@ public class PackageIndexWorkerTests
         var worker = new PackageIndexWorker(
             CreateUpdater(store, new StubHttpMessageHandler(
                 Gzip("""[{"ID":1,"Name":"demo","PackageBase":"demo","Version":"1.0-1"}]"""))),
-            catalog, packages, NullLogger<PackageIndexWorker>.Instance);
+            catalog, packages, new MetadataRefreshMetricPublisher(TextWriter.Null),
+            NullLogger<PackageIndexWorker>.Instance);
 
         await worker.StartAsync(TestContext.Current.CancellationToken);
         await WaitForPrewarmAsync(packages, expectedCalls: 2);
@@ -91,7 +95,8 @@ public class PackageIndexWorkerTests
                 Ok(Gzip("""[{"ID":1,"Name":"demo","PackageBase":"demo","Version":"1.0-1"}]"""), "\"dump-1\""),
                 new HttpResponseMessage(HttpStatusCode.NotModified),
                 Ok(InvalidPayload))),
-            catalog, packages, NullLogger<PackageIndexWorker>.Instance);
+            catalog, packages, new MetadataRefreshMetricPublisher(TextWriter.Null),
+            NullLogger<PackageIndexWorker>.Instance);
 
         var ct = TestContext.Current.CancellationToken;
         var outcomes = new[]
@@ -114,6 +119,44 @@ public class PackageIndexWorkerTests
 
             // The unchanged cycle re-reads the snapshot from the cache instead of rescanning for it.
             Assert.Equal(1, packages.ListCalls);
+        });
+    }
+
+    [Fact]
+    public async Task RefreshAndWarmAsync_PublishesFailureThenSuccess()
+    {
+        var packages = new SeededNamesPackageService([]);
+        var store = new PackageIndexStore();
+        store.Replace(TestData.LoadSampleIndexes());
+        var catalog = new PackageCatalogService(
+            new PackageSearchEngine(store), packages, new InMemoryPackageSecurityRepository(), TestHybridCache.New(),
+            Options.Create(new AtollOptions()));
+
+        // One EMF line per cycle: the parse failure raises the streak to 1, and the
+        // successful refresh that follows resets it to 0 so recovery is explicit.
+        var output = new StringWriter();
+        var worker = new PackageIndexWorker(
+            CreateUpdater(store, new ScriptedHttpMessageHandler(
+                Ok(InvalidPayload),
+                Ok(Gzip("""[{"ID":1,"Name":"demo","PackageBase":"demo","Version":"1.0-1"}]"""), "\"dump-1\""))),
+            catalog, packages, new MetadataRefreshMetricPublisher(output),
+            NullLogger<PackageIndexWorker>.Instance);
+
+        var ct = TestContext.Current.CancellationToken;
+        Assert.Equal(PackageIndexRefreshOutcome.Failed, await worker.RefreshAndWarmAsync(ct));
+        Assert.Equal(PackageIndexRefreshOutcome.Refreshed, await worker.RefreshAndWarmAsync(ct));
+
+        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+
+        using var failure = JsonDocument.Parse(lines[0]);
+        using var success = JsonDocument.Parse(lines[1]);
+        Assert.Multiple(() =>
+        {
+            Assert.Equal(1, failure.RootElement.GetProperty("RefreshConsecutiveFailures").GetInt64());
+            Assert.Equal("Failed", failure.RootElement.GetProperty("Outcome").GetString());
+            Assert.Equal(0, success.RootElement.GetProperty("RefreshConsecutiveFailures").GetInt64());
+            Assert.Equal("Refreshed", success.RootElement.GetProperty("Outcome").GetString());
         });
     }
 

@@ -1,3 +1,4 @@
+using Atoll.Api.Services.Metrics;
 using Atoll.Api.Services.Packages;
 using Atoll.Api.Services.Ui;
 
@@ -7,6 +8,7 @@ public sealed class PackageIndexWorker(
     PackageIndexUpdater manager,
     PackageCatalogService catalog,
     IPackageService packageService,
+    MetadataRefreshMetricPublisher metrics,
     ILogger<PackageIndexWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -44,6 +46,18 @@ public sealed class PackageIndexWorker(
     internal async Task<PackageIndexRefreshOutcome> RefreshAndWarmAsync(CancellationToken ct)
     {
         var outcome = await manager.DownloadAndReloadAsync(ct);
+
+        try
+        {
+            metrics.Publish(manager.GetStatus(), outcome);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A broken stdout writer must not stop the refresh loop; the warning is the
+            // only signal left if stdout is gone.
+            logger.LogWarning(ex, "Failed to publish the metadata refresh metric; the refresh loop continues.");
+        }
+
         if (outcome is not PackageIndexRefreshOutcome.Failed)
             await WarmCachesAsync(ct);
 

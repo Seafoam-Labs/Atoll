@@ -179,6 +179,10 @@ internal static class ServiceCollectionExtensions
             services.AddSingleton<AurMetadataClient>();
             services.AddSingleton<UpstreamPackageReconciler>();
             services.AddSingleton<PackageIndexUpdater>();
+            services.AddSingleton(sp => new MetadataRefreshMetricPublisher(
+                sp.GetRequiredService<IHostEnvironment>().IsEnvironment("Testing")
+                    ? TextWriter.Null
+                    : Console.Out));
             services.AddHostedService<PackageIndexWorker>();
             return services;
         }

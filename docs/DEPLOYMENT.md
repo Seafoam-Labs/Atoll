@@ -104,6 +104,57 @@ Anything else is either a real difference to apply or drift to investigate befor
    (tags are immutable), then `terraform apply -var image_tag=<sha>`. Updating the task definition
    makes ECS roll the service to the new image.
 
+## Alerting
+
+Alarms live in `terraform/alerting.tf` and are only created when `alerting_topic_arn` is set (CI passes
+the `ALERTING_SNS_TOPIC_ARN` repository variable). Notifications go through the Buoy stack, which routes
+role mentions by matching text in the alarm name, description, metric namespace, and metric name — so
+renaming an alarm can silently change who gets pinged. Every alarm also sends `ok_actions` for recovery.
+
+| Alarm | Signal |
+| --- | --- |
+| `atoll-api-tasks-running` | `AWS/ECS` `LiveTaskCount` below 1 for five minutes; missing data breaches, because ECS publishes no service metric at zero running tasks |
+| `atoll-api-targets-unhealthy` | ALB `UnhealthyHostCount` above 0 |
+| `atoll-api-origin-5xx` | ALB target 5xx count above 5 per five minutes |
+| `atoll-api-metadata-refresh` | `Atoll/MetadataRefresh` `RefreshConsecutiveFailures` above 3 in three of four 5-minute periods (~30 minutes of sustained failure) |
+| `atoll-api-docdb-cpu` | DocumentDB `CPUUtilization` above 90 % for fifteen minutes |
+
+The metadata-refresh metric is app-originated: `PackageIndexWorker` writes one CloudWatch
+embedded-metric-format (EMF) JSON line per refresh cycle to stdout, the `awslogs` driver ships it to
+`/ecs/atoll-api`, and CloudWatch Logs extracts the metric. No ECS task role and no
+`cloudwatch:PutMetricData` permission are used — extraction rides the log-stream write actions the
+execution role already has. The line must stay a standalone JSON event: a console formatter or
+multiline pattern that prefixes or concatenates it breaks extraction.
+
+Verify after a deploy (within ~10 minutes):
+
+```bash
+# Raw EMF line is present and standalone (each match must start with {"_aws":)
+aws logs filter-log-events \
+  --log-group-name /ecs/atoll-api \
+  --filter-pattern RefreshConsecutiveFailures \
+  --start-time "$(date -u -d '15 minutes ago' +%s000)" \
+  --limit 5
+
+# CloudWatch extracted the metric (one datapoint per 5-minute period, 0 while healthy)
+aws cloudwatch get-metric-statistics \
+  --namespace Atoll/MetadataRefresh \
+  --metric-name RefreshConsecutiveFailures \
+  --start-time "$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --period 300 --statistics Maximum
+
+# Alarm states (tasks-running must show a recent LiveTaskCount state reason)
+aws cloudwatch describe-alarms \
+  --alarm-names atoll-api-metadata-refresh atoll-api-tasks-running
+```
+
+EMF extraction problems surface in the `AWS/Logs` namespace (dimension `LogGroupName=/ecs/atoll-api`)
+as `EMFParsingErrors`, `EMFValidationErrors`, and `EMFDisabledErrors`; all three should stay at 0.
+Before relying on `tasks-running`, confirm `LiveTaskCount` actually has datapoints while the service
+is healthy (`aws cloudwatch get-metric-statistics` on `AWS/ECS` with the cluster/service dimensions);
+missing data is treated as breaching, so an unpublished metric would page forever.
+
 ## Resource tags
 
 `terraform/main.tf` and `terraform/bootstrap/main.tf` each set `default_tags` on the provider, so every taggable

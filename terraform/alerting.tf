@@ -13,26 +13,33 @@
 #
 # Thresholds are first guesses. Revisit them against a week of the CloudWatch
 # dashboard (monitoring.tf) rather than tuning blind.
+#
+# App-originated metrics arrive via embedded metric format (EMF) on stdout,
+# which CloudWatch Logs extracts — not via OTLP, whose metrics live in a
+# separate store that classic alarms cannot evaluate.
 
 locals {
   alarms_enabled = var.alerting_topic_arn != ""
 }
 
-# The service is down: nothing is running to serve traffic. Two minutes rather
-# than one, so a task replacement that briefly dips does not page.
+# ECS publishes no AWS/ECS service metrics when a service has zero tasks in
+# RUNNING, so a missing datapoint is the scale-to-zero signal. LiveTaskCount
+# also counts ACTIVATING and DEACTIVATING tasks, which keeps a normal rolling
+# deploy above zero. Five missing minutes avoids paging on a task replacement.
 resource "aws_cloudwatch_metric_alarm" "tasks_running" {
   count = local.alarms_enabled ? 1 : 0
 
   alarm_name          = "${var.project_name}-tasks-running"
-  alarm_description   = "No ECS tasks running for the atoll-api service; the service is down"
+  alarm_description   = "No live ECS tasks for the atoll-api service for five minutes; the service is down"
   namespace           = "AWS/ECS"
-  metric_name         = "RunningTaskCount"
+  metric_name         = "LiveTaskCount"
   statistic           = "Minimum"
   period              = 60
-  evaluation_periods  = 2
+  evaluation_periods  = 5
+  datapoints_to_alarm = 5
   threshold           = 1
   comparison_operator = "LessThanThreshold"
-  treat_missing_data  = "notBreaching"
+  treat_missing_data  = "breaching"
 
   dimensions = {
     ClusterName = aws_ecs_cluster.main.name
@@ -101,6 +108,34 @@ resource "aws_cloudwatch_metric_alarm" "origin_5xx" {
 
   tags = {
     Name = "${var.project_name}-origin-5xx"
+  }
+}
+
+# PackageIndexWorker writes one EMF record per refresh cycle; CloudWatch Logs
+# extracts RefreshConsecutiveFailures from /ecs/atoll-api. The 3-of-4 window
+# tolerates one missing 5-minute datapoint (deploy, log delivery) while still
+# paging after roughly six consecutive failed cycles. Maximum is intentional:
+# EMF delivery is at-least-once, so duplicates must not inflate the value.
+resource "aws_cloudwatch_metric_alarm" "metadata_refresh" {
+  count = local.alarms_enabled ? 1 : 0
+
+  alarm_name          = "${var.project_name}-metadata-refresh"
+  alarm_description   = "AUR metadata refresh is repeatedly failing; the search index is going stale"
+  namespace           = "Atoll/MetadataRefresh"
+  metric_name         = "RefreshConsecutiveFailures"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 4
+  datapoints_to_alarm = 3
+  threshold           = 3
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [var.alerting_topic_arn]
+  ok_actions    = [var.alerting_topic_arn]
+
+  tags = {
+    Name = "${var.project_name}-metadata-refresh"
   }
 }
 

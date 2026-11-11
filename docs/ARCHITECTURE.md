@@ -351,8 +351,11 @@ revision becomes the head.
   bulk-seed statistics, security-scan statistics (throughput, outcomes, backlog depth), and package-refresh
   statistics; ASP.NET Core request metrics, outbound HTTP client metrics (AUR / mirror fetches via
   `OpenTelemetry.Instrumentation.Http`), and built-in .NET runtime metrics are included. Alerting lives in the
-  infrastructure layer (`terraform/alerting.tf`); the app's `atoll_*` series are not shipped to CloudWatch, so the
-  metadata-refresh alarm derives from ECS log events rather than from these instruments.
+  infrastructure layer (`terraform/alerting.tf`); the app's `atoll_*` series are not shipped to CloudWatch.
+  The one exception is the metadata-refresh alarm: the refresh worker writes the
+  `Atoll/MetadataRefresh` / `RefreshConsecutiveFailures` gauge to stdout as a CloudWatch embedded-metric-format
+  (EMF) record once per cycle, and CloudWatch Logs extracts it from `/ecs/atoll-api` — no task role or
+  `PutMetricData` call is involved.
 - **Telemetry export:** Metrics and application logs are also exported over OTLP via `UseOtlpExporter()`,
   configured through `OTEL_EXPORTER_OTLP_*` environment variables. `compose.yaml` bundles the
   `grafana/otel-lgtm` development stack (OTel Collector, Prometheus, Loki, Tempo, Grafana) with a provisioned

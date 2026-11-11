@@ -4,6 +4,8 @@
 # The application's own atoll_* series (see observability/grafana/atoll.json)
 # are deliberately absent — nothing in AWS scrapes /metrics or receives OTLP
 # from the Fargate task yet, so there is no collector for them to land in.
+# The one exception is the metadata-refresh EMF record, which CloudWatch Logs
+# extracts from the task's stdout (see alerting.tf).
 
 locals {
   # ALB, ECS, and DocumentDB publish every minute. CloudFront and WAF publish
@@ -268,17 +270,13 @@ resource "aws_cloudwatch_dashboard" "main" {
           stat   = "Maximum"
           period = local.period_origin
           metrics = [
+            # LiveTaskCount is published without Container Insights and counts
+            # tasks through draining; PendingTaskCount is not published at all.
             [
-              "AWS/ECS", "RunningTaskCount",
+              "AWS/ECS", "LiveTaskCount",
               "ClusterName", aws_ecs_cluster.main.name,
               "ServiceName", aws_ecs_service.main.name,
-              { label = "running" },
-            ],
-            [
-              "AWS/ECS", "PendingTaskCount",
-              "ClusterName", aws_ecs_cluster.main.name,
-              "ServiceName", aws_ecs_service.main.name,
-              { label = "pending" },
+              { label = "live" },
             ],
           ]
         }
@@ -358,6 +356,26 @@ resource "aws_cloudwatch_dashboard" "main" {
               "AWS/DocDB", "VolumeWriteIOPs",
               "DBClusterIdentifier", aws_docdb_cluster.main.id,
               { label = "write" },
+            ],
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 24
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Metadata refresh failures"
+          region = var.aws_region
+          view   = "timeSeries"
+          stat   = "Maximum"
+          period = local.period_edge
+          metrics = [
+            [
+              "Atoll/MetadataRefresh", "RefreshConsecutiveFailures",
+              { label = "consecutive failures" },
             ],
           ]
         }
