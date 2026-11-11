@@ -217,6 +217,25 @@ dotnet_diagnostic.CA1859.severity = error
 [Atoll.Api/Services/Security/Persistence/MongoPackageSecurityRepository.cs]
 dotnet_diagnostic.VSTHRD103.severity = suggestion
 
+# --- Per-file exemptions for the same VSTHRD103 false positive on IMongoCollection.Find: Find
+# only builds an IFindIterable and cannot block; execution happens in the awaited
+# ToListAsync/FirstOrDefaultAsync that closes every chain. Threading Analyzers 18.12 began
+# reporting it because the driver interface also offers a FindAsync overload.
+[Atoll.Api/Services/Packages/Persistence/MongoPackageRepository.cs]
+dotnet_diagnostic.VSTHRD103.severity = suggestion
+
+[Atoll.Api/Services/Packages/Persistence/MongoSeedExclusionRepository.cs]
+dotnet_diagnostic.VSTHRD103.severity = suggestion
+
+[Atoll.Api/Services/Catalog/Persistence/MongoAurMetadataRepository.cs]
+dotnet_diagnostic.VSTHRD103.severity = suggestion
+
+[Atoll.Api.Tests/Catalog/Persistence/AurMetadataRepositoryMongoTests.cs]
+dotnet_diagnostic.VSTHRD103.severity = suggestion
+
+[Atoll.Api.Tests/Packages/MongoPackageRepositoryTests.cs]
+dotnet_diagnostic.VSTHRD103.severity = suggestion
+
 # --- Per-file exemptions for MA0016, which has neither a per-member configuration nor a code fix.
 # These are BSON documents: the concrete List<T> and Dictionary<TKey,TValue> properties are what
 # the MongoDB serializer and init-only construction need, the same reason CA1002 is opted out
